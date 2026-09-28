@@ -86,6 +86,9 @@ export async function readTeams(claudeHome: string): Promise<TeamRecord[]> {
     } catch {
       continue; // config가 없으면 이 세션은 리드만 있는 1인 사무실이 된다
     }
+    // JSON.parse는 "null"/숫자/문자열도 성공적으로 파싱하므로(예: config.json 내용이 "null"),
+    // 객체가 아니면 이 팀만 건너뛴다 — 한 팀의 손상된 config가 나머지 팀 수집을 막지 않게 한다.
+    if (!config || typeof config !== "object") continue;
     const leadSessionId = str(config.leadSessionId);
     if (!leadSessionId) continue;
     const transcripts = await findTranscripts(join(claudeHome, "projects"), leadSessionId);

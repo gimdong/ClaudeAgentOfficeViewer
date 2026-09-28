@@ -48,6 +48,13 @@ describe("readTeams", () => {
   it("teams 폴더가 없으면 빈 배열", async () => {
     expect(await readTeams(h.home)).toEqual([]);
   });
+
+  it("config가 null인 팀이 있어도 다른 팀은 읽는다", async () => {
+    await h.write("teams/broken/config.json", null);
+    await h.write("teams/ok/config.json", { name: "ok", leadSessionId: "s2", members: [] });
+    const teams = await readTeams(h.home);
+    expect(teams).toEqual([{ name: "ok", leadSessionId: "s2", members: [] }]);
+  });
 });
 
 describe("countUnread", () => {
