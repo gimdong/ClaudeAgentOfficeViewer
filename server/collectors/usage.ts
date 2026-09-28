@@ -17,33 +17,63 @@ interface UsageRecord extends LastUsage {
 
 const HOUR = 3_600_000;
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw e;
+  }
+}
+
 export class UsageCollector {
   private tails = new Map<string, TailState>();
-  private records = new Map<string, UsageRecord>();
-  private fileKeys = new Map<string, Set<string>>();
+  /** file -> (key -> 그 파일이 스스로 관측한 레코드). 같은 key가 여러 파일에 나타날 수 있어 파일별로 보관하고,
+   *  대표(승자)는 조회 시점에 key별 total 최댓값으로 고른다. 이렇게 하면 한 파일이 삭제/reset돼도
+   *  같은 key의 다른 파일 사본이 함께 사라지지 않는다. */
+  private fileRecords = new Map<string, Map<string, UsageRecord>>();
   private last = new Map<string, LastUsage>();
   private mtimes = new Map<string, number>();
 
   constructor(private readonly projectsDir: string) {}
 
   async refresh(): Promise<void> {
-    let files: string[] = [];
+    let entries: string[];
     try {
-      const entries = await readdir(this.projectsDir, { recursive: true });
-      files = entries.filter((f) => f.endsWith(".jsonl")).map((f) => join(this.projectsDir, f));
+      entries = await readdir(this.projectsDir, { recursive: true });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      if (await pathExists(this.projectsDir)) {
+        // projectsDir은 있지만 순회 도중 하위 폴더가 사라진 경쟁 상태다.
+        // 지금 무엇이 남아있는지 알 수 없으므로 이번 refresh는 상태를 건드리지 않고 다음 기회로 미룬다.
+        return;
+      }
+      entries = []; // projectsDir 자체가 없다 -> 추적 중이던 파일을 전부 drop한다.
     }
+    const files = entries.filter((f) => f.endsWith(".jsonl")).map((f) => join(this.projectsDir, f));
     const seen = new Set(files);
     for (const f of [...this.tails.keys()]) if (!seen.has(f)) this.dropFile(f);
     for (const f of files) {
       try {
         await this.readFile(f);
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        this.dropFile(f);
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") this.dropFile(f);
+        // 그 외 오류(EISDIR, EACCES 등)는 이 파일만 건너뛰고 기존 상태를 유지한 채 다음 파일을 계속 읽는다.
       }
     }
+  }
+
+  /** key별로 모든 파일의 사본 중 total이 가장 큰 것을 대표로 고른다. */
+  private winners(): Map<string, UsageRecord> {
+    const result = new Map<string, UsageRecord>();
+    for (const recs of this.fileRecords.values()) {
+      for (const [key, r] of recs) {
+        const cur = result.get(key);
+        if (!cur || r.sum.total > cur.sum.total) result.set(key, r);
+      }
+    }
+    return result;
   }
 
   summary(now = Date.now()): UsageSummary {
@@ -55,7 +85,7 @@ export class UsageCollector {
     const byModel = new Map<string, TokenSum>();
     const hourly = new Array<number>(24).fill(0);
 
-    for (const r of this.records.values()) {
+    for (const r of this.winners().values()) {
       const age = now - r.ts;
       if (r.ts >= midnight.getTime() && age >= 0) today = addSum(today, r.sum);
       if (age < 0) continue;
@@ -78,9 +108,10 @@ export class UsageCollector {
 
   fileTotal(file: string): TokenSum {
     let sum = emptySum();
-    for (const k of this.fileKeys.get(file) ?? []) {
-      const r = this.records.get(k);
-      if (r && r.file === file) sum = addSum(sum, r.sum);
+    const winners = this.winners();
+    for (const key of this.fileRecords.get(file)?.keys() ?? []) {
+      const w = winners.get(key);
+      if (w && w.file === file) sum = addSum(sum, w.sum);
     }
     return sum;
   }
@@ -118,22 +149,18 @@ export class UsageCollector {
     const sum = usageToSum(l.message.usage);
     const key = l.requestId ?? l.message.id ?? `${file}:${l.uuid}`;
 
-    const prev = this.records.get(key);
+    let recs = this.fileRecords.get(file);
+    if (!recs) this.fileRecords.set(file, (recs = new Map()));
+    const prev = recs.get(key);
     if (!prev || sum.total > prev.sum.total) {
-      this.records.set(key, { key, ts, model, sum, file });
-      let keys = this.fileKeys.get(file);
-      if (!keys) this.fileKeys.set(file, (keys = new Set()));
-      keys.add(key);
+      recs.set(key, { key, ts, model, sum, file });
     }
     const last = this.last.get(file);
     if (!last || ts >= last.ts) this.last.set(file, { ts, model, sum });
   }
 
   private dropFile(file: string): void {
-    for (const k of this.fileKeys.get(file) ?? []) {
-      if (this.records.get(k)?.file === file) this.records.delete(k);
-    }
-    this.fileKeys.delete(file);
+    this.fileRecords.delete(file);
     this.tails.delete(file);
     this.last.delete(file);
     this.mtimes.delete(file);

@@ -120,4 +120,23 @@ describe("UsageCollector", () => {
     await c.refresh();
     expect(c.summary(NOW).last7d.total).toBe(0);
   });
+
+  it("`.jsonl` 이름의 디렉터리가 있어도 다른 파일은 수집한다", async () => {
+    await h.write("projects/weird.jsonl/placeholder.txt", "x");
+    await h.append("projects/z/ok.jsonl", [assistant({ requestId: "a", ts: NOW - 1000, output: 5 })]);
+    await c.refresh();
+    expect(c.summary(NOW).today.total).toBe(5);
+  });
+
+  it("같은 requestId가 두 파일에 있을 때 한 파일을 지워도 남은 파일의 토큰은 유지된다", async () => {
+    const dup = assistant({ requestId: "dup", ts: NOW - 1000, output: 10 });
+    await h.append(F, [dup]);
+    await h.append("projects/-p/s1/subagents/agent-x.jsonl", [dup]);
+    await c.refresh();
+    expect(c.summary(NOW).today.total).toBe(10);
+
+    await rm(h.path(F));
+    await c.refresh();
+    expect(c.summary(NOW).today.total).toBe(10);
+  });
 });
