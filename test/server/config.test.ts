@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONTEXT_WINDOW, loadConfig } from "../../server/config";
-import { contextInfo } from "../../server/collectors/context";
+import { contextInfo, EXTENDED_CONTEXT_WINDOW } from "../../server/collectors/context";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
 let h: FakeHome;
@@ -48,5 +48,17 @@ describe("contextInfo", () => {
     const big = { ...sum, cacheRead: 999999 };
     expect(contextInfo({ ts: 0, model: "x", sum: big }, {})!.pct).toBe(100);
     expect(contextInfo(undefined, {})).toBeNull();
+  });
+
+  it("설정이 없고 used가 200k를 넘으면 1M 창으로 추정한다", () => {
+    const big = { input: 1000, output: 500, cacheRead: 240000, cacheWrite: 9000, total: 250500 };
+    const info = contextInfo({ ts: 0, model: "mystery", sum: big }, {});
+    expect(info).toEqual({ used: 250000, window: EXTENDED_CONTEXT_WINDOW, pct: 25, estimated: true });
+  });
+
+  it("used가 정확히 200000이면 기본 창(200k)을 그대로 쓴다", () => {
+    const exact = { input: 1000, output: 500, cacheRead: 190000, cacheWrite: 9000, total: 200500 };
+    const info = contextInfo({ ts: 0, model: "mystery", sum: exact }, {});
+    expect(info).toEqual({ used: 200000, window: DEFAULT_CONTEXT_WINDOW, pct: 100, estimated: true });
   });
 });
