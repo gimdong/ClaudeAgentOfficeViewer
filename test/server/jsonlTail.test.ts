@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, rename, writeFile } from "node:fs/promises";
 import { readLastEntry, readNewLines } from "../../server/lib/jsonlTail";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -55,6 +55,16 @@ describe("readNewLines", () => {
     expect(second.reset).toBe(true);
     expect(second.lines).toEqual([{ n: 9 }]);
   });
+
+  it("교체된 파일이 이전보다 커도 inode가 바뀌면 reset=true로 새 파일 전체를 읽는다", async () => {
+    await h.append("a.jsonl", [{ n: 1 }, { n: 2 }]);
+    const first = await readNewLines(h.path("a.jsonl"));
+    await writeFile(h.path("a.jsonl.new"), '{"n":7}\n{"n":8}\n{"n":9}\n');
+    await rename(h.path("a.jsonl.new"), h.path("a.jsonl"));
+    const second = await readNewLines(h.path("a.jsonl"), first.state);
+    expect(second.reset).toBe(true);
+    expect(second.lines).toEqual([{ n: 7 }, { n: 8 }, { n: 9 }]);
+  });
 });
 
 describe("readLastEntry", () => {
@@ -66,5 +76,13 @@ describe("readLastEntry", () => {
   it("빈 파일이면 undefined", async () => {
     await writeFile(h.path("e.jsonl"), "");
     expect(await readLastEntry(h.path("e.jsonl"))).toBeUndefined();
+  });
+
+  it("마지막 줄이 maxBytes보다 길어도 창을 넓혀 파싱한다", async () => {
+    const big = "x".repeat(70000);
+    const first = JSON.stringify({ type: "assistant" });
+    const last = JSON.stringify({ type: "user", big });
+    await writeFile(h.path("big.jsonl"), `${first}\n${last}\n`);
+    expect(await readLastEntry(h.path("big.jsonl"))).toEqual({ type: "user", big });
   });
 });
