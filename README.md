@@ -23,7 +23,8 @@ npm start            # http://127.0.0.1:4317
 
 ## 요금제 한도 표시 (선택)
 
-`npm run setup:statusline`을 실행하면 statusline 입력을 `~/.claude/claude-office/limits.json`에 복사하도록 설정합니다(기존 상태줄 모양은 유지, 설정은 백업).
+`npm run setup:statusline`을 실행하면 statusline 입력을 `~/.claude/claude-office/limits.json`에 복사하도록 설정합니다(설정은 백업).
+기존에 직접 만든 `command` 타입 statusline이 있었다면 그 모양이 그대로 유지됩니다. statusline을 따로 설정한 적이 없어 Claude Code 기본 상태줄을 쓰고 있었다면, 설치 후에는 상태줄이 빈 줄로 보일 수 있습니다(한도 수집 자체에는 영향 없음) — 원래 statusline 설정이 없어 다시 실행할 명령이 없기 때문입니다.
 되돌리기: `npm run remove:statusline`. Claude Code가 한도 정보를 넘겨주지 않는 버전에서는 PLAN 바가 `-- 데이터 없음`으로 표시됩니다.
 
 ## 알아두면 좋은 점
