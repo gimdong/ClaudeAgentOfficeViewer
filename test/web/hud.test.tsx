@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { barLevel, HeartBar } from "../../web/hud/HeartBar";
 import { Hud } from "../../web/hud/Hud";
@@ -56,5 +56,24 @@ describe("Hud", () => {
     expect(screen.getByText("1.24M")).toBeTruthy();
     expect(screen.getByText("캐시 읽기 5.0k")).toBeTruthy();
     expect(screen.getByText("● LIVE")).toBeTruthy();
+  });
+
+  it("주간 사용률이 더 높으면 PLAN은 주간 기준으로 표시한다", () => {
+    const snap = makeSnapshot({ limits: { fiveHourPct: 10, weeklyPct: 95, source: "statusline" } });
+    render(<Hud snapshot={snap} live />);
+    // budget이 없으므로 5H·WEEK HeartBar는 meter가 없고 PLAN만 meter를 그린다.
+    // "WEEK"/"5H" 문자열은 TokenCounter 라벨과도 겹치므로, PLAN heartbar 컨테이너(meter의 부모)로
+    // 범위를 좁혀서 그 안의 hint만 확인한다.
+    const meter = screen.getByRole("meter");
+    expect(meter.getAttribute("aria-valuenow")).toBe("5"); // 100 - 95
+    expect(within(meter.parentElement!).getByText("WEEK")).toBeTruthy(); // PLAN 옆 hint가 더 많이 쓴 WEEK를 가리킨다
+  });
+
+  it("두 창의 사용률이 같으면 PLAN은 5H를 우선 표시한다", () => {
+    const snap = makeSnapshot({ limits: { fiveHourPct: 50, weeklyPct: 50, source: "statusline" } });
+    render(<Hud snapshot={snap} live />);
+    const meter = screen.getByRole("meter");
+    expect(meter.getAttribute("aria-valuenow")).toBe("50");
+    expect(within(meter.parentElement!).getByText("5H")).toBeTruthy();
   });
 });
