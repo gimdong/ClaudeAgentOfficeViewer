@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -52,6 +52,12 @@ async function remove() {
   if (backup.statusLine) settings.statusLine = backup.statusLine;
   else delete settings.statusLine;
   await writeJson(settingsPath, settings);
+  // 백업을 지우지 않고 타임스탬프를 붙여 남긴다. 그냥 지우면 다음에 install할 때는 문제없지만,
+  // 지우지 않고 그대로 두면(옛 구현) install()의 "!existsSync(backupPath)"가 계속 false가 되어
+  // remove 이후 사용자가 statusLine을 바꿔도 다음 install/remove가 이 옛 백업으로 되돌려버린다.
+  // 원래 이름의 백업 파일은 이제 없어야 다음 install이 "현재" 값을 새로 백업한다.
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await rename(backupPath, join(officeDir, `settings.backup.${stamp}.json`));
   console.log("statusline 설정을 원래대로 되돌렸습니다.");
 }
 

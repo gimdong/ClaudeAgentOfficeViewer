@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -79,6 +79,35 @@ describe("statusline-setup.mjs", () => {
     execFileSync("node", [SETUP, "install"], { env });
     execFileSync("node", [SETUP, "remove"], { env });
     expect(await json("settings.json")).toEqual({ theme: "dark" });
+  });
+
+  // director 검토 관점(fix round 1, Ruling 16): remove가 백업을 지우지 않고 install이 백업 있으면
+  // 새로 만들지 않아, remove 후 statusLine을 바꾸고 다시 install/remove하면 옛 백업으로 되돌아가던 버그.
+  it("remove 후 statusLine을 바꾸고 다시 install/remove하면 바뀐 값으로 복원된다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo A" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    execFileSync("node", [SETUP, "remove"], { env });
+    expect((await json("settings.json")).statusLine.command).toBe("echo A");
+
+    // remove 이후 사용자가 statusLine을 바꿨다고 가정한다.
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo B" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    // original-statusline.sh도 매 install마다 현재 값으로 덮어써지는지 함께 확인한다
+    // (director 지시: remove 후에도 남아있는 original-statusline.sh가 다음 install에서 덮어써지는지 확인).
+    expect(await readFile(h.path("claude-office/original-statusline.sh"), "utf8")).toContain("echo B");
+    execFileSync("node", [SETUP, "remove"], { env });
+    expect((await json("settings.json")).statusLine.command).toBe("echo B");
+  });
+
+  it("remove는 백업을 지우지 않고 타임스탬프를 붙여 보관한다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo A" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    execFileSync("node", [SETUP, "remove"], { env });
+    await expect(readFile(h.path("claude-office/settings.backup.json"), "utf8")).rejects.toThrow(); // 원래 이름으로는 더 이상 없다
+    const files = await readdir(h.path("claude-office"));
+    const renamed = files.filter((f) => f !== "settings.backup.json" && /^settings\.backup\..+\.json$/.test(f));
+    expect(renamed).toHaveLength(1);
+    expect(JSON.parse(await readFile(h.path(`claude-office/${renamed[0]}`), "utf8")).statusLine.command).toBe("echo A");
   });
 
   it("백업 없이 remove하면 종료 코드 1", async () => {
