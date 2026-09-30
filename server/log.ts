@@ -116,13 +116,22 @@ export class Logger {
 }
 
 /**
+ * 로그에 넣을 오류 정보: 오류 코드(EACCES 등)나 이름(SyntaxError 등)만. 없으면 "Error".
+ * 메시지는 넣지 않는다 — fs 오류 메시지는 전체 경로(팀·폴더 이름)를, JSON.parse 오류 메시지는 파일 내용 일부를 담고,
+ * 문자열 throw는 무엇이든 담을 수 있다.
+ */
+export function errInfo(e: unknown): string {
+  const o = e && typeof e === "object" ? (e as { code?: unknown; name?: unknown }) : {};
+  return String(o.code ?? o.name ?? "Error");
+}
+
+/**
  * 빈 catch 대신 쓴다. ENOENT("없으면 건너뜀")는 조용히 넘기고, 나머지는 오류 코드와 파일 이름만 남긴다.
  * 오류 메시지는 넣지 않는다 — fs 오류 메시지는 전체 경로(팀·폴더 이름)를, JSON.parse 오류 메시지는 파일 내용 일부를 담는다.
  */
 export function warnCaught(src: string, msg: string, e: unknown, file?: string): void {
-  const code = (e as NodeJS.ErrnoException | null)?.code;
-  if (code === "ENOENT") return;
-  getLogger().warn(src, msg, { error: String(code ?? (e as Error | null)?.name ?? e), ...(file ? { file } : {}) });
+  if ((e as NodeJS.ErrnoException | null)?.code === "ENOENT") return;
+  getLogger().warn(src, msg, { error: errInfo(e), ...(file ? { file } : {}) });
 }
 
 // dir이 ""이면 아무 것도 쓰지 않는다 — setLogger 전 기본값이자 테스트 기본값

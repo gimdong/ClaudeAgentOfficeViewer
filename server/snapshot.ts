@@ -10,7 +10,7 @@ import { readLimits } from "./collectors/limits";
 import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
-import { getLogger, warnCaught } from "./log";
+import { errInfo, getLogger, warnCaught } from "./log";
 import { readLastEntry } from "./lib/jsonlTail";
 
 export interface BuilderOptions {
@@ -73,7 +73,7 @@ export class SnapshotBuilder {
       try {
         return await fn();
       } catch (e) {
-        getLogger().warn("snapshot", `${label} collect failed, using previous value`, { error: String((e as Error)?.message ?? e) });
+        getLogger().warn("snapshot", `${label} collect failed, using previous value`, { error: errInfo(e) });
         stale = true;
         return fallback;
       }

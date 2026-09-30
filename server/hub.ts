@@ -1,6 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import type { Snapshot } from "../src/shared/types";
-import { getLogger } from "./log";
+import { errInfo, getLogger } from "./log";
 
 export interface HubOptions {
   intervalMs?: number;
@@ -37,9 +37,9 @@ export class SnapshotHub {
       this.watcher = watch(this.opts.watchDir, { recursive: true }, (_event, file) => {
         if (WATCHED.test(String(file ?? ""))) this.schedule();
       });
-      this.watcher.on("error", (e) => getLogger().warn("hub", "watch error, polling continues", { error: e.message }));
+      this.watcher.on("error", (e) => getLogger().warn("hub", "watch error, polling continues", { error: errInfo(e) }));
     } catch (e) {
-      getLogger().warn("hub", "watch unavailable, polling only", { error: String((e as Error)?.message ?? e) });
+      getLogger().warn("hub", "watch unavailable, polling only", { error: errInfo(e) });
     }
   }
 
@@ -97,7 +97,7 @@ export class SnapshotHub {
           }
         } while (this.again);
       } catch (e) {
-        getLogger().error("hub", "snapshot build failed", { error: String((e as Error)?.message ?? e) });
+        getLogger().error("hub", "snapshot build failed", { error: errInfo(e) });
         if (!this.snapshot && this.opts.fallback) {
           this.snapshot = this.opts.fallback(e);
           for (const l of this.listeners) l(this.snapshot);

@@ -9,7 +9,7 @@ import { formatDoctor, runDoctor } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
-import { Logger, setLogger } from "./log";
+import { Logger, errInfo, setLogger } from "./log";
 import { resolvePaths } from "./paths";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import pkg from "../package.json" with { type: "json" };
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
       log.error("server", "port in use", { port: opts.port });
     } else {
       console.error(e);
-      log.error("server", "listen failed", { code: e.code, error: e.message });
+      log.error("server", "listen failed", { error: errInfo(e) });
     }
     hub.stop();
     process.exit(1);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
 import type { HookStats } from "./events/stats";
 import type { SnapshotHub } from "./hub";
-import { getLogger } from "./log";
+import { errInfo, getLogger } from "./log";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -83,7 +83,7 @@ export function createApp(
         opts.onHookEvent?.(body as Record<string, unknown>);
       } catch (e) {
         // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
-        getLogger().error("hooks", "event handling failed", { error: String((e as Error)?.message ?? e) });
+        getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
       }
       res.status(200).end();
     },

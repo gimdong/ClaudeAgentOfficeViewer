@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -10,8 +10,8 @@ import { loadConfig, type OfficeConfig } from "../../server/config";
 import { readTeams } from "../../server/collectors/teams";
 import { SnapshotHub } from "../../server/hub";
 import { checkNode } from "../../server/index";
-import { Logger, setLogger, type LogLine } from "../../server/log";
-import { emptySnapshot } from "../../server/snapshot";
+import { Logger, errInfo, setLogger, type LogLine } from "../../server/log";
+import { SnapshotBuilder, emptySnapshot } from "../../server/snapshot";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
 let logDir: string;
@@ -100,6 +100,51 @@ describe("첫 빌드 실패", () => {
     fail = false;
     await hub.refresh();
     expect(hub.current().error).toBeUndefined();
+  });
+});
+
+describe("로그에 오류 메시지 원문을 넣지 않는다", () => {
+  it("errInfo는 코드나 이름만, 없으면 Error", () => {
+    expect(errInfo(Object.assign(new Error("open '/x/teams/fake-secret-team'"), { code: "EACCES" }))).toBe("EACCES");
+    expect(errInfo(new SyntaxError("Unexpected token in fake-secret-team"))).toBe("SyntaxError");
+    expect(errInfo("fake-secret-team")).toBe("Error");
+    expect(errInfo(null)).toBe("Error");
+  });
+
+  it("snapshot guard: 경로가 든 수집 오류(EACCES)에도 폴더 이름이 남지 않는다", async () => {
+    const h = await makeHome();
+    const locked = h.path("projects/-Users-x-fake-secret-team");
+    await mkdir(join(locked, "sub"), { recursive: true });
+    chmodSync(locked, 0o000);
+    try {
+      await new SnapshotBuilder({ claudeHome: h.home, config }).build();
+    } finally {
+      chmodSync(locked, 0o755);
+      await h.cleanup();
+    }
+    const lines = logLines().filter((l) => l.src === "snapshot");
+    expect(lines.length).toBeGreaterThan(0); // 실제로 오류 경로를 탔다
+    expect(lines[0].data).toMatchObject({ error: "EACCES" });
+    expect(JSON.stringify(logLines())).not.toContain("fake-secret-team");
+  });
+
+  it("hub: 빌드 오류 메시지의 경로가 남지 않는다", async () => {
+    const err = Object.assign(new Error("EACCES: permission denied, scandir '/x/teams/fake-secret-team'"), { code: "EACCES" });
+    hub = new SnapshotHub({ build: () => Promise.reject(err) }, { intervalMs: 60_000 });
+    await hub.start();
+    const lines = logLines().filter((l) => l.src === "hub");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].data).toEqual({ error: "EACCES" });
+    expect(JSON.stringify(logLines())).not.toContain("fake-secret-team");
+  });
+
+  it("hooks: 처리 중 문자열 throw의 내용이 남지 않는다", async () => {
+    const snap = emptySnapshot(0, config);
+    const base = await listen(createApp({ current: () => snap, subscribe: () => () => {} }, { onHookEvent: () => { throw "fake-secret-team"; } }));
+    const r = await fetch(`${base}/hooks/event`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hook_event_name: "Stop", session_id: "s" }) });
+    expect(r.status).toBe(200);
+    expect(logLines().find((l) => l.src === "hooks")?.data).toEqual({ error: "Error" });
+    expect(JSON.stringify(logLines())).not.toContain("fake-secret-team");
   });
 });
 
