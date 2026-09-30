@@ -1,3 +1,5 @@
+import { ActivityBubble } from "./bubble/ActivityBubble";
+import { useBubble } from "./bubble/useBubble";
 import { Building } from "./building/Building";
 import { Hud } from "./hud/Hud";
 import { useDecisionAnnouncer } from "./useDecisionAnnouncer";
@@ -6,6 +8,7 @@ import { useSnapshot } from "./useSnapshot";
 export function App() {
   const { snapshot, live } = useSnapshot();
   const { text: announce, n: announceN } = useDecisionAnnouncer(snapshot);
+  const { target, handlers } = useBubble();
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
   // aria-live(role=status)는 같은 노드의 "내용이 바뀔 때" 알린다 — key로 다시 마운트하면 새 영역의
   // "등장"이라 일부 스크린 리더(VoiceOver+Safari 등)가 안 읽을 수 있다(Ruling P16 수정).
@@ -21,7 +24,8 @@ export function App() {
         </div>
       )}
       <Hud snapshot={snapshot} live={live} />
-      <Building sessions={snapshot.sessions} />
+      <Building sessions={snapshot.sessions} bubble={handlers} />
+      <ActivityBubble target={target} sessions={snapshot.sessions} />
       <div className="sr-only" role="status">
         {shown}
       </div>
