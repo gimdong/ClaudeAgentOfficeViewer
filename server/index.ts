@@ -201,7 +201,7 @@ async function main(): Promise<void> {
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
     if (e.code === "EADDRINUSE") {
-      console.error(`포트 ${opts.port}가 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+      console.error(`포트 ${opts.port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
       log.error("server", "port in use", { port: opts.port });
     } else {
       console.error(e);

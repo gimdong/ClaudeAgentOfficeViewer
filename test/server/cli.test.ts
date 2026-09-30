@@ -118,7 +118,7 @@ describe("CLI", () => {
     const code = await new Promise<number | null>((r) => child.on("exit", r));
     blocker.close();
     expect(code).toBe(1);
-    expect(stderr).toContain("이미 사용 중");
+    expect(stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
     const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
     rmSync(logDir, { recursive: true, force: true });
     expect(log).toContain('"msg":"port in use"');
