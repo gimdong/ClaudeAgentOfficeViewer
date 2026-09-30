@@ -114,11 +114,15 @@ describe("CLI", () => {
     const logDir = mkdtempSync(join(tmpdir(), "office-cli-log-"));
     const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", tmpdir(), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
+    let stdout = "";
     child.stderr.on("data", (d) => (stderr += d));
+    child.stdout.on("data", (d) => (stdout += d));
     const code = await new Promise<number | null>((r) => child.on("exit", r));
     blocker.close();
     expect(code).toBe(1);
     expect(stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+    // 실패했는데 "켜졌다" 줄이 먼저 찍히면 고객이 성공으로 오해한다(Express 5는 listen 실패에도 콜백을 부른다)
+    expect(stdout).not.toContain("Claude Agent Office: http");
     const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
     rmSync(logDir, { recursive: true, force: true });
     expect(log).toContain('"msg":"port in use"');

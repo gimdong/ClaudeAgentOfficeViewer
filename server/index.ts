@@ -196,7 +196,9 @@ async function main(): Promise<void> {
     }),
     makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics }).listen(opts.port, "127.0.0.1", () => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+    // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
+    if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
