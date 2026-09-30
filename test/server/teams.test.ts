@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { utimes } from "node:fs/promises";
+import { chmod, mkdir, utimes } from "node:fs/promises";
 import { ACTIVE_WINDOW_MS, countUnread, memberState, readTeams } from "../../server/collectors/teams";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -54,6 +54,25 @@ describe("readTeams", () => {
     await h.write("teams/ok/config.json", { name: "ok", leadSessionId: "s2", members: [] });
     const teams = await readTeams(h.home);
     expect(teams).toEqual([{ name: "ok", leadSessionId: "s2", members: [] }]);
+  });
+
+  // final review I-2: projects/ 아래 한 프로젝트 폴더를 읽을 수 없어도(EACCES) 팀원 전체가
+  // 사라지면 안 된다. root는 chmod 000이 무의미해 재현이 안 되므로 그럴 때만 건너뛴다.
+  it("읽을 수 없는 프로젝트 폴더가 있어도 다른 팀원은 표시된다", async () => {
+    if (process.getuid?.() === 0) return;
+    await seedTeam();
+    const blocked = h.path("projects/blocked-proj");
+    await mkdir(blocked, { recursive: true });
+    await chmod(blocked, 0o000);
+    try {
+      const teams = await readTeams(h.home);
+      expect(teams).toHaveLength(1);
+      expect(teams[0].members.map((m) => m.name)).toEqual(["developer", "reviewer"]);
+      const dev = teams[0].members.find((m) => m.name === "developer");
+      expect(dev?.transcript).toBe(h.path(`${SUB}/agent-adev-new.jsonl`));
+    } finally {
+      await chmod(blocked, 0o755); // afterEach의 정리(rm -rf)가 지울 수 있게 권한을 복구한다
+    }
   });
 });
 

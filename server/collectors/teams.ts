@@ -21,13 +21,15 @@ export const ACTIVE_WINDOW_MS = 10_000;
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
+// findTranscripts 안에서만 쓴다. projects/ 아래 프로젝트 폴더 하나가 EACCES 등으로 못 읽어도
+// 그 폴더만 건너뛰고 다른 프로젝트에서 팀원 전사록을 계속 찾는다 — 그 오류를 findTranscripts
+// 밖으로 새어나가게 하면 readTeams 전체가 죽어 모든 세션의 팀원이 한꺼번에 사라진다(readTeams
+// 최상위 teams/ 디렉터리 읽기는 이 함수를 쓰지 않고 여전히 ENOENT 외 오류를 그대로 던진다).
 async function readdirOrEmpty(dir: string): Promise<string[]> {
   try {
     return await readdir(dir);
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return [];
-    throw e;
+  } catch {
+    return [];
   }
 }
 
