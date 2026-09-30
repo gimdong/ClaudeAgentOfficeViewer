@@ -3,7 +3,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // 이 파일의 모든 케이스는 HOME=<mkdtemp>, --no-open을 쓴다(팀 규칙 — 이 Mac 사용자의 ~/.zshrc·~/.claude는
@@ -86,6 +86,24 @@ function installLogLines(prefix: string): string[] {
   return files.flatMap((f) => readFileSync(join(dir, f), "utf8").trim().split("\n").filter(Boolean));
 }
 
+/**
+ * 설치 로그 한 줄 형식(Ruling B10 보강, #36): "<ISO> <단계> ok|fail|skip( <메시지>)?". 경로("/"
+ * 포함)가 있는 줄은 그 경로가 줄 끝 큰따옴표 안에 있어야 한다 — 안 그러면 진단 파일의 경로 가림이
+ * 공백을 포함해 다음 "/"·따옴표·줄 끝까지를 통째로 삼켜 경로 뒤 설명까지 함께 가려진다. 따옴표
+ * 앞부분(설명)에는 임시 HOME의 mkdtemp 고유 이름이 나오면 안 된다(비밀값·사용자 식별 정보 금지).
+ */
+function expectValidInstallLog(lines: string[], tempMarker: string) {
+  const re = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z (node|copy|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
+  for (const line of lines) {
+    expect(line, line).toMatch(re);
+    if (!line.includes("/")) continue;
+    const m = /"([^"]*)"$/.exec(line);
+    expect(m, `경로가 있는 줄은 줄 끝 큰따옴표 안에 있어야 함: ${line}`).toBeTruthy();
+    expect(m![1]).toContain("/");
+    expect(line.slice(0, line.length - m![0].length)).not.toContain(tempMarker);
+  }
+}
+
 describe("packaging/install.sh, claude-office.sh", () => {
   it("bash -n과 sh -n 문법 검사 통과", () => {
     for (const bin of ["bash", "sh"]) {
@@ -126,11 +144,10 @@ describe("packaging/install.sh, claude-office.sh", () => {
       expect(existsSync(join(prefix, "logs"))).toBe(true);
       expect(existsSync(join(prefix, "diagnostics"))).toBe(true);
 
-      // 설치 로그(SPEC 4장, Ruling B10): <prefix>/logs/install-*.log에 평문 한 줄씩.
+      // 설치 로그(SPEC 4장, Ruling B10/#36): <prefix>/logs/install-*.log에 평문 한 줄씩.
       const lines = installLogLines(prefix);
       expect(lines.length).toBeGreaterThan(0);
-      const re = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z (node|copy|path|plugin|doctor|done) (ok|fail|skip) .+$/;
-      for (const line of lines) expect(line, line).toMatch(re);
+      expectValidInstallLog(lines, basename(dirname(rig.home)));
       const steps = lines.map((l) => l.split(" ")[1]);
       for (const step of ["node", "copy", "plugin", "done"]) expect(steps, lines.join("\n")).toContain(step);
       // 비밀값·환경변수 값은 안 남는다(경로는 됨) — STUB_LOG 값 같은 건 절대 안 보여야 한다.
@@ -218,6 +235,7 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const rc1 = readFileSync(join(rig.home, ".zshrc"), "utf8");
       expect(rc1.split("\n").filter((l) => l === "# claude-office PATH")).toHaveLength(1);
       expect(rc1).toContain(`export PATH="${prefix}/bin:$PATH"`);
+      expectValidInstallLog(installLogLines(prefix), basename(dirname(rig.home))); // path ok 줄에 실제 경로 포함(#36 형식 확인)
 
       expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
       const rc2 = readFileSync(join(rig.home, ".zshrc"), "utf8");

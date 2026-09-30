@@ -15,7 +15,10 @@ done
 ask() { [ "$YES" = 1 ] && return 0; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
 
 # 설치 로그(SPEC 4장): 단계마다 한 줄 "<ISO시각> <단계> ok|fail|skip <쉬운 말 메시지>". 비밀값·환경변수
-# 값은 쓰지 않는다(경로는 됨). Node 검사가 실패할 수도 있으니 logs 폴더는 그보다 먼저 만든다.
+# 값(USER, whoami, 호스트 이름 등)은 안 쓴다 — 경로는 되지만, 반드시 줄 끝에 큰따옴표로 감싸 쓴다
+# (Ruling B10 보강 — 리뷰어 실측: 진단 파일의 경로 가림이 공백을 포함해 다음 "/"·따옴표·줄 끝까지를
+# 경로로 보기 때문에, 경로 뒤에 설명을 쓰면 그 설명까지 함께 가려진다. 설명은 항상 경로보다 앞에 쓴다).
+# Node 검사가 실패할 수도 있으니 logs 폴더는 그보다 먼저 만든다.
 mkdir -p "$PREFIX/logs"
 LOGFILE="$PREFIX/logs/install-$(date +%Y%m%d-%H%M%S).log"
 log() { printf '%s %s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" >> "$LOGFILE"; }
@@ -43,16 +46,16 @@ cp -R "$HERE/plugin" "$PREFIX/plugin"
 cp "$HERE/VERSION" "$PREFIX/VERSION"
 [ -f "$HERE/사용설명서.html" ] && cp "$HERE/사용설명서.html" "$PREFIX/사용설명서.html"
 cp "$HERE/claude-office.sh" "$PREFIX/bin/claude-office"; chmod 755 "$PREFIX/bin/claude-office"
-log copy ok "앱 파일 복사 완료"
+log copy ok "앱 파일 복사 완료 \"$PREFIX/app\""
 
 # 3. PATH
 if [ "$NOPATH" = 0 ]; then
   case "${SHELL:-}" in */zsh) RC="$HOME/.zshrc" ;; *) RC="$HOME/.bashrc"; [ -f "$RC" ] || RC="$HOME/.profile" ;; esac
   if grep -q '^# claude-office PATH$' "$RC" 2>/dev/null; then
-    log path skip "이미 ${RC}에 등록됨"
+    log path skip "이미 등록됨 \"$RC\""
   elif ask "${RC}에 claude-office 명령 경로를 추가할까요?"; then
     printf '\n# claude-office PATH\nexport PATH="%s/bin:$PATH"\n' "$PREFIX" >> "$RC"
-    log path ok "${RC}에 PATH 추가"
+    log path ok "PATH 추가 \"$RC\""
   else
     log path skip "사용자가 거절함"
   fi
@@ -64,8 +67,8 @@ fi
 if command -v claude >/dev/null 2>&1; then
   if ask "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다."; then
     plugin_ok=1
-    claude plugin marketplace add "$PREFIX/plugin" || { echo "마켓플레이스 등록 실패 — 사용설명서 5장을 봐 주세요." >&2; plugin_ok=0; }
-    claude plugin install claude-office@claude-office --scope user || { echo "플러그인 설치 실패 — 사용설명서 5장을 봐 주세요." >&2; plugin_ok=0; }
+    claude plugin marketplace add "$PREFIX/plugin" || { echo "마켓플레이스 등록 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }
+    claude plugin install claude-office@claude-office --scope user || { echo "플러그인 설치 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }
     if [ "$plugin_ok" = 1 ]; then log plugin ok "플러그인 설치 완료"; else log plugin fail "플러그인 설치 중 오류(설치는 계속함)"; fi
   else
     log plugin skip "사용자가 거절함"
