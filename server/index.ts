@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
-import { HookStats } from "./events/stats";
+import { formatDoctor, runDoctor } from "./diag/doctor";
+import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
 import { Logger, setLogger } from "./log";
@@ -55,10 +56,38 @@ export function checkNode(version: string): string | null {
   return major >= 24 ? null : `Claude Agent Office는 Node.js 24 이상이 필요합니다(지금 ${version}). https://nodejs.org 에서 LTS를 설치한 뒤 다시 실행해 주세요.`;
 }
 
+/** `doctor [--json]`: 서버를 켜지 않고 환경을 점검한다. 켜져 있는 서버의 hook 통계는 /api/diagnostics에서 읽는다 */
+async function doctorCli(argv: string[]): Promise<void> {
+  const json = argv.includes("--json");
+  const opts = parseCliArgs(argv.filter((a) => a !== "--json"));
+  const items = await runDoctor({
+    claudeHome: opts.claudeHome,
+    paths: resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir }),
+    port: opts.port,
+    hooks: () =>
+      fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { signal: AbortSignal.timeout(1500) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => (j as { hooks?: HookStatsView } | null)?.hooks ?? null)
+        .catch(() => null),
+  });
+  console.log(json ? JSON.stringify(items, null, 2) : formatDoctor(items));
+  process.exitCode = items.some((i) => i.status === "fail") ? 1 : 0;
+}
+
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  if (argv[0] === "doctor") {
+    try {
+      await doctorCli(argv.slice(1));
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exitCode = 1;
+    }
+    return;
+  }
   let opts: CliOptions;
   try {
-    opts = parseCliArgs(process.argv.slice(2));
+    opts = parseCliArgs(argv);
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);

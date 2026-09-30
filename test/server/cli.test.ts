@@ -46,6 +46,23 @@ describe("parseCliArgs", () => {
 });
 
 describe("CLI", () => {
+  it("doctor --json은 서버를 켜지 않고 10개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
+    const home = mkdtempSync(join(tmpdir(), "office-doctor-home-"));
+    const logDir = mkdtempSync(join(tmpdir(), "office-doctor-log-"));
+    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", "4399", "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    const code = await new Promise<number | null>((r) => child.on("exit", r));
+    const items = JSON.parse(stdout) as Array<{ id: string; status: string }>;
+    const logFiles = readdirSync(logDir);
+    rmSync(home, { recursive: true, force: true });
+    rmSync(logDir, { recursive: true, force: true });
+    expect(items.map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "managed", "proxy", "hooks", "statusline"]);
+    expect(items.find((i) => i.id === "port")!.status).toBe("warn"); // 4399에는 아무것도 없다
+    expect(code).toBe(items.some((i) => i.status === "fail") ? 1 : 0);
+    expect(logFiles).toEqual([]); // doctor는 서버 로그를 쓰지 않는다
+  }, 20_000);
+
   it("포트가 이미 사용 중이면 안내 후 종료 코드 1", async () => {
     const blocker = createServer().listen(0, "127.0.0.1");
     await new Promise((r) => blocker.once("listening", r));
