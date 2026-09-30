@@ -42,4 +42,27 @@ describe("App", () => {
     expect(after.textContent).not.toBe(beforeText); // 글자 자체는 바뀐다
     expect(after.textContent!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
   });
+
+  it("같은 사람의 두 번째 결정도 노드 텍스트가 이전과 다르고, trim하면 같은 문장이다(Ruling P16 — NBSP)", () => {
+    const none = makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer" })] });
+    const decided = (since: string) =>
+      makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer", state: "decision", decision: { kind: "permission", since } })] });
+
+    state.value = { snapshot: makeSnapshot({ sessions: [none] }), live: true };
+    const { rerender } = render(<App />);
+
+    state.value = { snapshot: makeSnapshot({ sessions: [decided("2026-10-01T05:00:00Z")], decisionCount: 1 }), live: true };
+    rerender(<App />);
+    const afterFirst = screen.getByRole("status").textContent;
+
+    state.value = { snapshot: makeSnapshot({ sessions: [none] }), live: true }; // 해제
+    rerender(<App />);
+    state.value = { snapshot: makeSnapshot({ sessions: [decided("2026-10-01T05:10:00Z")], decisionCount: 1 }), live: true }; // 다시 결정
+    rerender(<App />);
+    const afterSecond = screen.getByRole("status").textContent;
+
+    expect(afterSecond).not.toBe(afterFirst);
+    expect(afterFirst!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
+    expect(afterSecond!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
+  });
 });
