@@ -73,8 +73,12 @@ describe("format", () => {
     expect(formatTokens(1e12)).toBe("1000000.00M");
   });
 
-  it("formatTokens(NaN)은 예외를 던지지 않지만 'NaNM'을 만든다(알려진 한계, report 참고)", () => {
-    expect(formatTokens(NaN)).toBe("NaNM");
+  // final review I-5: formatTokens(NaN) === "NaNM"을 "올바른 동작"으로 못박아두면 나중에 누가
+  // 가드를 넣을 때 테스트가 깨진다 — 결함을 명세로 만든 셈이라 기대값을 "--"로 교체한다.
+  it("formatTokens에 유한하지 않은 값을 주면 '--'를 반환한다", () => {
+    expect(formatTokens(NaN)).toBe("--");
+    expect(formatTokens(Infinity)).toBe("--");
+    expect(formatTokens(-Infinity)).toBe("--");
   });
 
   it("remainingPct 경계값: 음수 used, budget 초과는 0~100으로 자른다", () => {
@@ -82,8 +86,12 @@ describe("format", () => {
     expect(remainingPct(100, 0)).toBe(0);
   });
 
-  it("remainingPct(0,0)과 NaN 입력은 예외 없이 NaN을 만든다(알려진 한계, report 참고)", () => {
-    expect(remainingPct(0, 0)).toBeNaN();
-    expect(remainingPct(NaN, 1000)).toBeNaN();
+  // final review I-5: remainingPct(0,0)/remainingPct(NaN, ...)이 NaN을 반환하던 것도 같은 이유로
+  // 0을 반환하도록 고치고, 그 기대값을 테스트에 반영한다.
+  it("remainingPct는 budget이 0 이하이거나 used가 유한하지 않으면 0을 반환한다", () => {
+    expect(remainingPct(0, 0)).toBe(0);
+    expect(remainingPct(NaN, 1000)).toBe(0);
+    expect(remainingPct(50, -10)).toBe(0);
+    expect(remainingPct(Infinity, 1000)).toBe(0);
   });
 });
