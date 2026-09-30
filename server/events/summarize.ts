@@ -50,6 +50,9 @@ const AUTH_BARE = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(?!bearer\\b)(${VA
 const BEARER_BARE = new RegExp(`\\b(bearer)(\\s+)(${VALUE})`, "gi");
 // curl -u user:pass — 사용자 이름은 남기고 비밀번호만 가린다
 const CURL_U = /(-u\s+[^\s:]+:)(\S+)/g;
+// npm config의 //registry…/:_authToken 형태(Ruling P11) — 일반 공백 구분(CLI_FLAG_VALUE)은 오탐 위험이 있어
+// 넓히지 않고, _authToken 앞에 선택적 콜론이 붙는 이 구체적인 이름만 좁게 잡는다
+const AUTH_TOKEN_FIELD = new RegExp(`(:?_authToken)(=|\\s+)(${QUOTED_VALUE}|${VALUE})`, "gi");
 const PREFIX_TOKEN = /\b(?:sk|ghp|gho|xox[abp]|AKIA)[-_A-Za-z0-9]{8,}/g;
 const URL_CREDS = /\/\/[^/\s:@]+:[^/\s@]+@/g;
 // 이름·접두어로 잡히지 않은, 32자 이상 이어진 16진수/base64 형태의 문자열을 통째로 가리는 마지막 안전망.
@@ -75,6 +78,7 @@ export function redact(s: string): string {
     .replace(AUTH_BARE, (_m, kw: string, sep: string) => `${kw}${sep}***`)
     .replace(BEARER_BARE, (_m, kw: string, sp: string) => `${kw}${sp}***`)
     .replace(CURL_U, (_m, prefix: string) => `${prefix}***`)
+    .replace(AUTH_TOKEN_FIELD, (_m, name: string, sep: string, value: string) => `${name}${sep}${maskValue(value)}`)
     .replace(PREFIX_TOKEN, "***")
     .replace(URL_CREDS, "//***@")
     .replace(HEX_RUN, "***")

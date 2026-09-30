@@ -218,6 +218,25 @@ describe("redact 확장 규칙 (Ruling P10, reviewer Important B)", () => {
       "curl -u admin:*** https://example.com/api",
     );
   });
+
+  it("npm _authToken은 전용 규칙으로 가린다(Ruling P11)", () => {
+    expect(
+      summarize("Bash", { command: "npm config set //registry.npmjs.org/:_authToken FAKETOKEN123" }).command,
+    ).toBe("npm config set //registry.npmjs.org/:_authToken ***");
+    expect(summarize("Bash", { command: "_authToken=FAKETOKEN123" }).command).toBe("_authToken=***");
+  });
+});
+
+describe("redact 오탐 없음 추가분 ([배정 #6] 이어서 — director가 직접 찾은 사례)", () => {
+  it("날짜가 붙은 저장소 파일명·식별자는 가리지 않는다", () => {
+    expect(
+      summarize("Bash", { command: "cat docs/superpowers/plans/2026-09-28-claude-agent-office-viewer.md" })
+        .command,
+    ).toBe("cat docs/superpowers/plans/2026-09-28-claude-agent-office-viewer.md");
+    expect(summarize("Bash", { command: "git log 2026-10-01-v2-phase1-design-spec-2" }).command).toBe(
+      "git log 2026-10-01-v2-phase1-design-spec-2",
+    );
+  });
 });
 
 describe("agentOf", () => {
