@@ -19,7 +19,8 @@ export interface ToolSummary {
 }
 
 // 그래핌 단위 분해. Intl.Segmenter가 없는 런타임을 대비해 코드포인트 단위로 대체한다.
-const toGraphemes: (s: string) => string[] = (() => {
+// lastSentence(derive.ts)도 같은 함수로 잘라야 ZWJ 이모지가 안 쪼개진다(Ruling P14).
+export const toGraphemes: (s: string) => string[] = (() => {
   try {
     const seg = new Intl.Segmenter("ko", { granularity: "grapheme" });
     return (s: string) => Array.from(seg.segment(s), (x) => x.segment);

@@ -1,6 +1,6 @@
 import type { Activity, Decision, DecisionKind } from "../../src/shared/types";
 import type { StoredEvent } from "./store";
-import type { ToolSummary } from "./summarize";
+import { MAX_FIELD, redact, toGraphemes, type ToolSummary } from "./summarize";
 
 export const TOOL_TTL = 10 * 60_000;
 export const DECISION_TTL = 30 * 60_000;
@@ -151,7 +151,12 @@ export function deriveAgent(events: readonly StoredEvent[], now: number): Derive
   return out;
 }
 
-/** 대화 기록 마지막 항목이 assistant 텍스트면 그 마지막 문장(최대 200자). "저는 방금 「…」라고 말했습니다"에 쓴다 */
+/**
+ * 대화 기록 마지막 항목이 assistant 텍스트면 그 마지막 문장(최대 200자). "저는 방금 「…」라고 말했습니다"에 쓴다.
+ * 코드 펜스(```)와 표 행(|…|)은 문장으로 안 치고 건너뛴다(Ruling P15). 비밀값으로 보이는 형식은 가린 뒤
+ * 자른다(Ruling P14) — summarize.ts와 같은 redact()·그래핌 자르기를 재사용해 EventStore → 스냅샷 →
+ * SSE → 말풍선으로 원문이 새지 않게 한다.
+ */
 export function lastSentence(entry: unknown): string | undefined {
   const e = entry as { type?: string; message?: { content?: unknown } } | undefined;
   if (e?.type !== "assistant" || !Array.isArray(e.message?.content)) return undefined;
@@ -161,6 +166,22 @@ export function lastSentence(entry: unknown): string | undefined {
     .join(" ")
     .trim();
   if (!text) return undefined;
-  const last = text.split(/(?<=[.!?。])\s+|\n+/).map((p) => p.trim()).filter(Boolean).at(-1);
-  return last === undefined ? undefined : Array.from(last).slice(0, 200).join("");
+
+  let inFence = false;
+  const visible: string[] = [];
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (t.length > 1 && t.startsWith("|") && t.endsWith("|")) continue; // 표 행
+    visible.push(line);
+  }
+  const shown = visible.join("\n").trim();
+  if (!shown) return undefined;
+
+  const last = shown.split(/(?<=[.!?。])\s+|\n+/).map((p) => p.trim()).filter(Boolean).at(-1);
+  return last === undefined ? undefined : toGraphemes(redact(last)).slice(0, MAX_FIELD).join("");
 }

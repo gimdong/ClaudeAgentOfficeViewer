@@ -299,4 +299,29 @@ describe("lastSentence", () => {
     expect(lastSentence(undefined)).toBeUndefined();
     expect(Array.from(lastSentence(a("가".repeat(300)))!)).toHaveLength(200);
   });
+
+  it("마지막 문장의 흔한 토큰 형식은 가린다(Ruling P14)", () => {
+    expect(lastSentence(a("토큰은 ghp_FAKEFAKEFAKE1234567890 입니다."))).toBe("토큰은 *** 입니다.");
+    expect(lastSentence(a("export GITHUB_TOKEN=FAKE_TOKEN_123 로 설정하세요"))).toBe("export GITHUB_TOKEN=*** 로 설정하세요");
+  });
+
+  it("가림이 200자 자르기보다 먼저 적용된다(긴 문장 끝의 토큰)", () => {
+    const filler = "lorem ".repeat(30); // 180자, 공백으로 끊겨 32자 연속 규칙에 안 걸림
+    const secret = "ghp_" + "F".repeat(36);
+    const text = `${filler}GITHUB_TOKEN=${secret}`;
+    expect(text.length).toBeGreaterThan(200);
+    expect(lastSentence(a(text))).toBe(`${filler}GITHUB_TOKEN=***`);
+  });
+
+  it("코드 블록으로 끝나면 그 앞 문장을 고른다(Ruling P15)", () => {
+    expect(lastSentence(a("다음 코드입니다:\n```ts\nconst x = 1;\n```"))).toBe("다음 코드입니다:");
+  });
+
+  it("표로 끝나면 그 앞 문장을 고른다(Ruling P15)", () => {
+    expect(lastSentence(a("결과는 다음과 같습니다.\n| A | B |\n| 1 | 2 |"))).toBe("결과는 다음과 같습니다.");
+  });
+
+  it("코드만 있으면 undefined", () => {
+    expect(lastSentence(a("```ts\nconst x = 1;\n```"))).toBeUndefined();
+  });
 });
