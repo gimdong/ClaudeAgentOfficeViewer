@@ -167,9 +167,26 @@ describe("redact 오탐 없음 (Ruling P10)", () => {
     for (const c of untouched) expect(summarize("Bash", { command: c }).command).toBe(c);
   });
 
-  it("40자 git sha(숫자·영문 혼합)는 가려져도 된다(수용)", () => {
-    const sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"; // 40자, 숫자·영문 섞임
+  it("40자 git sha(16진수)는 가려져도 된다(수용)", () => {
+    const sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"; // 40자, 0-9와 a-f만
     expect(summarize("Bash", { command: `git checkout ${sha}` }).command).toBe("git checkout ***");
+  });
+
+  it("대문자·소문자·숫자가 모두 섞인 32자 이상 base64형 문자열은 가려진다", () => {
+    // 대문자, 소문자, 숫자가 모두 있어야 하는 새 base64형 규칙(16진수 규칙과는 별개) 확인
+    const token = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5z"; // 38자, 대/소문자/숫자 모두 포함
+    expect(summarize("Bash", { command: `export TOKEN_VALUE ${token}` }).command).toBe(
+      `export TOKEN_VALUE ***`,
+    );
+  });
+
+  it("경로 속 NAME=값의 확장자는 삼키지 않는다(Minor)", () => {
+    expect(summarize("Bash", { command: "cat /tmp/fake/password=hint.txt" }).command).toBe(
+      "cat /tmp/fake/password=***.txt",
+    );
+    expect(summarize("Read", { file_path: "/tmp/fake/password=hint.txt" }).filePath).toBe(
+      "/tmp/fake/password=***.txt",
+    );
   });
 });
 

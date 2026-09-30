@@ -53,9 +53,14 @@ const CURL_U = /(-u\s+[^\s:]+:)(\S+)/g;
 const PREFIX_TOKEN = /\b(?:sk|ghp|gho|xox[abp]|AKIA)[-_A-Za-z0-9]{8,}/g;
 const URL_CREDS = /\/\/[^/\s:@]+:[^/\s@]+@/g;
 // 이름·접두어로 잡히지 않은, 32자 이상 이어진 16진수/base64 형태의 문자열을 통째로 가리는 마지막 안전망.
-// /와 =는 넣지 않는다 — 절대경로 전체나 NAME=값의 이름+값이 하나로 합쳐져 통째로 가려지는 오탐이 있었다(reviewer Important A).
-// 숫자와 영문이 둘 다 있을 때만 가린다 — 글자만 있는 긴 식별자(경로 조각, 함수 이름)는 그대로 둔다.
-const LONG_RANDOM = /(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*\d)(?=[A-Za-z0-9+_-]*[A-Za-z])[A-Za-z0-9+_-]{32,}(?![A-Za-z0-9+_-])/g;
+// Fix round 2에서 "숫자+영문 혼합"만으로는 SOME_REALLY_LONG_..._HERE=1처럼 이름 전체가 여전히 걸려서(reviewer 재확인),
+// round 2 보강(Ruling P10 추가분)에서 두 규칙으로 좁힌다.
+// (a) 16진수(git sha, 해시)만: 0-9와 a-f만으로 32자 이상 이어진 경우
+const HEX_RUN = /\b[0-9a-f]{32,}\b/gi;
+// (b) base64형: /를 빼고, 대문자·소문자·숫자가 모두 있어야 한다 — 이름만(대문자만/소문자만)인 식별자나
+// 절대경로는 대개 세 종류가 다 섞이지 않으므로 자연히 빠진다.
+const BASE64_RUN =
+  /(?<![A-Za-z0-9+=_-])(?=[A-Za-z0-9+=_-]*[A-Z])(?=[A-Za-z0-9+=_-]*[a-z])(?=[A-Za-z0-9+=_-]*\d)[A-Za-z0-9+=_-]{32,}(?![A-Za-z0-9+=_-])/g;
 
 const maskValue = (value: string): string => {
   const q = value[0];
@@ -72,7 +77,8 @@ export function redact(s: string): string {
     .replace(CURL_U, (_m, prefix: string) => `${prefix}***`)
     .replace(PREFIX_TOKEN, "***")
     .replace(URL_CREDS, "//***@")
-    .replace(LONG_RANDOM, "***");
+    .replace(HEX_RUN, "***")
+    .replace(BASE64_RUN, "***");
 }
 
 const cut = (v: unknown): string | undefined =>
