@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
 import type { SnapshotHub } from "./hub";
+import { getLogger } from "./log";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -75,7 +76,7 @@ export function createApp(
         opts.onHookEvent?.(body as Record<string, unknown>);
       } catch (e) {
         // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
-        console.error("[hooks] 이벤트 처리 실패:", e);
+        getLogger().error("hooks", "event handling failed", { error: (e as Error).message });
       }
       res.status(200).end();
     },

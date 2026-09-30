@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import type { Snapshot } from "../src/shared/types";
+import { getLogger } from "./log";
 
 export interface HubOptions {
   intervalMs?: number;
@@ -34,9 +35,9 @@ export class SnapshotHub {
       this.watcher = watch(this.opts.watchDir, { recursive: true }, (_event, file) => {
         if (WATCHED.test(String(file ?? ""))) this.schedule();
       });
-      this.watcher.on("error", (e) => console.warn(`[hub] 파일 감시 오류, 주기 갱신은 계속됩니다: ${e.message}`));
+      this.watcher.on("error", (e) => getLogger().warn("hub", "watch error, polling continues", { error: e.message }));
     } catch (e) {
-      console.warn(`[hub] 파일 감시를 시작하지 못해 주기 갱신만 씁니다: ${(e as Error).message}`);
+      getLogger().warn("hub", "watch unavailable, polling only", { error: (e as Error).message });
     }
   }
 
@@ -94,7 +95,7 @@ export class SnapshotHub {
           }
         } while (this.again);
       } catch (e) {
-        console.error("[hub] 스냅샷 생성 실패:", e);
+        getLogger().error("hub", "snapshot build failed", { error: (e as Error).message });
       } finally {
         this.running = null;
       }

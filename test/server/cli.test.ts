@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,6 +38,11 @@ describe("parseCliArgs", () => {
   it("단독 ~도 homedir()로 확장된다", () => {
     expect(parseCliArgs(["--claude-home", "~"], {})).toMatchObject({ claudeHome: homedir() });
   });
+
+  it("--log-dir는 홈을 전개해 logDir로 들어오고, 없으면 undefined", () => {
+    expect(parseCliArgs(["--log-dir", "~/x"], {})).toMatchObject({ logDir: join(homedir(), "x") });
+    expect(parseCliArgs([], {}).logDir).toBeUndefined();
+  });
 });
 
 describe("CLI", () => {
@@ -44,12 +50,18 @@ describe("CLI", () => {
     const blocker = createServer().listen(0, "127.0.0.1");
     await new Promise((r) => blocker.once("listening", r));
     const port = (blocker.address() as { port: number }).port;
-    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", tmpdir()], { stdio: ["ignore", "pipe", "pipe"] });
+    // 저장소 .logs/에 시험 산출물을 남기지 않도록 임시 로그 폴더를 준다
+    const logDir = mkdtempSync(join(tmpdir(), "office-cli-log-"));
+    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", tmpdir(), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (d) => (stderr += d));
     const code = await new Promise<number | null>((r) => child.on("exit", r));
     blocker.close();
     expect(code).toBe(1);
     expect(stderr).toContain("이미 사용 중");
+    const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
+    rmSync(logDir, { recursive: true, force: true });
+    expect(log).toContain('"msg":"port in use"');
+    expect(log).toContain('"msg":"exit"');
   });
 });

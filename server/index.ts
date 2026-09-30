@@ -1,17 +1,22 @@
-import { homedir } from "node:os";
+import { existsSync } from "node:fs";
+import { arch, homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
+import { Logger, setLogger } from "./log";
+import { resolvePaths } from "./paths";
 import { SnapshotBuilder } from "./snapshot";
+import pkg from "../package.json" with { type: "json" };
 
 export interface CliOptions {
   port: number;
   claudeHome: string;
   configPath: string;
+  logDir?: string;
 }
 
 /** 선행 "~/"나 단독 "~"를 homedir()로 치환한다(그 외 경로는 그대로 둔다). */
@@ -24,7 +29,7 @@ function expandHome(p: string): string {
 export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
   const { values } = parseArgs({
     args: argv,
-    options: { port: { type: "string" }, "claude-home": { type: "string" }, config: { type: "string" } },
+    options: { port: { type: "string" }, "claude-home": { type: "string" }, config: { type: "string" }, "log-dir": { type: "string" } },
   });
   const port = values.port === undefined ? 4317 : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`잘못된 포트: ${values.port}`);
@@ -36,6 +41,7 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
     port,
     claudeHome: resolve(expandHome(claudeHomeRaw)),
     configPath: resolve(values.config ?? "claude-office.config.json"),
+    logDir: values["log-dir"] ? resolve(expandHome(values["log-dir"])) : undefined,
   };
 }
 
@@ -47,12 +53,31 @@ async function main(): Promise<void> {
     console.error((e as Error).message);
     process.exit(1);
   }
+  // index.ts(묶음에서는 server.mjs)의 URL을 넘긴다 — paths.ts의 URL이면 묶음 여부를 알 수 없다
+  const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
+  const log = new Logger({ dir: paths.logDir });
+  setLogger(log);
+  log.cleanup();
+  const staticDir = paths.staticDir;
+  log.info("server", "start", {
+    version: (pkg as { version?: string }).version ?? "dev", // version은 T6에서 package.json에 들어온다
+    os: platform(),
+    arch: arch(),
+    node: process.version,
+    port: opts.port,
+    mode: paths.mode,
+    claudeHomeExists: existsSync(opts.claudeHome),
+    webExists: existsSync(join(staticDir, "index.html")),
+  });
+  process.on("exit", (code) => log.info("server", "exit", { code }));
+  process.on("SIGINT", () => process.exit(130));
+  process.on("SIGTERM", () => process.exit(143));
+
   const config = await loadConfig(opts.configPath);
   const events = new EventStore();
   const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events }), { watchDir: opts.claudeHome });
   await hub.start();
 
-  const staticDir = fileURLToPath(new URL("../dist/web", import.meta.url));
   const onHookEvent = (input: Record<string, unknown>) => {
     if (events.add(input, Date.now())) hub.poke();
   };
@@ -60,8 +85,13 @@ async function main(): Promise<void> {
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
-    if (e.code === "EADDRINUSE") console.error(`포트 ${opts.port}가 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
-    else console.error(e);
+    if (e.code === "EADDRINUSE") {
+      console.error(`포트 ${opts.port}가 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+      log.error("server", "port in use", { port: opts.port });
+    } else {
+      console.error(e);
+      log.error("server", "listen failed", { code: e.code, error: e.message });
+    }
     hub.stop();
     process.exit(1);
   });

@@ -10,6 +10,7 @@ import { readLimits } from "./collectors/limits";
 import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
+import { getLogger } from "./log";
 import { readLastEntry } from "./lib/jsonlTail";
 
 export interface BuilderOptions {
@@ -72,7 +73,7 @@ export class SnapshotBuilder {
       try {
         return await fn();
       } catch (e) {
-        console.warn(`[snapshot] ${label} 수집 실패, 직전 값을 씁니다: ${(e as Error).message}`);
+        getLogger().warn("snapshot", `${label} collect failed, using previous value`, { error: (e as Error).message });
         stale = true;
         return fallback;
       }

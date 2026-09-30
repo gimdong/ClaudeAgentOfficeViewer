@@ -2,3 +2,6 @@ node_modules/
 dist/
 claude-office.config.json
 .superpowers/
+.logs/
+release/
+beta-feedback/

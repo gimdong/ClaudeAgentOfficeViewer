@@ -3,6 +3,7 @@ import { utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
 import { EventStore } from "../../server/events/store";
+import { getLogger } from "../../server/log";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
 
 const NOW = Date.now();
@@ -80,11 +81,12 @@ describe("SnapshotBuilder", () => {
     // teams 자리에 파일을 두면 readTeams가 ENOTDIR로 실패한다 → 직전 값(처음엔 빈 배열) 사용
     await h.write("sessions/1.json", { pid: 1, sessionId: "z", updatedAt: NOW });
     await h.write("teams", "not a directory");
+    const warn = vi.spyOn(getLogger(), "warn");
     const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true }).build(NOW);
     expect(snap.sessions).toHaveLength(1);
     expect(snap.sessions[0].stale).toBe(true);
     expect(snap.sessions[0].members.map((m) => m.name)).toEqual(["team-lead"]);
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("teams"));
+    expect(warn).toHaveBeenCalledWith("snapshot", expect.stringContaining("teams"), expect.anything());
   });
 });
 
