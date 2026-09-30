@@ -152,4 +152,24 @@ describe("SnapshotBuilder v2", () => {
     const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
     expect(lead.activity).toMatchObject({ kind: "said", target: "다음은 리뷰입니다." });
   });
+
+  it("team config의 leadSessionId가 세션 id와 달라도 팀원 meta의 teamName으로 팀을 찾아 팀원 책상을 그린다(Ruling P19)", async () => {
+    await h.write("sessions/1.json", { pid: 1, sessionId: "sess-fake-A", name: "alpha", cwd: "/x", status: "idle", updatedAt: T - 1000 });
+    await h.write("teams/team-fake/config.json", {
+      name: "team-fake",
+      leadSessionId: "lead-fake-B", // 실제 세션 id와 다름(Phase 0 관찰)
+      members: [{ name: "team-lead", agentType: "team-lead" }, { name: "quill", agentType: "general-purpose" }],
+    });
+    await h.write("projects/-p/sess-fake-A/subagents/agent-aquill-1.meta.json", { name: "quill", teamName: "team-fake" });
+    await h.append("projects/-p/sess-fake-A/subagents/agent-aquill-1.jsonl", [assistant({ requestId: "q1", ts: T - 500 })]);
+
+    const events = new EventStore();
+    events.add({ hook_event_name: "PreToolUse", session_id: "sess-fake-A", agent_id: "aquill-1", agent_type: "quill", tool_name: "Bash", tool_input: { command: "echo hi" } }, T - 400);
+
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events }).build(T);
+    const s = snap.sessions.find((x) => x.id === "sess-fake-A")!;
+    const quill = s.members.find((m) => m.name === "quill");
+    expect(quill).toBeDefined();
+    expect(quill!.activity).toEqual({ kind: "tool", tool: "Bash", target: "echo hi", startedAt: new Date(T - 400).toISOString() });
+  });
 });

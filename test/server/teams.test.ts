@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { chmod, mkdir, utimes } from "node:fs/promises";
-import { ACTIVE_WINDOW_MS, countUnread, memberState, readTeams } from "../../server/collectors/teams";
+import { ACTIVE_WINDOW_MS, countUnread, findTeamNameForSession, memberState, readTeams, withTranscriptsFor } from "../../server/collectors/teams";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
 let h: FakeHome;
@@ -73,6 +73,31 @@ describe("readTeams", () => {
     } finally {
       await chmod(blocked, 0o755); // afterEach의 정리(rm -rf)가 지울 수 있게 권한을 복구한다
     }
+  });
+});
+
+describe("findTeamNameForSession / withTranscriptsFor (Ruling P19)", () => {
+  it("leadSessionId와 다른 세션이어도, 그 세션의 subagent meta에 적힌 teamName으로 팀을 찾을 수 있다", async () => {
+    await h.write("projects/-p/sess-fake-A/subagents/agent-aquill-1.meta.json", { name: "quill", teamName: "team-fake" });
+    expect(await findTeamNameForSession(h.path("projects"), "sess-fake-A")).toBe("team-fake");
+    expect(await findTeamNameForSession(h.path("projects"), "no-such-session")).toBeUndefined();
+  });
+
+  it("meta 파일이 깨져 있으면 그 파일만 건너뛰고 나머지에서 찾는다", async () => {
+    await h.write("projects/-p/s/subagents/agent-bad.meta.json", "{");
+    await h.write("projects/-p/s/subagents/agent-aok.meta.json", { name: "ok", teamName: "team-ok" });
+    expect(await findTeamNameForSession(h.path("projects"), "s")).toBe("team-ok");
+  });
+
+  it("withTranscriptsFor는 원래 팀 정보(이름·unread 등)는 두고 transcript만 새 세션 기준으로 다시 찾는다", async () => {
+    await h.write("projects/-p/lead-fake-B/subagents/agent-adev.meta.json", { name: "developer" });
+    await h.append("projects/-p/lead-fake-B/subagents/agent-adev.jsonl", [{ n: 1 }]);
+    await h.write("projects/-p/sess-fake-A/subagents/agent-adev2.meta.json", { name: "developer" });
+    await h.append("projects/-p/sess-fake-A/subagents/agent-adev2.jsonl", [{ n: 2 }]);
+    const team = { name: "team-fake", leadSessionId: "lead-fake-B", members: [{ name: "developer", agentType: "general-purpose", unread: 1 }] };
+    const moved = await withTranscriptsFor(team, h.path("projects"), "sess-fake-A");
+    expect(moved.name).toBe("team-fake");
+    expect(moved.members[0]).toMatchObject({ name: "developer", unread: 1, transcript: h.path("projects/-p/sess-fake-A/subagents/agent-adev2.jsonl") });
   });
 });
 

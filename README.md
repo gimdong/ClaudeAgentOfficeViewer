@@ -56,6 +56,7 @@ claude --plugin-dir /tmp/claude-office-dev-plugin
 ### PLAN 바와 요금제
 
 PLAN 바는 statusline이 넘겨 주는 `rate_limits`의 5시간·주간·지출 한도(`spend_limit`) 가운데 가장 많이 쓴 창을 보여줍니다. Pro/Max 구독이나 지출 한도가 있는 gateway 뒤에서만 값이 오고, 그 밖에는 `-- 데이터 없음`입니다.
+PLAN 바 값은 `npm run setup:statusline`으로 statusline tap을 설치해야 들어옵니다(설치는 사용자가 직접 결정합니다).
 
 ## 글꼴
 

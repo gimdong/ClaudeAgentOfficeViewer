@@ -69,6 +69,33 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
   return new Map([...best].map(([k, v]) => [k, v.path]));
 }
 
+/**
+ * team config의 leadSessionId가 실제로 그 팀을 쓰는 세션과 다를 수 있다(Ruling P19 — Phase 0 T0.1/T0.1-review
+ * 관찰: in-process 팀원의 세션 id가 나중에 leadSessionId와 어긋남). leadSessionId로 못 찾으면 이 세션
+ * 자신의 subagents meta에 적힌 teamName으로 팀을 역으로 찾는다. meta 파일 하나가 깨져도 그 파일만 건너뛴다.
+ */
+export async function findTeamNameForSession(projectsDir: string, sessionId: string): Promise<string | undefined> {
+  for (const project of await readdirOrEmpty(projectsDir)) {
+    const dir = join(projectsDir, project, sessionId, "subagents");
+    for (const n of await readdirOrEmpty(dir)) {
+      if (!n.endsWith(".meta.json")) continue;
+      try {
+        const teamName = str(JSON.parse(await readFile(join(dir, n), "utf8"))?.teamName);
+        if (teamName) return teamName;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** team을 leadSessionId가 아닌 다른 세션에 붙일 때, 팀원 transcript를 그 세션 폴더 기준으로 다시 찾는다(Ruling P19) */
+export async function withTranscriptsFor(team: TeamRecord, projectsDir: string, sessionId: string): Promise<TeamRecord> {
+  const transcripts = await findTranscripts(projectsDir, sessionId);
+  return { ...team, members: team.members.map((m) => ({ ...m, transcript: transcripts.get(m.name) })) };
+}
+
 export async function readTeams(claudeHome: string): Promise<TeamRecord[]> {
   const teamsDir = join(claudeHome, "teams");
   let names: string[];

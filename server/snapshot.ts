@@ -8,7 +8,7 @@ import { deriveAgent, lastSentence, type Derived } from "./events/derive";
 import type { EventStore } from "./events/store";
 import { readLimits } from "./collectors/limits";
 import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
-import { memberState, readTeams, type TeamRecord } from "./collectors/teams";
+import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
 import { readLastEntry } from "./lib/jsonlTail";
 
@@ -90,9 +90,19 @@ export class SnapshotBuilder {
     const floorOf = new Map(byStart.map((s, i) => [s.sessionId, i + 1]));
     const ordered = [...sessions].sort((a, b) => Number(b.alive) - Number(a.alive) || b.updatedAt - a.updatedAt);
     const currentId = ordered.find((s) => s.alive)?.sessionId;
+    const projectsDir = join(claudeHome, "projects");
+    const teamFor = async (sessionId: string): Promise<TeamRecord | undefined> => {
+      const direct = teams.find((t) => t.leadSessionId === sessionId);
+      if (direct) return direct;
+      // leadSessionId로 못 찾으면, 이 세션 자신의 subagents meta에 적힌 teamName으로 역으로 찾는다
+      // (Ruling P19) — 그 팀의 transcript는 이 세션 폴더 기준으로 다시 찾는다.
+      const teamName = await findTeamNameForSession(projectsDir, sessionId);
+      const byName = teamName ? teams.find((t) => t.name === teamName) : undefined;
+      return byName ? withTranscriptsFor(byName, projectsDir, sessionId) : undefined;
+    };
     const views = await Promise.all(
-      ordered.map((s) =>
-        this.sessionView(s, teams.find((t) => t.leadSessionId === s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0),
+      ordered.map(async (s) =>
+        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0),
       ),
     );
     const decisionCount = views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
