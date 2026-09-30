@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Agent Office 사용설명서</title>
+<!--
+  Claude Agent Office v2.0.0-beta.1 사용설명서(초안). 인터넷 없이 열리는 파일 하나입니다.
+  외부 요청 0: 글꼴·그림·스크립트를 모두 이 파일 안에 넣습니다.
+  "TODO(Tn)" 주석은 그 Task의 실제 출력이 나오면 채울 자리입니다. "FIG(id)"는 designer 그림 자리입니다.
+  예시 값은 모두 가짜입니다(사용자 이름 fakeuser).
+-->
+<style>
+  :root {
+    --bg: #fbfaf7; --ink: #1d1b2e; --muted: #5f5b73; --line: #dcd8e6; --panel: #ffffff;
+    --code-bg: #1b1930; --code-ink: #f1eefc; --accent: #2f6fd6; --ok: #1f8a4c; --warn: #9a6a00; --fail: #c23b3b;
+    --tip-bg: #eef5ff; --warn-bg: #fff6e0;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14121f; --ink: #ece9f7; --muted: #a7a2bd; --line: #34304a; --panel: #1c1a2b;
+      --code-bg: #0b0a17; --accent: #7fb0ff; --ok: #59d18a; --warn: #f0c14b; --fail: #ff7a7a;
+      --tip-bg: #1a2640; --warn-bg: #2e2612;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.7 -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 1.8rem; line-height: 1.3; margin: 0 0 4px; }
+  h2 { font-size: 1.35rem; margin: 56px 0 12px; padding-top: 12px; border-top: 2px solid var(--line); }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; }
+  a { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  nav.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 20px; }
+  nav.toc ol { margin: 0; padding-left: 1.3em; }
+  ol.steps { padding-left: 1.4em; }
+  ol.steps > li { margin: 0 0 18px; }
+  .term { border-bottom: 1px dotted var(--muted); }
+  .box { border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .ok-box { border: 2px solid var(--ok); }
+  .ok-box::before { content: "이렇게 보이면 성공"; display: block; font-weight: 700; color: var(--ok); margin-bottom: 4px; }
+  .tip { background: var(--tip-bg); }
+  .caution { background: var(--warn-bg); }
+  .cmd { position: relative; margin: 8px 0; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 12px 84px 12px 14px; overflow-x: auto; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  pre.out { padding-right: 14px; }
+  .copy { position: absolute; top: 8px; right: 8px; min-width: 64px; min-height: 32px; border: 1px solid #56507a; border-radius: 6px; background: #2b2748; color: #fff; font: inherit; font-size: 14px; cursor: pointer; }
+  .copy:focus-visible, .tabs button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 16px 0 0; }
+  .tabs button { font: inherit; font-size: 15px; padding: 8px 16px; min-height: 40px; border: 1px solid var(--line); border-bottom: none; border-radius: 8px 8px 0 0; background: var(--bg); color: var(--ink); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--panel); font-weight: 700; }
+  .os-panel { border: 1px solid var(--line); border-radius: 0 8px 8px 8px; background: var(--panel); padding: 4px 16px 8px; margin-bottom: 16px; }
+  .os-panel > .os-name { font-weight: 700; margin-top: 12px; }
+  .js .os-panel > .os-name { display: none; }
+  .fig-slot, .shot-slot { border: 2px dashed var(--line); border-radius: 8px; color: var(--muted); text-align: center; padding: 24px 12px; margin: 12px 0; font-size: 14px; }
+  .shot-slot { aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 8px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: .9em; }
+  dt { font-weight: 700; margin-top: 8px; }
+  dd { margin: 0 0 8px 0; }
+  .symptom { border-left: 4px solid var(--accent); padding-left: 12px; margin: 20px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Claude Agent Office 사용설명서</h1>
+<p class="sub">베타 버전 2.0.0-beta.1 · 개발자가 아니어도 순서대로 따라 하면 됩니다.</p>
+
+<nav class="toc" aria-label="목차">
+  <ol>
+    <li><a href="#s1">이 프로그램이 하는 일</a></li>
+    <li><a href="#s2">준비물</a></li>
+    <li><a href="#s3">설치</a></li>
+    <li><a href="#s4">켜기와 끄기</a></li>
+    <li><a href="#s5">화면 보는 법</a></li>
+    <li><a href="#s6">문제가 생겼을 때</a></li>
+    <li><a href="#s7">지우기</a></li>
+    <li><a href="#s8">부록 A: 회사 관리자에게 전달할 설정</a></li>
+    <li><a href="#s9">부록 B: 베타에서 알려진 제한</a></li>
+  </ol>
+</nav>
+
+<div class="box tip">
+  <strong>이 설명서에서 쓰는 말</strong>
+  <dl>
+    <dt>터미널</dt>
+    <dd>글자로 컴퓨터에 명령을 내리는 창입니다. mac은 "터미널" 앱, Windows는 "PowerShell", Linux는 "터미널"을 씁니다.</dd>
+    <dt>명령</dt>
+    <dd>터미널에 붙여 넣고 <kbd>Enter</kbd>를 누르는 한 줄입니다. 이 설명서의 검은 상자가 명령이고, 오른쪽 <strong>복사</strong> 버튼으로 복사할 수 있습니다.</dd>
+    <dt>Claude Code</dt>
+    <dd>터미널에서 쓰는 Claude입니다. 이 프로그램은 Claude Code가 일하는 모습을 보여 줍니다.</dd>
+    <dt>대시보드</dt>
+    <dd>이 프로그램의 화면입니다. 웹 브라우저(Chrome, Safari, Edge 등)에서 열립니다.</dd>
+  </dl>
+</div>
+
+<!-- ───────────────────────────── 1 ───────────────────────────── -->
+<h2 id="s1">1. 이 프로그램이 하는 일</h2>
+<p>Claude Code가 지금 무엇을 하고 있는지 <strong>작은 사무실 빌딩</strong>으로 보여 줍니다.</p>
+<ul>
+  <li>Claude Code 창 하나가 빌딩의 <strong>층</strong> 하나입니다.</li>
+  <li>Claude와 함께 일하는 도우미(팀원)는 층 안의 <strong>도트 캐릭터</strong>입니다.</li>
+  <li>캐릭터 머리 위 <strong>말풍선</strong>에 지금 하는 일이 짧게 나옵니다.</li>
+  <li>Claude가 여러분의 확인을 기다리면 캐릭터가 <strong>손을 들고</strong> 머리 위에 노란 <strong>?</strong>가 뜹니다.</li>
+</ul>
+<!-- FIG(fig-overview): 터미널 창 두 개 → hook → 빌딩(층 2개, 캐릭터 3명) -->
+<div class="fig-slot" data-fig="fig-overview">그림 준비 중: Claude Code가 일하는 모습을 사무실 빌딩으로 보여 줍니다</div>
+<p>이 프로그램은 <strong>여러분의 컴퓨터 안에서만</strong> 동작합니다. 대화 내용을 인터넷으로 보내지 않고, Claude Code의 설정을 읽기만 합니다.</p>
+
+<!-- ───────────────────────────── 2 ───────────────────────────── -->
+<h2 id="s2">2. 준비물</h2>
+<p>설치하기 전에 두 가지가 있어야 합니다.</p>
+<ol class="steps">
+  <li>
+    <strong>Claude Code</strong>가 설치되어 있고, 한 번 이상 실행해 본 적이 있어야 합니다. 터미널에서 아래 명령으로 확인합니다.
+    <div class="cmd"><pre><code>claude --version</code></pre><button class="copy" type="button">복사</button></div>
+    <div class="box ok-box">숫자로 된 버전이 한 줄 나옵니다(예: <code>2.1.0 (Claude Code)</code>). "명령을 찾을 수 없습니다"가 나오면 Claude Code를 먼저 설치해 주세요.</div>
+  </li>
+  <li>
+    <strong>Node.js 24 이상</strong>이 있어야 합니다. Node.js는 이 프로그램을 움직이는 기본 프로그램입니다. 터미널에서 확인합니다.
+    <div class="cmd"><pre><code>node --version</code></pre><button class="copy" type="button">복사</button></div>
+    <div class="box ok-box"><code>v24</code> 이상으로 시작하는 한 줄이 나옵니다(예: <code>v24.1.0</code>).</div>
+    <p>없거나 24보다 낮으면 운영체제에 맞게 설치합니다.</p>
+    <div class="tabs" role="tablist" aria-label="운영체제"></div>
+    <div class="os-panel" data-os="mac"><p class="os-name">macOS</p>
+      <p><a href="https://nodejs.org">nodejs.org</a>에서 <strong>LTS</strong>라고 적힌 설치 파일(.pkg)을 받아 두 번 눌러 설치합니다. 설치 뒤에는 터미널을 닫았다가 다시 열어 주세요.</p>
+    </div>
+    <div class="os-panel" data-os="linux"><p class="os-name">Linux(Ubuntu)</p>
+      <p>회사 IT 담당자에게 "Node.js 24 설치"를 부탁하는 것이 가장 안전합니다. 직접 설치한다면 <a href="https://nodejs.org">nodejs.org</a>의 안내(NodeSource 또는 nvm)를 따릅니다.</p>
+    </div>
+    <div class="os-panel" data-os="win"><p class="os-name">Windows</p>
+      <p><a href="https://nodejs.org">nodejs.org</a>에서 <strong>LTS</strong>라고 적힌 설치 파일(.msi)을 받아 설치합니다. 설치 뒤에는 PowerShell을 닫았다가 다시 열어 주세요.</p>
+    </div>
+  </li>
+</ol>
+
+<!-- ───────────────────────────── 3 ───────────────────────────── -->
+<h2 id="s3">3. 설치</h2>
+<p>담당자에게 받은 파일 하나로 설치합니다. 인터넷 연결은 필요 없습니다. 설치는 여러분의 사용자 폴더 안(<code>~/.claude-office</code>, Windows는 <code>C:\Users\fakeuser\.claude-office</code>)에만 파일을 둡니다.</p>
+<div class="tabs" role="tablist" aria-label="운영체제"></div>
+<div class="os-panel" data-os="mac"><p class="os-name">macOS</p>
+  <ol class="steps">
+    <li>받은 파일 <code>claude-office-2.0.0-beta.1.tar.gz</code>를 <strong>다운로드</strong> 폴더에 둡니다.</li>
+    <li>"터미널" 앱을 엽니다(<kbd>⌘</kbd>+<kbd>Space</kbd>를 누르고 "터미널"을 입력).</li>
+    <li>아래 명령으로 파일을 풉니다.
+      <div class="cmd"><pre><code>cd ~/Downloads &amp;&amp; tar -xzf claude-office-2.0.0-beta.1.tar.gz</code></pre><button class="copy" type="button">복사</button></div>
+      <!-- TODO(T6/T7): 압축을 푼 폴더 이름 확인 -->
+    </li>
+    <li>설치 스크립트를 실행합니다.
+      <div class="cmd"><pre><code>cd ~/Downloads/claude-office-2.0.0-beta.1 &amp;&amp; bash install.sh</code></pre><button class="copy" type="button">복사</button></div>
+      <!-- TODO(T7): 실제 폴더 이름과 실행 명령 -->
+    </li>
+    <li>질문 두 개에 답합니다(아래 "설치 중 질문").</li>
+  </ol>
+  <div class="box caution">
+    <strong>"확인되지 않은 개발자" 경고가 나오면</strong><br>
+    베타 버전은 Apple의 서명을 받지 않아서 이 경고가 나올 수 있습니다. 담당자에게 받은 파일이 맞다면 <strong>시스템 설정 → 개인정보 보호 및 보안</strong> 아래쪽의 <strong>"그래도 열기"</strong>를 누른 뒤 같은 명령을 다시 실행합니다.
+  </div>
+</div>
+<div class="os-panel" data-os="linux"><p class="os-name">Linux(Ubuntu)</p>
+  <ol class="steps">
+    <li>받은 파일 <code>claude-office-2.0.0-beta.1.tar.gz</code>를 <strong>다운로드</strong> 폴더에 둡니다.</li>
+    <li>터미널을 엽니다(<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>).</li>
+    <li>아래 명령으로 파일을 풀고 설치 스크립트를 실행합니다.
+      <div class="cmd"><pre><code>cd ~/Downloads &amp;&amp; tar -xzf claude-office-2.0.0-beta.1.tar.gz &amp;&amp; cd claude-office-2.0.0-beta.1 &amp;&amp; bash install.sh</code></pre><button class="copy" type="button">복사</button></div>
+      <!-- TODO(T7): 실제 폴더 이름과 실행 명령 -->
+    </li>
+    <li>질문 두 개에 답합니다(아래 "설치 중 질문").</li>
+  </ol>
+</div>
+<div class="os-panel" data-os="win"><p class="os-name">Windows</p>
+  <ol class="steps">
+    <li>받은 파일 <code>claude-office-2.0.0-beta.1.zip</code>을 마우스 오른쪽 버튼으로 누르고 <strong>"압축 풀기"</strong>를 고릅니다. <strong>다운로드</strong> 폴더에 풉니다.</li>
+    <li>시작 메뉴에서 <strong>PowerShell</strong>을 엽니다.</li>
+    <li>설치 스크립트를 실행합니다.
+      <div class="cmd"><pre><code>cd $HOME\Downloads\claude-office-2.0.0-beta.1; powershell -ExecutionPolicy Bypass -File .\install.ps1</code></pre><button class="copy" type="button">복사</button></div>
+      <!-- TODO(T7): install.ps1 실제 실행 명령(실행 정책 안내 포함) -->
+    </li>
+    <li>질문 두 개에 답합니다(아래 "설치 중 질문").</li>
+  </ol>
+</div>
+
+<h3>설치 중 질문</h3>
+<dl>
+  <dt>"PATH에 추가할까요?" <!-- TODO(T7): 실제 질문 문구 --></dt>
+  <dd><kbd>y</kbd>를 누르면 어느 폴더에서나 <code>claude-office</code>라고만 쳐서 켤 수 있습니다. PATH는 "명령을 찾아보는 폴더 목록"입니다. <kbd>n</kbd>을 누르면 설치가 끝날 때 전체 경로로 켜는 방법을 알려 줍니다.</dd>
+  <dt>"Claude Code 플러그인을 설치할까요?" <!-- TODO(T7): 실제 질문 문구 --></dt>
+  <dd><kbd>y</kbd>를 권장합니다. 플러그인은 Claude Code에 붙이는 작은 추가 기능이고, 말풍선과 손들기를 보여 주려면 필요합니다. 플러그인은 <strong>보기만</strong> 하고 Claude의 동작을 바꾸지 않습니다.</dd>
+</dl>
+<p>설치가 끝나면 환경 점검(doctor) 결과가 나옵니다.</p>
+<!-- FIG(fig-install-ok): 설치 마지막 줄과 doctor ✅ 줄 -->
+<div class="box ok-box">
+  <!-- TODO(T7): 설치 스크립트 마지막 몇 줄(실제 출력 복사) -->
+  <pre class="out">✅ Node.js: 버전 24
+✅ 프로그램 파일: 있음
+✅ Claude 데이터 폴더: 세션 0개, 프로젝트 1개
+✅ Claude Code: 있음
+✅ 플러그인: 켜져 있음
+✅ 회사 관리자 설정: 파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)
+✅ 프록시: 없음</pre>
+  <p>✅가 대부분이면 성공입니다. ⚠️ "포트: 서버가 꺼져 있습니다", ⚠️ "실시간 이벤트: 서버가 꺼져 있어 확인하지 못했습니다", ⚠️ "요금제 한도(선택): 없음"은 아직 대시보드를 켜지 않았거나 선택 기능이라 괜찮습니다.</p>
+</div>
+<div class="shot-slot" data-screenshot="install-ok">스크린샷 자리: 설치 완료 화면</div>
+
+<!-- ───────────────────────────── 4 ───────────────────────────── -->
+<h2 id="s4">4. 켜기와 끄기</h2>
+<h3>켜기</h3>
+<ol class="steps">
+  <li>터미널(Windows는 PowerShell)을 새로 엽니다.</li>
+  <li>아래 명령을 실행합니다.
+    <div class="cmd"><pre><code>claude-office</code></pre><button class="copy" type="button">복사</button></div>
+    <!-- TODO(T8): PATH에 넣지 않은 경우의 전체 경로 명령 -->
+  </li>
+  <li>웹 브라우저가 저절로 열리고 대시보드가 보입니다. 열리지 않으면 브라우저 주소 창에 <code>http://127.0.0.1:4317</code>을 입력합니다. <code>127.0.0.1</code>은 "이 컴퓨터 자신"이라는 뜻입니다.</li>
+</ol>
+<div class="box ok-box">
+  <pre class="out">Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre>
+  <!-- TODO(T8): claude-office 명령이 덧붙이는 안내 줄("이 창을 닫으면 대시보드가 꺼집니다" 등) -->
+  <p>브라우저에 빌딩과 층이 보이고, 위쪽 막대 오른쪽에 <strong>● LIVE</strong>가 보입니다.</p>
+</div>
+<!-- FIG(fig-first-screen) -->
+<div class="shot-slot" data-screenshot="first-screen">스크린샷 자리: 처음 켰을 때의 대시보드</div>
+<div class="box caution">터미널 창을 닫으면 대시보드도 꺼집니다. 대시보드를 보는 동안에는 창을 열어 두세요(작게 줄여 두어도 됩니다).</div>
+<h3>끄기</h3>
+<p>대시보드를 켠 터미널 창에서 <kbd>Ctrl</kbd>+<kbd>C</kbd>를 누르거나, 그 창을 닫습니다. Claude Code는 계속 쓸 수 있습니다.</p>
+
+<!-- ───────────────────────────── 5 ───────────────────────────── -->
+<h2 id="s5">5. 화면 보는 법</h2>
+<!-- FIG(fig-screen-guide): 층 하나에 번호 ①–⑤ -->
+<div class="fig-slot" data-fig="fig-screen-guide">그림 준비 중: 화면의 각 부분(①–⑤)</div>
+<ol>
+  <li><strong>층</strong>: Claude Code 창 하나입니다. 층 머리에 이름과 상태가 보입니다. Claude Code 창을 정상적으로 닫으면 그 층은 사라집니다. 불이 꺼진 채 흐리게 남은 층은 창이 갑자기 꺼진 경우입니다.</li>
+  <li><strong>캐릭터</strong>: Claude(팀장)와, Claude가 함께 일하도록 부른 팀원들입니다.</li>
+  <li><strong>말풍선</strong>: 캐릭터가 지금 하는 일입니다(예: <code>저는 지금 "README.md" 파일을 읽고 있습니다</code>).</li>
+  <li><strong>손들기와 노란 ?</strong>: Claude가 여러분의 확인(권한 허락, 질문 답변, 계획 승인)을 기다립니다. Claude Code 창으로 가서 답해 주세요.</li>
+  <li><strong>진단 칩</strong>: 위쪽 막대의 "진단" 단추입니다. 최근 1시간 안에 오류가 있었으면 빨간 점이 붙습니다. 누르면 진단 패널이 열립니다(6장).</li>
+</ol>
+<!-- TODO(T10): 진단 칩·패널 실제 문구 대조 -->
+<!-- FIG(fig-diag-chip-panel) -->
+
+<h3>위쪽 막대의 숫자</h3>
+<ul>
+  <li><strong>토큰</strong>: Claude가 읽고 쓴 글자의 양입니다. 오늘·최근 5시간·최근 7일 합계가 보입니다.</li>
+  <li><strong>PLAN 바</strong>(선택): 요금제 사용 한도를 얼마나 썼는지 보여 줍니다. 설정하지 않았거나 회사 계정이 이 정보를 주지 않으면 "데이터 없음"으로 보입니다. Windows에서는 베타 기간에 항상 "데이터 없음"입니다.</li>
+</ul>
+<h3 id="plan-bar">요금제 한도(PLAN 바) 켜기(선택)</h3>
+<!-- TODO(T8): 설치본에서 statusline 설정을 켜는 명령(없으면 이 절을 "베타에서는 지원하지 않음"으로 바꿈). doctor의 statusline fix가 이 절을 가리킨다 -->
+<p>이 기능은 Claude Code의 상태 줄(statusline) 설정을 바꿉니다. 켜는 방법은 정식 배포 전에 채워 넣습니다.</p>
+
+<!-- ───────────────────────────── 6 ───────────────────────────── -->
+<h2 id="s6">6. 문제가 생겼을 때</h2>
+<h3>먼저 환경 점검(doctor)을 해 보세요</h3>
+<div class="cmd"><pre><code>claude-office doctor</code></pre><button class="copy" type="button">복사</button></div>
+<p>항목마다 ✅(정상), ⚠️(확인 필요), ❌(문제) 가운데 하나가 붙고, ⚠️·❌ 아래에는 <strong>→ 고치는 법</strong>이 한 줄 나옵니다. 그대로 따라 해 보세요.</p>
+<div class="box">
+  <p>예: Claude Code를 한 번도 실행하지 않은 컴퓨터</p>
+  <pre class="out">❌ Claude 데이터 폴더: 없음 또는 읽을 수 없음
+  → Claude Code를 한 번 실행한 뒤 다시 확인해 주세요.</pre>
+</div>
+
+<h3>진단 파일을 만들어 보내 주세요</h3>
+<p>고쳐지지 않으면 <strong>진단 파일</strong>을 만들어 담당자에게 보내 주세요. 진단 파일은 문제를 찾는 데 필요한 정보만 담은 파일 하나입니다. <strong>대화 내용, 이름, 비밀값은 들어가지 않습니다.</strong> 폴더 이름도 <code>&lt;project-1&gt;</code>처럼 번호로 바뀝니다.</p>
+<p><strong>방법 1. 화면에서</strong>: 위쪽 막대의 <strong>진단</strong> → 패널 아래 <strong>진단 파일 만들기</strong> → <strong>받기</strong>를 누릅니다.</p>
+<!-- TODO(T10): 버튼·완료 상자 실제 문구 대조 --><!-- FIG(fig-diag-file) -->
+<p><strong>방법 2. 터미널에서</strong>:</p>
+<div class="cmd"><pre><code>claude-office diag</code></pre><button class="copy" type="button">복사</button></div>
+<div class="box ok-box">
+  <pre class="out">진단 파일을 만들었습니다: /Users/fakeuser/.claude-office/diagnostics/claude-office-diag-20261001-093000.json
+이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.</pre>
+</div>
+<p>만들어진 파일(<code>claude-office-diag-…json</code>)을 메일이나 메신저로 담당자에게 보내면 됩니다.</p>
+
+<h3>자주 묻는 증상</h3>
+<div class="symptom">
+  <h4>① 위쪽 막대에 "○ 재연결 중"이 보여요</h4>
+  <p>대시보드 프로그램이 꺼졌거나 다시 켜지는 중입니다. 대시보드를 켠 터미널 창이 열려 있는지 확인하고, 닫혔다면 4장대로 다시 켜 주세요. 다시 켜지면 저절로 <strong>● LIVE</strong>로 돌아옵니다.</p>
+  <!-- FIG(fig-err-offline) -->
+</div>
+<div class="symptom">
+  <h4>② 캐릭터는 보이는데 말풍선과 손들기가 안 나와요</h4>
+  <p>Claude Code가 대시보드에 소식을 보내지 못하고 있습니다. doctor에서 이렇게 보입니다.</p>
+  <pre class="out">⚠️ 실시간 이벤트: 받은 이벤트 0건
+  → Claude Code 세션에서 아무 작업이나 해 보세요. 그래도 0건이면 플러그인과 회사 관리자 설정 항목을 확인해 주세요. 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.</pre>
+  <ol>
+    <li>Claude Code에서 아무 질문이나 한 번 해 봅니다.</li>
+    <li>doctor의 <strong>플러그인</strong> 항목이 ⚠️이면 그 고치는 법대로 플러그인을 설치합니다. 설치 뒤에는 Claude Code를 닫았다가 다시 엽니다.</li>
+    <li><strong>doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다.</strong> 회사가 관리 도구로 정책을 배포하면 이 컴퓨터에서는 설정 파일이 보이지 않을 수 있습니다. 회사 관리자에게 <a href="#s8">부록 A</a>를 전달해 주세요.</li>
+  </ol>
+  <!-- FIG(fig-err-nobubble) -->
+</div>
+<div class="symptom">
+  <h4>③ doctor에 "회사 관리자 설정"이 ❌로 나와요</h4>
+  <pre class="out">❌ 회사 관리자 설정: 있음: 관리자 hook만 허용
+  → 사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요.</pre>
+  <p>회사가 Claude Code에 추가 기능을 막아 두었습니다. 여러분이 직접 바꿀 수 없습니다. <a href="#s8">부록 A</a>를 회사 관리자에게 전달해 주세요. 그 전까지도 빌딩, 층, 토큰 숫자는 그대로 볼 수 있고, 말풍선과 손들기만 보이지 않습니다.</p>
+  <!-- FIG(fig-err-managed) -->
+</div>
+<div class="symptom">
+  <h4>④ 켤 때 "포트 4317번이 이미 사용 중입니다"가 나와요</h4>
+  <!-- TODO(QA 인폼): 포트 충돌 때 성공 줄이 먼저 찍히는 문제 수정 뒤 실제 출력으로 다시 복사 -->
+  <pre class="out">포트 4317번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.</pre>
+  <p>포트는 프로그램이 쓰는 "통로 번호"입니다. 대시보드가 이미 다른 창에서 켜져 있을 가능성이 가장 큽니다. 브라우저에서 <code>http://127.0.0.1:4317</code>을 열어 보세요. 대시보드가 보이면 그대로 쓰면 됩니다.</p>
+  <p>다른 프로그램이 4317을 쓰고 있다면 doctor에 이렇게 나옵니다.</p>
+  <pre class="out">❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다</pre>
+  <p>그 프로그램을 끄는 것이 가장 좋습니다. 다른 번호로 켤 수도 있지만(<code>--port</code>), 그러면 말풍선과 손들기가 보이지 않습니다.</p>
+  <!-- FIG(fig-err-port) --><div class="shot-slot" data-screenshot="err-port">스크린샷 자리: 포트 사용 중 안내</div>
+</div>
+<div class="symptom">
+  <h4>⑤ "Node.js 24 이상이 필요합니다"가 나와요</h4>
+  <pre class="out">❌ Node.js: 버전 20 (24 이상 필요)
+  → https://nodejs.org 에서 LTS(24 이상)를 설치한 뒤 다시 실행해 주세요.</pre>
+  <p><a href="#s2">2장</a>대로 Node.js를 새로 설치한 뒤, 터미널을 닫았다가 다시 열고 켜 주세요.</p>
+  <!-- FIG(fig-err-node) -->
+</div>
+
+<!-- ───────────────────────────── 7 ───────────────────────────── -->
+<h2 id="s7">7. 지우기</h2>
+<ol class="steps">
+  <li>대시보드가 켜져 있으면 먼저 끕니다(4장).</li>
+  <li>아래 명령을 실행합니다.
+    <div class="cmd"><pre><code>claude-office uninstall</code></pre><button class="copy" type="button">복사</button></div>
+  </li>
+  <li>플러그인을 지울지 묻습니다. <kbd>y</kbd>를 누르면 Claude Code에서도 빠집니다.</li>
+  <li>로그와 진단 파일을 지울지 따로 묻습니다. 담당자에게 보낼 진단 파일이 남아 있다면 <kbd>n</kbd>을 누르세요.</li>
+</ol>
+<!-- TODO(T8): uninstall 실제 질문 문구와 마지막 줄 -->
+<div class="box ok-box"><p>"지웠습니다" 안내가 나오고, 새 터미널에서 <code>claude-office</code>를 입력하면 "명령을 찾을 수 없습니다"가 나옵니다.</p></div>
+
+<!-- ───────────────────────────── 8 ───────────────────────────── -->
+<h2 id="s8">8. 부록 A: 회사 관리자에게 전달할 설정</h2>
+<p>이 절은 <strong>회사의 Claude Code 관리자</strong>에게 그대로 전달하는 내용입니다.</p>
+<div class="box">
+  <p><strong>관리자님께</strong></p>
+  <p>Claude Agent Office는 직원 PC 안에서만 동작하는 읽기 전용 대시보드입니다. 플러그인 <code>claude-office@claude-office</code>는 Claude Code의 hook 이벤트를 같은 PC의 <code>http://127.0.0.1:4317/hooks/event</code>로 보냅니다. 외부로는 아무것도 보내지 않고, hook에 어떤 결정도 돌려주지 않습니다(도구 실행을 막거나 허용하지 않음).</p>
+  <p>관리자 설정(managed settings)에 다음이 필요합니다.</p>
+  <table>
+    <tr><th>설정</th><th>필요한 값</th><th>언제</th></tr>
+    <tr><td><code>allowedHttpHookUrls</code></td><td><code>"http://127.0.0.1:4317/*"</code>를 목록에 추가</td><td>이 목록을 쓰고 있을 때</td></tr>
+    <tr><td><code>allowManagedHooksOnly</code></td><td>켜 두려면 <code>enabledPlugins</code>에서 <code>"claude-office@claude-office": true</code>로 플러그인을 관리자가 활성화</td><td>이 값이 <code>true</code>일 때</td></tr>
+    <tr><td><code>enabledPlugins</code></td><td><code>"claude-office@claude-office": true</code></td><td>위와 같음</td></tr>
+  </table>
+  <p>예시(기존 설정에 합쳐 주세요):</p>
+  <div class="cmd"><pre><code>{
+  "allowedHttpHookUrls": ["http://127.0.0.1:4317/*"],
+  "enabledPlugins": { "claude-office@claude-office": true }
+}</code></pre><button class="copy" type="button">복사</button></div>
+  <p>관리자 설정 파일 위치:</p>
+  <ul>
+    <li>macOS: <code>/Library/Application Support/ClaudeCode/managed-settings.json</code></li>
+    <li>Linux: <code>/etc/claude-code/managed-settings.json</code></li>
+    <li>Windows: <code>C:\Program Files\ClaudeCode\managed-settings.json</code></li>
+  </ul>
+  <p>MDM 등 다른 방식으로 정책을 배포한다면 같은 키를 그 방식으로 넣어 주세요. 플러그인 마켓플레이스는 직원 PC의 설치 폴더(<code>~/.claude-office/app/plugin</code>)에 있습니다. <!-- TODO(T7): 설치본의 플러그인 폴더 경로 확인 --></p>
+</div>
+
+<!-- ───────────────────────────── 9 ───────────────────────────── -->
+<h2 id="s9">9. 부록 B: 베타에서 알려진 제한</h2>
+<ul>
+  <li><strong>Windows와 Linux는 충분히 검증하지 못했습니다.</strong> 베타는 macOS에서 확인했습니다. 다른 운영체제에서 문제가 생기면 진단 파일을 보내 주세요.</li>
+  <li><strong>Windows에서는 PLAN 바가 항상 "데이터 없음"입니다.</strong> 요금제 한도를 읽는 기능이 아직 Windows를 지원하지 않습니다.</li>
+  <li><strong>macOS에서 "확인되지 않은 개발자" 경고가 나올 수 있습니다.</strong> 베타 버전은 코드 서명을 하지 않았습니다. 대처법은 <a href="#s3">3장</a>에 있습니다.</li>
+  <li><strong>회사 관리자 정책</strong>(<code>allowManagedHooksOnly</code> 등)이 켜져 있으면, 관리자가 <a href="#s8">부록 A</a>대로 설정하기 전까지 말풍선과 손들기가 보이지 않습니다. 빌딩, 층, 토큰 숫자는 그대로 보입니다.</li>
+  <li><strong>대시보드는 4317번 포트에서만 말풍선과 손들기가 동작합니다.</strong> 다른 번호로 켜면 빌딩과 숫자만 보입니다.</li>
+  <li><strong>로그인할 때 저절로 켜지지 않습니다.</strong> 볼 때마다 <code>claude-office</code>로 켜 주세요.</li>
+  <li><strong>로그와 진단 파일은 자동으로 보내지 않습니다.</strong> 여러분이 직접 만든 진단 파일만 담당자에게 전달됩니다. 로그는 7일이 지나면 저절로 지워집니다.</li>
+</ul>
+</main>
+
+<script>
+  // OS 탭: 스크립트가 없어도 모든 운영체제 내용이 차례로 보인다. 스크립트가 있으면 탭으로 나누고 지금 쓰는 운영체제를 먼저 연다.
+  (function () {
+    document.documentElement.classList.add("js");
+    var names = { mac: "macOS", linux: "Linux", win: "Windows" };
+    var ua = navigator.userAgent;
+    var current = /Windows/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux/.test(ua) ? "linux" : "mac";
+    function show(os) {
+      document.querySelectorAll(".os-panel").forEach(function (p) { p.hidden = p.dataset.os !== os; });
+      document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.os === os)); });
+    }
+    document.querySelectorAll(".tabs").forEach(function (tabs) {
+      ["mac", "linux", "win"].forEach(function (os) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        b.dataset.os = os;
+        b.textContent = names[os];
+        b.addEventListener("click", function () { show(os); });
+        tabs.appendChild(b);
+      });
+    });
+    show(current);
+
+    // 복사 버튼
+    document.querySelectorAll(".copy").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var code = btn.parentElement.querySelector("code").innerText;
+        var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "복사"; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(function () { done("복사됨"); }, function () { done("직접 선택"); });
+        } else {
+          done("직접 선택");
+        }
+      });
+    });
+  })();
+</script>
+</body>
+</html>
