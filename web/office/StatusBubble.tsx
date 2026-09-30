@@ -1,10 +1,11 @@
 import type { MemberState } from "../../src/shared/types";
 import { NEON } from "../pixel/palette";
 
-const ICON: Record<MemberState, string> = { working: "⌨", idle: "z z", mail: "✉", offline: "" };
+// decision은 말머리 대신 노란 ?를 그리므로(Task 10) 여기서는 그리지 않는다
+const ICON: Record<MemberState, string> = { decision: "", working: "⌨", idle: "z z", mail: "✉", offline: "" };
 
 export function StatusBubble({ state, unread }: { state: MemberState; unread: number }) {
-  if (state === "offline") return null;
+  if (state === "offline" || state === "decision") return null;
   const text = state === "mail" && unread > 0 ? `${ICON.mail}${unread}` : ICON[state];
   return (
     <g className={`bubble bubble-${state}`}>

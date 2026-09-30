@@ -12,7 +12,7 @@ export function remainingPct(used: number, budget: number): number {
   return Math.max(0, Math.min(100, 100 - (used / budget) * 100));
 }
 
-const LABELS: Record<MemberState, string> = { working: "작업 중", idle: "대기", mail: "메시지 수신", offline: "종료" };
+const LABELS: Record<MemberState, string> = { decision: "결정 필요", working: "작업 중", idle: "대기", mail: "메시지 수신", offline: "종료" };
 
 export function stateLabel(s: MemberState): string {
   return LABELS[s];
