@@ -135,7 +135,7 @@ describe("runDoctor", () => {
 
   it("managed: 파일 없음 ok, 훅 차단 fail, 허용 목록 확인", async () => {
     const none = await item("managed");
-    expect(none).toMatchObject({ status: "ok", detail: "파일 없음" });
+    expect(none).toMatchObject({ status: "ok", detail: "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)" });
 
     await writeFile(h.path("managed-settings.json"), JSON.stringify({ allowManagedHooksOnly: true, apiKeyHelper: FAKE_SECRET }));
     const blocked = await runDoctor(deps());
@@ -151,6 +151,18 @@ describe("runDoctor", () => {
     expect((await item("managed")).status).toBe("ok");
     await writeFile(h.path("managed-settings.json"), JSON.stringify({ allowedHttpHookUrls: ["http://127.0.0.1:*"] }));
     expect((await item("managed")).status).toBe("ok");
+  });
+
+  it("managed 파일이 없고 hook이 0건이면 hooks 안내에 부록 A를 붙인다", async () => {
+    const zero = async () => stats();
+    expect((await item("hooks", { hooks: zero })).fix).toContain("부록 A");
+    // hook이 1건 이상이면 붙이지 않는다
+    expect((await item("hooks", { hooks: async () => stats({ total: 1, last10min: 1 }) })).fix).not.toContain("부록 A");
+    // 서버가 꺼져 확인하지 못한 경우도 0건이 아니다
+    expect((await item("hooks", { hooks: async () => null })).fix).not.toContain("부록 A");
+    // managed 파일이 있으면(그 항목이 원인을 직접 보여 주므로) 붙이지 않는다
+    await writeFile(h.path("managed-settings.json"), JSON.stringify({ allowedHttpHookUrls: ["http://127.0.0.1:4317/*"] }));
+    expect((await item("hooks", { hooks: zero })).fix).not.toContain("부록 A");
   });
 
   it("proxy: 주소는 넣지 않는다", async () => {

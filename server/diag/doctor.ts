@@ -34,6 +34,10 @@ const HOOK_URL = `http://127.0.0.1:${HOOK_PORT}/hooks/event`;
 const PLUGIN_ID = "claude-office@claude-office";
 const INSTALL_FIX = "설치 스크립트를 다시 실행해 플러그인 설치에 y로 답하거나, 터미널에서 claude plugin install claude-office@claude-office 를 실행해 주세요.";
 
+// 관리자 정책은 파일 말고 다른 방식(MDM 등)으로도 배포될 수 있어, 파일이 없다고 문제 없다고 단정하지 않는다
+const MANAGED_MISSING = "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)";
+const APPENDIX_A = " 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.";
+
 const item = (id: string, status: Status, title: string, detail: string, fix = ""): DoctorItem => ({ id, status, title, detail, fix });
 
 /**
@@ -143,7 +147,7 @@ const checks: Check[] = [
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);
     const title = "회사 관리자 설정";
-    if (m === null) return item("managed", "ok", title, "파일 없음");
+    if (m === null) return item("managed", "ok", title, MANAGED_MISSING);
     if (m === "unreadable") return item("managed", "warn", title, "있음(읽을 수 없음)", "사용설명서 부록 A를 회사 관리자에게 전달해 확인을 부탁해 주세요.");
     const problems: string[] = [];
     if (m.allowManagedHooksOnly === true && !pluginEnabled(m.enabledPlugins)) problems.push("관리자 hook만 허용");
@@ -199,11 +203,16 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
     env,
   };
   // 한 점검이 던져도 나머지 결과는 낸다
-  return Promise.all(
+  const items = await Promise.all(
     checks.map((c, i) =>
       c(d).catch(() => item(META[i][0], "warn", META[i][1], "확인 중 오류", "진단 파일을 만들어 담당자에게 보내 주세요.")),
     ),
   );
+  // 관리자 설정 파일이 안 보이는데 hook이 0건이면, 파일 밖의 정책이 막고 있을 수 있다
+  const managed = items.find((i) => i.id === "managed");
+  const hooks = items.find((i) => i.id === "hooks");
+  if (managed?.detail === MANAGED_MISSING && hooks && hooks.detail === "받은 이벤트 0건") hooks.fix += APPENDIX_A;
+  return items;
 }
 
 const MARK: Record<Status, string> = { ok: "✅", warn: "⚠️", fail: "❌" };
