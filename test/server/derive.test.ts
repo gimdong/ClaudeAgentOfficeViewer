@@ -156,3 +156,63 @@ describe("deriveAgent: 결정", () => {
     expect(deriveAgent([ev("Whatever", T0), ev("Notification", T0 + 1)], T0 + 2)).toEqual({ toolRunning: false });
   });
 });
+
+describe("deriveAgent: 결정을 특정 Pre에 묶기 (Ruling P12)", () => {
+  it("재현(1): 무관한 도구(Read)의 Post로 결정이 내려가지 않는다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Bash", toolUseId: "a", summary: { command: "rm -rf /tmp/fake" } }),
+      ev("PreToolUse", T0 + 1, { tool: "Read", toolUseId: "b", summary: { filePath: "/x/r.md" } }),
+      ev("PermissionRequest", T0 + 2, { tool: "Bash", summary: { command: "rm -rf /tmp/fake" } }),
+      ev("PostToolUse", T0 + 3, { tool: "Read", toolUseId: "b" }),
+    ];
+    expect(deriveAgent(events, T0 + 4).decision).toEqual({ kind: "permission", since: iso(T0 + 2), summary: "rm -rf /tmp/fake" });
+  });
+
+  it("재현(2): 리드의 결정이 백그라운드 서브에이전트 도구 호출로 내려가지 않는다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Bash", toolUseId: "pub", summary: { command: "npm publish" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Bash", summary: { command: "npm publish" } }),
+      ev("PreToolUse", T0 + 2, { tool: "Grep", toolUseId: "g", sub: true, summary: { pattern: "TODO" } }),
+      ev("PostToolUse", T0 + 3, { tool: "Grep", toolUseId: "g", sub: true }),
+    ];
+    expect(deriveAgent(events, T0 + 4).decision?.kind).toBe("permission");
+  });
+
+  it("재현(3): 질문 결정이 뒤이은 다른 도구의 Pre/Post로 내려가지 않는다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "AskUserQuestion", summary: { question: "어느 쪽?" } }),
+      ev("PreToolUse", T0 + 1, { tool: "Read", toolUseId: "r", summary: { filePath: "/x/r.md" } }),
+      ev("PostToolUse", T0 + 2, { tool: "Read", toolUseId: "r" }),
+    ];
+    expect(deriveAgent(events, T0 + 3).decision).toEqual({ kind: "question", since: iso(T0), summary: "어느 쪽?" });
+  });
+
+  it("묶인 Pre의 Post(같은 tool_use_id)가 오면 내린다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Bash", toolUseId: "a", summary: { command: "npm test" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Bash", summary: { command: "npm test" } }),
+      ev("PostToolUse", T0 + 2, { tool: "Bash", toolUseId: "a" }),
+    ];
+    expect(deriveAgent(events, T0 + 3).decision).toBeUndefined();
+  });
+
+  it("묶인 Pre가 닫힌 뒤 새 Pre가 오면 내린다(이미 닫혀서)", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Bash", toolUseId: "a", summary: { command: "npm test" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Bash", summary: { command: "npm test" } }),
+      ev("PostToolUse", T0 + 2, { tool: "Bash", toolUseId: "a" }),
+      ev("PreToolUse", T0 + 3, { tool: "Bash", toolUseId: "c", summary: { command: "ls" } }),
+    ];
+    expect(deriveAgent(events, T0 + 4).decision).toBeUndefined();
+  });
+
+  it("병렬 Bash 두 개 중 명령이 일치하는 쪽에 묶이고, 다른 쪽의 Post로는 안 내려간다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Bash", toolUseId: "a", summary: { command: "cmd1" } }),
+      ev("PreToolUse", T0 + 1, { tool: "Bash", toolUseId: "b", summary: { command: "cmd2" } }),
+      ev("PermissionRequest", T0 + 2, { tool: "Bash", summary: { command: "cmd2" } }),
+      ev("PostToolUse", T0 + 3, { tool: "Bash", toolUseId: "a" }), // 관련 없는 첫 번째 Bash가 먼저 끝남
+    ];
+    expect(deriveAgent(events, T0 + 4).decision).toEqual({ kind: "permission", since: iso(T0 + 2), summary: "cmd2" });
+  });
+});

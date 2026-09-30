@@ -61,6 +61,9 @@ interface Pending {
   sub: boolean;
   subType?: string;
   target?: string;
+  /** PermissionRequest가 같은 도구 호출을 찾을 때 대조하는 값(target과 별도로 둔다 — Bash는 target이 description일 수 있다) */
+  command?: string;
+  filePath?: string;
 }
 
 interface Raised {
@@ -69,31 +72,47 @@ interface Raised {
   tool?: string;
   sub: boolean;
   summary?: string;
+  /** 이 결정이 묶인 도구 호출(Pending 객체 참조). 그 호출이 pending 배열에서 사라지면(닫히면) 묶임이 풀린다(Ruling P12) */
+  pending?: Pending;
 }
 
 const TURN_END = new Set(["Stop", "SubagentStop", "TeammateIdle", "SessionEnd"]);
 const CLOSES_TOOL = new Set(["PostToolUse", "PostToolUseFailure", "PermissionDenied"]);
+
+/** e와 같은 tool·sub인 pending 중, summary.command/filePath가 같은 것을 우선해 가장 최근 것을 고른다. 없으면 undefined(묶을 짝 없음) */
+function pickPending(pending: readonly Pending[], e: StoredEvent): Pending | undefined {
+  const candidates = pending.filter((p) => p.tool === e.tool && p.sub === e.sub);
+  if (candidates.length === 0) return undefined;
+  const { command, filePath } = e.summary;
+  const matching = candidates.filter((p) => (command !== undefined && p.command === command) || (filePath !== undefined && p.filePath === filePath));
+  return (matching.length > 0 ? matching : candidates).at(-1);
+}
 
 export function deriveAgent(events: readonly StoredEvent[], now: number): Derived {
   let pending: Pending[] = [];
   let decision: Raised | undefined;
   let todo: { text: string; at: number } | undefined;
 
-  const raise = (e: StoredEvent) => {
+  // 결정이 묶인 도구 호출이 아직 pending 배열에 있으면(안 닫혔으면) true. 묶을 짝이 없었으면(unbound) false
+  const bound = (d: Raised | undefined): boolean => d?.pending !== undefined && pending.includes(d.pending);
+
+  const raise = (e: StoredEvent, boundTo?: Pending) => {
     const kind = decisionKindOf(e.tool);
-    decision = { kind, at: e.at, tool: e.tool, sub: e.sub, summary: decisionSummary(kind, e) };
+    decision = { kind, at: e.at, tool: e.tool, sub: e.sub, summary: decisionSummary(kind, e), pending: boundTo ?? pickPending(pending, e) };
   };
 
   for (const e of events) {
     if (e.event === "PreToolUse") {
-      decision = undefined; // 새 도구 호출이 시작되면 앞선 결정은 끝났다
-      pending.push({ at: e.at, tool: e.tool, toolUseId: e.toolUseId, sub: e.sub, subType: e.subType, target: targetOf(e.tool, e.summary) });
-      if (e.tool === "AskUserQuestion" || e.tool === "ExitPlanMode") raise(e);
+      // 새 도구 호출이 시작되면, 어느 진행 중 호출에도 묶이지 않은 결정만 끝난다(Ruling P12)
+      if (!bound(decision)) decision = undefined;
+      const p: Pending = { at: e.at, tool: e.tool, toolUseId: e.toolUseId, sub: e.sub, subType: e.subType, target: targetOf(e.tool, e.summary), command: e.summary.command, filePath: e.summary.filePath };
+      pending.push(p);
+      if (e.tool === "AskUserQuestion" || e.tool === "ExitPlanMode") raise(e, p); // 방금 올린 그 호출에 바로 묶는다
       if (e.summary.activeForm !== undefined) todo = e.summary.activeForm === null ? undefined : { text: e.summary.activeForm, at: e.at };
     } else if (CLOSES_TOOL.has(e.event)) {
       const i = e.toolUseId ? pending.findIndex((p) => p.toolUseId === e.toolUseId) : pending.findIndex((p) => !p.toolUseId);
       if (i >= 0) pending.splice(i, 1); // 짝이 없는 Post는 무시한다
-      decision = undefined;
+      if (!bound(decision)) decision = undefined; // 묶인 호출이 닫혔거나, 애초에 묶이지 않았으면 내린다
     } else if (e.event === "PermissionRequest") {
       // 질문·계획은 PreToolUse에서 이미 올라가 있다. 같은 도구의 권한 요청이 종류를 덮어쓰지 않게 한다(Ruling P6)
       if (!(decision && decision.tool === e.tool)) raise(e);
