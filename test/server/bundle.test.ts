@@ -106,10 +106,48 @@ describe("buildBundle", () => {
   it("7일 넘은 로그는 넣지 않고, 다른 파일도 넣지 않는다", async () => {
     writeLog("2026-09-23", [line("2026-09-23T01:00:00.000Z", "too old")]);
     writeLog("2026-09-25", [line("2026-09-25T01:00:00.000Z", "ok")]);
-    writeFileSync(join(logDir, "install-20261001.log"), "not office log\n");
+    writeFileSync(join(logDir, "install-20261001.log"), "이름 형식이 다른 파일\n");
+    writeFileSync(join(logDir, "notes.txt"), "other\n");
     const b = await base();
     expect(b.logs.map((l) => l.file)).toEqual(["office-2026-09-25.log"]);
     expect(b.truncated).toBe(false);
+  });
+
+  it("설치 로그(install-YYYYMMDD-HHMMSS.log)도 넣고, 경로·비밀값은 가리며, 8일 전 것은 뺀다", async () => {
+    const local = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+    const recent = `install-${local(new Date(NOW - 3_600_000))}.log`;
+    const old = `install-${local(new Date(NOW - 8 * 86_400_000))}.log`;
+    writeFileSync(
+      join(logDir, recent),
+      [
+        "2026-10-01T02:00:00.000Z node ok v24.1.0",
+        "2026-10-01T02:00:01.000Z copy ok /Users/fakeuser/Code/fake-proj-alpha/src",
+        "2026-10-01T02:00:02.000Z plugin fail token=FAKE-sk-ant-xxx /Users/fakeuser/Code/My Secret Client/app.ts",
+      ].join("\n") + "\n",
+    );
+    writeFileSync(join(logDir, old), "2026-09-23T02:00:00.000Z node ok v24.1.0\n");
+    writeLog("2026-10-01", [line("2026-10-01T01:00:00.000Z", "start")]);
+    const b = await base();
+    expect(b.logs.map((l) => l.file)).toContain(recent);
+    expect(b.logs.map((l) => l.file)).not.toContain(old);
+    const text = JSON.stringify(b);
+    for (const bad of ["fakeuser", "fake-proj-alpha", "FAKE-sk-ant", "Secret", "Client"]) expect(text).not.toContain(bad);
+    const install = b.logs.find((l) => l.file === recent)!.lines;
+    expect(install[0]).toBe("2026-10-01T02:00:00.000Z node ok v24.1.0");
+    expect(install[1]).toMatch(/^2026-10-01T02:00:01\.000Z copy ok ~\/Code\/<project-\d+>\/<item-\d+>$/);
+  });
+
+  it("상한에서는 종류와 관계없이 날짜가 가장 오래된 로그부터 버린다", async () => {
+    const pad = "z".repeat(300);
+    writeLog("2026-09-29", [line("2026-09-29T01:00:00.000Z", `office-old ${pad}`)]);
+    writeFileSync(join(logDir, "install-20260930-120000.log"), `2026-09-30T03:00:00.000Z copy ok ${pad}\n`);
+    writeLog("2026-10-01", [line("2026-10-01T01:00:00.000Z", `office-new ${pad}`)]);
+    const all = await base();
+    expect(all.logs.map((l) => l.file)).toEqual(["office-2026-10-01.log", "install-20260930-120000.log", "office-2026-09-29.log"]);
+    const size = Buffer.byteLength(JSON.stringify(all, null, 2));
+    const cut = await base({ maxBytes: size - 100 });
+    expect(cut.logs.map((l) => l.file)).toEqual(["office-2026-10-01.log", "install-20260930-120000.log"]);
   });
 
   it("로그 폴더가 없으면 로그 없이 만든다", async () => {
@@ -124,6 +162,14 @@ describe("pseudonymize", () => {
     expect(pseudonymize("~/.claude-office/logs/office-2026-10-01.log", map)).toBe("~/.claude-office/logs/office-2026-10-01.log");
     expect(pseudonymize("~/.claude/claude-office/limits.json", map)).toBe("~/.claude/claude-office/limits.json");
     expect(pseudonymize("~/.claude-office/app/fake-secret", map)).toBe("~/.claude-office/app/<item-1>");
+  });
+
+  it("경로 조각은 공백을 포함한다(뒤 단어가 남지 않는다)", () => {
+    const map = new Map<string, string>();
+    expect(pseudonymize("open ~/Code/My Secret Client/app.ts", map)).toBe("open ~/Code/<project-1>/<item-1>");
+    expect(pseudonymize('{"msg":"read ~/Documents/AcmeCorp Deal/notes.md","x":1}', map)).toBe('{"msg":"read ~/Documents/<project-2>/<item-2>","x":1}');
+    // 같은 폴더를 Claude Code 인코딩으로 본 이름도 같은 번호
+    expect(pseudonymize("~-Code-My-Secret-Client", map)).toBe("<project-1>");
   });
 
   it("이미 바꾼 것은 다시 바꾸지 않는다", () => {

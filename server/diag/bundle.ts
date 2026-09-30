@@ -32,7 +32,23 @@ export interface BundleInput {
 }
 
 const DAY = 86_400_000;
-const LOG_FILE = /^office-(\d{4}-\d{2}-\d{2})\.log$/;
+const OFFICE_LOG = /^office-(\d{4})-(\d{2})-(\d{2})\.log$/; // 날짜는 UTC(로그 줄의 t와 같다)
+const INSTALL_LOG = /^install-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.log$/; // Ruling B10, 로컬 시각
+
+/** 로그 파일 이름에서 [시작 시각, 정렬용 시각]. 실행 로그는 그날 전체를 담으므로 정렬은 그날 끝으로 한다 */
+function logTime(name: string): [number, number] | null {
+  const o = OFFICE_LOG.exec(name);
+  if (o) {
+    const start = Date.UTC(+o[1], +o[2] - 1, +o[3]);
+    return [start, start + DAY - 1];
+  }
+  const i = INSTALL_LOG.exec(name);
+  if (i) {
+    const t = new Date(+i[1], +i[2] - 1, +i[3], +i[4], +i[5], +i[6]).getTime();
+    return [t, t];
+  }
+  return null;
+}
 
 /** 경로에서 그대로 둬도 되는 구조 이름. 그 밖의 폴더·파일 이름은 순번으로 바꾼다 */
 const KNOWN = new Set([
@@ -42,7 +58,9 @@ const KNOWN = new Set([
 ]);
 /** 이 프로그램이 만드는 파일 이름(날짜만 담는다) */
 const OWN_FILE = /^(office-\d{4}-\d{2}-\d{2}\.log|install-[\d-]+\.log|claude-office-diag-\d{8}-\d{6}\.json)$/;
-const PATH = /~((?:[\/\\]+[^\s"'`<>\/\\,;:()[\]{}]+)+)/g;
+// 조각은 공백을 포함하고 구분자(/ \\)·따옴표·줄바꿈에서 끝난다(폴더 이름에 공백이 있어도 뒤가 남지 않게. 과잉 가림은 허용).
+// "<"도 끝으로 본다 — 이미 바꾼 <project-N>을 다시 바꾸지 않게
+const PATH = /~((?:[\/\\]+[^"'`<\/\\\r\n]+)+)/g;
 const ENCODED = /~-([A-Za-z0-9-]+)/g;
 const encode = (s: string) => s.replace(/[^A-Za-z0-9]/g, "-");
 
@@ -112,13 +130,12 @@ async function readLogs(dir: string, now: number): Promise<DiagBundle["logs"]> {
     return [];
   }
   const cutoff = now - 7 * DAY;
+  // 실행 로그와 설치 로그를 섞어 새것부터. 크기 상한은 끝(가장 오래된 것)부터 버린다
   const recent = names
-    .filter((n) => {
-      const m = LOG_FILE.exec(n);
-      return m && Date.parse(`${m[1]}T00:00:00Z`) >= cutoff;
-    })
-    .sort()
-    .reverse();
+    .map((n) => [n, logTime(n)] as const)
+    .filter((x): x is readonly [string, [number, number]] => !!x[1] && x[1][0] >= cutoff)
+    .sort((a, b) => b[1][1] - a[1][1])
+    .map(([n]) => n);
   const out: DiagBundle["logs"] = [];
   for (const file of recent) {
     try {
