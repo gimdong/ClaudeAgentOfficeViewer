@@ -50,6 +50,11 @@ describe("사용설명서(docs/manual/index.html)", () => {
   it("알려진 제한과 B9 안내를 빠뜨리지 않는다", () => {
     for (const s of ["확인되지 않은 개발자", "데이터 없음", "검증하지 못했습니다", "allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"]) expect(html).toContain(s);
     expect(html).toContain("doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다");
+    // Ruling B12
+    expect(html).toContain("PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음)");
+    // 본문만 본다. designer 그림(fig-install-ok, fig-diag-chip-panel)의 옛 문구는 designer가 고친 뒤 다시 넣고 html 전체로 바꾼다
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    expect(prose).not.toContain("요금제 한도 설정을 따라");
   });
 
   it("doctor·CLI 문구가 실제 코드와 같다", () => {
