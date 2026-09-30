@@ -28,7 +28,7 @@ const log = (t: string, level: string, src: string, msg: string, data?: unknown)
 async function bundle(): Promise<DiagBundle> {
   const logDir = join(dir, "logs");
   const { mkdirSync } = await import("node:fs");
-  mkdirSync(logDir);
+  mkdirSync(logDir, { recursive: true });
   writeFileSync(
     join(logDir, "office-2026-10-01.log"),
     [
@@ -38,6 +38,8 @@ async function bundle(): Promise<DiagBundle> {
       log("2026-10-01T01:05:00.000Z", "error", "hub", "snapshot build failed", { error: "EACCES" }),
       log("2026-10-01T01:09:00.000Z", "error", "hub", "snapshot build failed", { error: "EACCES" }),
       log("2026-10-01T01:10:00.000Z", "warn", "teams", "cannot read team config", { error: "SyntaxError" }),
+      log("2026-10-01T01:20:00.000Z", "warn", "teams", "cannot read team config", { error: "SyntaxError", suppressed: 4 }),
+      log("2026-10-01T01:21:00.000Z", "warn", "usage", "cannot read transcript", { error: "EACCES", file: "transcript" }),
       "깨진 줄 { not json",
     ].join("\n") + "\n",
   );
@@ -98,6 +100,30 @@ describe("analyze", () => {
     expect(s).not.toContain("cannot read team config"); // warn은 묶음에 넣지 않는다
   });
 
+  it("경고 묶음: suppressed를 더해 세고 많은 순, 상위 10개", async () => {
+    const s = section(analyze(await bundle()), "경고 묶음");
+    // 억제 없는 한 줄(1) + suppressed:4인 한 줄(1+4) = 6
+    expect(s).toContain("| teams | cannot read team config | 6 | 2026-10-01T01:10:00.000Z | 2026-10-01T01:20:00.000Z |");
+    expect(s).toContain("| usage | cannot read transcript | 1 |");
+    expect(s.indexOf("cannot read team config")).toBeLessThan(s.indexOf("cannot read transcript"));
+
+    const b = await bundle();
+    const many = Array.from({ length: 12 }, (_, i) => log("2026-10-01T02:00:00.000Z", "warn", "x", `w${i}`, i === 0 ? { suppressed: 4 } : undefined));
+    const md = analyze({ ...b, logs: [{ file: "office-2026-10-01.log", lines: many }] });
+    const w = section(md, "경고 묶음");
+    expect(w).toContain("| x | w0 | 5 |"); // suppressed:4인 한 줄은 5건
+    expect((w.match(/^\| x \|/gm) ?? []).length).toBe(10);
+    expect(w).toContain("상위 10개");
+  });
+
+  it("error가 없고 warn만 있으면 [QA 인폼] 근거에 warn 상위 항목을 쓴다", async () => {
+    const b = await bundle();
+    const only = [log("2026-10-01T02:00:00.000Z", "warn", "teams", "cannot read team config", { suppressed: 2 })];
+    const md = analyze({ ...b, logs: [{ file: "office-2026-10-01.log", lines: only }] });
+    const inform = section(md, "[QA 인폼]");
+    expect(inform).toMatch(/근거: [^\n]*teams cannot read team config[^\n]*3/);
+  });
+
   it("설치 실패 줄은 따로 보여 주고, 이름은 가린 채로 둔다", async () => {
     const md = analyze(await bundle());
     const s = section(md, "설치 실패");
@@ -144,6 +170,20 @@ describe("CLI", () => {
     const r = run([f]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("## [QA 인폼]");
+  }, 20_000);
+
+  it("kind는 맞는데 형식이 다르면 한 줄 안내와 종료 코드 2(스택 없음)", () => {
+    const f = join(dir, "partial.json");
+    writeFileSync(f, JSON.stringify({ kind: "claude-office-diag" }));
+    const r = run([f]);
+    expect(r.status).toBe(2);
+    expect(r.stderr.trim()).toBe("진단 파일 형식이 다릅니다(format undefined)");
+    expect(r.stderr).not.toMatch(/TypeError|\n\s+at /);
+    const g = join(dir, "broken.json");
+    writeFileSync(g, JSON.stringify({ kind: "claude-office-diag", format: 1, doctor: null }));
+    const r2 = run([g]);
+    expect(r2.status).toBe(2);
+    expect(r2.stderr.trim()).toBe("진단 파일 형식이 다릅니다(format 1)");
   }, 20_000);
 
   it("kind가 claude-office-diag가 아니면 오류 종료 코드 2", () => {
