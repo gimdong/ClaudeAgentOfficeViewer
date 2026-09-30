@@ -5,6 +5,8 @@ import type { HookStatsView } from "../events/stats";
 import type { OfficePaths } from "../paths";
 
 export type Status = "ok" | "warn" | "fail";
+/** timeout: 연결은 됐는데 답이 없다(멈춘 우리 서버일 수도 있어 "다른 프로그램"과 구분한다) */
+export type PortState = "ours" | "other" | "free" | "timeout";
 export interface DoctorItem { id: string; status: Status; title: string; detail: string; fix: string }
 export interface DoctorDeps {
   claudeHome: string;
@@ -15,7 +17,7 @@ export interface DoctorDeps {
   env?: NodeJS.ProcessEnv;
   managedPath?: string; // 기본: 플랫폼별 경로
   which?: (cmd: string) => string | null; // 기본: PATH 탐색
-  probePort?: (port: number) => Promise<"ours" | "other" | "free">; // 기본: GET /api/snapshot
+  probePort?: (port: number) => Promise<PortState>; // 기본: GET /api/snapshot
   hooks?: () => Promise<HookStatsView | null>; // 서버 안: stats.view(), CLI: /api/diagnostics 조회
   now?: () => number;
 }
@@ -75,17 +77,24 @@ export function defaultWhich(env: NodeJS.ProcessEnv, platform: NodeJS.Platform) 
   };
 }
 
-export async function defaultProbePort(port: number): Promise<"ours" | "other" | "free"> {
+export async function defaultProbePort(port: number): Promise<PortState> {
   try {
     const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
     const body = (await r.json().catch(() => null)) as { generatedAt?: unknown } | null;
     return body && typeof body.generatedAt === "string" ? "ours" : "other";
   } catch (e) {
-    return ((e as { cause?: { code?: string } }).cause?.code === "ECONNREFUSED") ? "free" : "other";
+    if ((e as { name?: string }).name === "TimeoutError") return "timeout";
+    return (e as { cause?: { code?: string } }).cause?.code === "ECONNREFUSED" ? "free" : "other";
   }
 }
 
 type Check = (d: Required<DoctorDeps>) => Promise<DoctorItem>;
+
+/** 점검이 던질 때 쓸 id·제목(checks와 같은 순서) */
+const META: Array<[string, string]> = [
+  ["node", "Node.js"], ["app", "프로그램 파일"], ["port", "포트"], ["claude_home", "Claude 데이터 폴더"], ["claude_cli", "Claude Code"],
+  ["plugin", "플러그인"], ["managed", "회사 관리자 설정"], ["proxy", "프록시"], ["hooks", "실시간 이벤트"], ["statusline", "요금제 한도(선택)"],
+];
 
 const checks: Check[] = [
   async (d) => {
@@ -105,6 +114,7 @@ const checks: Check[] = [
   async (d) => {
     const state = await d.probePort(d.port);
     if (state === "other") return item("port", "fail", "포트", `다른 프로그램이 ${d.port}을 쓰고 있습니다`, `그 프로그램을 끄거나 다른 포트로 켜 주세요. 다른 포트에서는 말풍선·손들기가 보이지 않습니다(플러그인은 ${HOOK_PORT}로 보냄).`);
+    if (state === "timeout") return item("port", "warn", "포트", `${d.port}에서 응답이 없습니다`, "대시보드 창을 닫고 claude-office 명령으로 다시 켜 주세요. 그래도 같으면 컴퓨터를 다시 시작해 주세요.");
     if (state === "free") return item("port", "warn", "포트", `서버가 꺼져 있습니다(${d.port})`, "claude-office 명령으로 대시보드를 켜 주세요.");
     if (d.port !== HOOK_PORT) return item("port", "warn", "포트", `서버가 ${d.port}에서 켜져 있지만 플러그인은 ${HOOK_PORT}로 보냅니다`, `포트 옵션 없이 켜면 ${HOOK_PORT}을 씁니다.`);
     return item("port", "ok", "포트", `${d.port} 사용 중(이 프로그램)`);
@@ -133,7 +143,7 @@ const checks: Check[] = [
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);
     const title = "회사 관리자 설정";
-    if (m === null) return item("managed", "ok", title, "없음");
+    if (m === null) return item("managed", "ok", title, "파일 없음");
     if (m === "unreadable") return item("managed", "warn", title, "있음(읽을 수 없음)", "사용설명서 부록 A를 회사 관리자에게 전달해 확인을 부탁해 주세요.");
     const problems: string[] = [];
     if (m.allowManagedHooksOnly === true && !pluginEnabled(m.enabledPlugins)) problems.push("관리자 hook만 허용");
@@ -188,7 +198,12 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
     platform,
     env,
   };
-  return Promise.all(checks.map((c) => c(d)));
+  // 한 점검이 던져도 나머지 결과는 낸다
+  return Promise.all(
+    checks.map((c, i) =>
+      c(d).catch(() => item(META[i][0], "warn", META[i][1], "확인 중 오류", "진단 파일을 만들어 담당자에게 보내 주세요.")),
+    ),
+  );
 }
 
 const MARK: Record<Status, string> = { ok: "✅", warn: "⚠️", fail: "❌" };

@@ -5,13 +5,15 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
-import { formatDoctor, runDoctor } from "./diag/doctor";
+import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
+import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
-import { Logger, errInfo, setLogger } from "./log";
-import { resolvePaths } from "./paths";
+import { Logger, errInfo, scrub, setLogger } from "./log";
+import { resolvePaths, type OfficePaths } from "./paths";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
+import type { Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
 
 export interface CliOptions {
@@ -74,8 +76,53 @@ async function doctorCli(argv: string[]): Promise<void> {
   process.exitCode = items.some((i) => i.status === "fail") ? 1 : 0;
 }
 
+/** 진단 파일을 만들어 paths.diagDir에 쓰고 파일 이름을 돌려준다(서버 버튼과 CLI가 같이 쓴다) */
+async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>): Promise<string> {
+  const claudeVersion = await readClaudeVersion(defaultWhich(process.env, process.platform)("claude"));
+  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion }));
+}
+
+/**
+ * `diag`: 진단 파일을 만들고 전체 경로를 출력한다(고객 자신의 화면이라 경로를 보여 준다. 파일 안에는 없다).
+ * 이 포트의 서버가 우리 서버면 서버에게 만들게 하고(hook 통계 포함), 아니면 직접 만든다.
+ */
+async function diagCli(argv: string[]): Promise<void> {
+  const opts = parseCliArgs(argv);
+  const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
+  let file: string | null = null;
+  if ((await defaultProbePort(opts.port)) === "ours") {
+    try {
+      const r = await fetch(`http://127.0.0.1:${opts.port}/api/diagnostics/bundle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (r.status === 201) file = ((await r.json()) as { file: string }).file;
+    } catch {
+      /* 아래에서 직접 만든다 */
+    }
+  }
+  if (!file) {
+    const config = await loadConfig(opts.configPath);
+    const snapshot = await new SnapshotBuilder({ claudeHome: opts.claudeHome, config }).build();
+    file = await makeBundleFile(paths, snapshot, new HookStats().view(), () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port }));
+  }
+  console.log(`진단 파일을 만들었습니다: ${join(paths.diagDir, file)}`);
+  console.log("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  if (argv[0] === "diag") {
+    try {
+      await diagCli(argv.slice(1));
+    } catch (e) {
+      console.error(`진단 파일을 만들지 못했습니다(${errInfo(e)}).`);
+      process.exitCode = 1;
+    }
+    return;
+  }
   if (argv[0] === "doctor") {
     try {
       await doctorCli(argv.slice(1));
@@ -136,7 +183,20 @@ async function main(): Promise<void> {
   const onHookEvent = (input: Record<string, unknown>) => {
     if (events.add(input, Date.now())) hub.poke();
   };
-  const server = createApp(hub, { staticDir, onHookEvent, stats }).listen(opts.port, "127.0.0.1", () => {
+  const home = homedir();
+  const doctor = () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port, hooks: async () => stats.view() });
+  const diagnostics = {
+    diagDir: paths.diagDir,
+    summary: async () => ({
+      doctor: await doctor(),
+      hooks: stats.view(),
+      errorsLastHour: log.errorsSince(Date.now() - 3_600_000),
+      logDir: scrub(paths.logDir, home) as string,
+      diagDir: scrub(paths.diagDir, home) as string,
+    }),
+    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor),
+  };
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics }).listen(opts.port, "127.0.0.1", () => {
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {

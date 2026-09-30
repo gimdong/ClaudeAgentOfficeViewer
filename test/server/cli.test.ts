@@ -45,11 +45,54 @@ describe("parseCliArgs", () => {
   });
 });
 
+/** 비어 있는 포트 번호(잠깐 열었다 닫는다) */
+async function freePort(): Promise<number> {
+  const s = createServer().listen(0, "127.0.0.1");
+  await new Promise((r) => s.once("listening", r));
+  const port = (s.address() as { port: number }).port;
+  await new Promise((r) => s.close(r));
+  return port;
+}
+
+function run(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", ...args], { stdio: ["ignore", "pipe", "pipe"], env });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (d) => (stdout += d));
+  child.stderr.on("data", (d) => (stderr += d));
+  return new Promise((r) => child.on("exit", (code) => r({ code, stdout, stderr })));
+}
+
 describe("CLI", () => {
+  it("doctor: 데이터 폴더가 없으면 fail이고 종료 코드 1", async () => {
+    const logDir = mkdtempSync(join(tmpdir(), "office-doctor-log-"));
+    const r = await run(["doctor", "--json", "--claude-home", join(logDir, "no-such-home"), "--port", String(await freePort()), "--log-dir", logDir]);
+    rmSync(logDir, { recursive: true, force: true });
+    const items = JSON.parse(r.stdout) as Array<{ id: string; status: string }>;
+    expect(items.find((i) => i.id === "claude_home")!.status).toBe("fail");
+    expect(r.code).toBe(1);
+  }, 20_000);
+
+  it("diag: 서버가 꺼져 있으면 직접 만들어 prefix/diagnostics에 쓰고 전체 경로를 출력한다", async () => {
+    const prefix = mkdtempSync(join(tmpdir(), "office-diag-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-diag-home-"));
+    const r = await run(["diag", "--claude-home", home, "--port", String(await freePort())], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
+    const files = readdirSync(join(prefix, "diagnostics"));
+    const body = JSON.parse(readFileSync(join(prefix, "diagnostics", files[0]), "utf8"));
+    rmSync(prefix, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    expect(r.code).toBe(0);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^claude-office-diag-\d{8}-\d{6}\.json$/);
+    expect(r.stdout).toContain(files[0]);
+    expect(body).toMatchObject({ kind: "claude-office-diag", snapshot: { sessions: 0 } });
+    expect(body.doctor).toHaveLength(10);
+  }, 30_000);
+
   it("doctor --json은 서버를 켜지 않고 10개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
     const home = mkdtempSync(join(tmpdir(), "office-doctor-home-"));
     const logDir = mkdtempSync(join(tmpdir(), "office-doctor-log-"));
-    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", "4399", "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", String(await freePort()), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     child.stdout.on("data", (d) => (stdout += d));
     const code = await new Promise<number | null>((r) => child.on("exit", r));
@@ -58,7 +101,7 @@ describe("CLI", () => {
     rmSync(home, { recursive: true, force: true });
     rmSync(logDir, { recursive: true, force: true });
     expect(items.map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "managed", "proxy", "hooks", "statusline"]);
-    expect(items.find((i) => i.id === "port")!.status).toBe("warn"); // 4399에는 아무것도 없다
+    expect(items.find((i) => i.id === "port")!.status).toBe("warn"); // 빈 포트라 서버가 꺼져 있다
     expect(code).toBe(items.some((i) => i.status === "fail") ? 1 : 0);
     expect(logFiles).toEqual([]); // doctor는 서버 로그를 쓰지 않는다
   }, 20_000);

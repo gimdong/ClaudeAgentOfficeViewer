@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
+import { defaultProbePort, formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
 import type { HookStatsView } from "../../server/events/stats";
 import type { OfficePaths } from "../../server/paths";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
@@ -68,6 +68,14 @@ describe("runDoctor", () => {
     expect((await runDoctor(deps())).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "managed", "proxy", "hooks", "statusline"]);
   });
 
+  it("점검 하나가 던지면 그 항목만 warn(확인 중 오류)이고 나머지는 낸다", async () => {
+    const items = await runDoctor(deps({ probePort: async () => { throw new Error("boom"); }, which: () => { throw new Error("boom"); } }));
+    expect(items).toHaveLength(10);
+    expect(items.find((i) => i.id === "port")).toMatchObject({ status: "warn", title: "포트", detail: "확인 중 오류" });
+    expect(items.find((i) => i.id === "claude_cli")).toMatchObject({ status: "warn", detail: "확인 중 오류" });
+    expect(items.find((i) => i.id === "node")!.status).toBe("ok");
+  });
+
   it("node", async () => {
     expect((await item("node", { nodeVersion: "v22.0.0" })).status).toBe("fail");
     expect((await item("node", { nodeVersion: "v24.1.0" })).status).toBe("ok");
@@ -88,6 +96,10 @@ describe("runDoctor", () => {
     const free = await item("port", { probePort: async () => "free" });
     expect(free.status).toBe("warn");
     expect(free.detail).toContain("서버가 꺼져 있습니다");
+    const hung = await item("port", { probePort: async () => "timeout" });
+    expect(hung.status).toBe("warn");
+    expect(hung.detail).toContain("응답이 없습니다");
+    expect(hung.detail).not.toContain("다른 프로그램");
     const moved = await item("port", { port: 4399, probePort: async () => "ours" });
     expect(moved.status).toBe("warn");
     expect(moved.detail).toContain("4317");
@@ -123,7 +135,7 @@ describe("runDoctor", () => {
 
   it("managed: 파일 없음 ok, 훅 차단 fail, 허용 목록 확인", async () => {
     const none = await item("managed");
-    expect(none).toMatchObject({ status: "ok", detail: "없음" });
+    expect(none).toMatchObject({ status: "ok", detail: "파일 없음" });
 
     await writeFile(h.path("managed-settings.json"), JSON.stringify({ allowManagedHooksOnly: true, apiKeyHelper: FAKE_SECRET }));
     const blocked = await runDoctor(deps());
@@ -182,6 +194,29 @@ describe("runDoctor", () => {
     expect(opened.length).toBeGreaterThan(0); // 감시가 실제로 동작함
     expect(opened.filter((p) => p.endsWith(".credentials.json") || p.endsWith(".key"))).toEqual([]);
     expect(JSON.stringify(all)).not.toContain(FAKE_SECRET);
+  });
+});
+
+describe("defaultProbePort", () => {
+  it("연결은 되는데 답이 없으면 timeout", async () => {
+    const { createServer } = await import("node:net");
+    const hang = createServer(() => {}).listen(0, "127.0.0.1");
+    await new Promise((r) => hang.once("listening", r));
+    const p = (hang.address() as { port: number }).port;
+    try {
+      expect(await defaultProbePort(p)).toBe("timeout");
+    } finally {
+      hang.close();
+    }
+  }, 5000);
+
+  it("아무도 없으면 free", async () => {
+    const { createServer } = await import("node:net");
+    const s = createServer().listen(0, "127.0.0.1");
+    await new Promise((r) => s.once("listening", r));
+    const p = (s.address() as { port: number }).port;
+    await new Promise((r) => s.close(r));
+    expect(await defaultProbePort(p)).toBe("free");
   });
 });
 

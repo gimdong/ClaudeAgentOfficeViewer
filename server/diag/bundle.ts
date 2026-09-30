@@ -1,0 +1,195 @@
+import { execFile } from "node:child_process";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { arch, homedir, platform } from "node:os";
+import { join } from "node:path";
+import type { Snapshot } from "../../src/shared/types";
+import type { HookStatsView } from "../events/stats";
+import { scrub } from "../log";
+import type { DoctorItem } from "./doctor";
+
+export interface DiagBundle {
+  kind: "claude-office-diag";
+  format: 1;
+  createdAt: string;
+  versions: { app: string; node: string; platform: string; arch: string; claude: string | null };
+  doctor: DoctorItem[];
+  hooks: HookStatsView;
+  snapshot: { sessions: number; members: number; teams: number; decisions: number; error: boolean };
+  logs: Array<{ file: string; lines: string[] }>; // 최근 7일, 새 파일이 앞
+  truncated: boolean;
+}
+
+export interface BundleInput {
+  doctor: () => Promise<DoctorItem[]>;
+  hooks: HookStatsView;
+  snapshot: Snapshot;
+  logDir: string;
+  home?: string;
+  now?: () => number;
+  appVersion: string;
+  claudeVersion?: string | null;
+  maxBytes?: number;
+}
+
+const DAY = 86_400_000;
+const LOG_FILE = /^office-(\d{4}-\d{2}-\d{2})\.log$/;
+
+/** 경로에서 그대로 둬도 되는 구조 이름. 그 밖의 폴더·파일 이름은 순번으로 바꾼다 */
+const KNOWN = new Set([
+  ".claude", ".claude-office", "claude-office", "projects", "teams", "sessions", "subagents", "inboxes", "logs", "diagnostics",
+  "app", "web", "bin", "plugin", "Code", "Documents", "Desktop", "Downloads",
+  "settings.json", "config.json", "limits.json", "managed-settings.json",
+]);
+/** 이 프로그램이 만드는 파일 이름(날짜만 담는다) */
+const OWN_FILE = /^(office-\d{4}-\d{2}-\d{2}\.log|install-[\d-]+\.log|claude-office-diag-\d{8}-\d{6}\.json)$/;
+const PATH = /~((?:[\/\\]+[^\s"'`<>\/\\,;:()[\]{}]+)+)/g;
+const ENCODED = /~-([A-Za-z0-9-]+)/g;
+const encode = (s: string) => s.replace(/[^A-Za-z0-9]/g, "-");
+
+/**
+ * Ruling B7: 홈 아래 경로의 폴더·파일 이름과 인코딩된 프로젝트 폴더 이름(~-Code-x)을 `<project-N>`·`<team-N>`·`<item-N>`으로 바꾼다.
+ * map을 공유하면 같은 이름은 같은 번호다. 프로젝트는 Claude Code의 폴더 인코딩(영숫자 아닌 문자 → "-") 기준으로 묶어서
+ * `~/Code/x`와 `~-Code-x`가 같은 번호가 된다. scrub(홈 → "~") 뒤에 부른다.
+ */
+export function pseudonymize(s: string, map: Map<string, string>): string {
+  const label = (kind: string, key: string) => {
+    const k = `${kind}\u0000${key}`;
+    let v = map.get(k);
+    if (!v) {
+      v = `<${kind}-${[...map.keys()].filter((x) => x.startsWith(`${kind}\u0000`)).length + 1}>`;
+      map.set(k, v);
+    }
+    return v;
+  };
+  const project = (seg: string) => label("project", seg.startsWith("~-") ? seg.slice(2) : encode(seg));
+  return s
+    .replace(PATH, (_m, rest: string) => {
+      const parts = rest.split(/([\/\\]+)/); // 구분자를 남겨 원래 모양을 지킨다
+      const segs: string[] = [];
+      let underClaude = false;
+      let next: "project" | "team" | null = null;
+      let projectDone = false;
+      const out = parts.map((p) => {
+        if (!p || /^[\/\\]+$/.test(p)) return p;
+        segs.push(p);
+        const expect = next;
+        next = null;
+        if ((KNOWN.has(p) || OWN_FILE.test(p)) && !expect) {
+          // ~/.claude·~/.claude-office 아래는 프로젝트 폴더가 아니다
+          if (p === ".claude" || p === ".claude-office") underClaude = true;
+          if (underClaude && p === "projects") next = "project";
+          if (underClaude && p === "teams") next = "team";
+          return p;
+        }
+        if (expect === "project") return (projectDone = true), project(p);
+        if (expect === "team") return label("team", p);
+        if (!underClaude && !projectDone) return (projectDone = true), label("project", encode(segs.join("-")));
+        return label("item", p);
+      });
+      return `~${out.join("")}`;
+    })
+    .replace(ENCODED, (_m, key: string) => label("project", key));
+}
+
+function mapStrings(v: unknown, f: (s: string) => string): unknown {
+  if (typeof v === "string") return f(v);
+  if (Array.isArray(v)) return v.map((x) => mapStrings(x, f));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [f(k), mapStrings(x, f)]));
+  return v;
+}
+
+/** 전체 가림: redact + 홈 → "~" + 순번 치환. 여러 번 해도 결과가 같다 */
+function clean<T>(v: T, home: string): T {
+  const map = new Map<string, string>();
+  return mapStrings(scrub(v, home), (s) => pseudonymize(s, map)) as T;
+}
+
+async function readLogs(dir: string, now: number): Promise<DiagBundle["logs"]> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const cutoff = now - 7 * DAY;
+  const recent = names
+    .filter((n) => {
+      const m = LOG_FILE.exec(n);
+      return m && Date.parse(`${m[1]}T00:00:00Z`) >= cutoff;
+    })
+    .sort()
+    .reverse();
+  const out: DiagBundle["logs"] = [];
+  for (const file of recent) {
+    try {
+      out.push({ file, lines: (await readFile(join(dir, file), "utf8")).split("\n").filter(Boolean) });
+    } catch {
+      /* 읽는 사이 지워진 파일은 건너뛴다 */
+    }
+  }
+  return out;
+}
+
+const sizeOf = (b: DiagBundle) => Buffer.byteLength(JSON.stringify(b, null, 2));
+
+export async function buildBundle(d: BundleInput): Promise<DiagBundle> {
+  const now = (d.now ?? Date.now)();
+  const home = d.home ?? homedir();
+  const s = d.snapshot;
+  const raw: DiagBundle = {
+    kind: "claude-office-diag",
+    format: 1,
+    createdAt: new Date(now).toISOString(),
+    versions: { app: d.appVersion, node: process.version, platform: platform(), arch: arch(), claude: d.claudeVersion ?? null },
+    doctor: await d.doctor(),
+    hooks: d.hooks,
+    // 이름·경로는 빼고 개수만
+    snapshot: {
+      sessions: s.sessions.length,
+      members: s.sessions.reduce((n, x) => n + x.members.length, 0),
+      teams: s.sessions.filter((x) => x.members.length > 1).length,
+      decisions: s.decisionCount ?? 0,
+      error: !!s.error,
+    },
+    logs: await readLogs(d.logDir, now),
+    truncated: false,
+  };
+  const b = clean(raw, home);
+
+  // 크기 상한: 오래된 파일부터 통째로, 마지막 한 파일은 오래된 줄부터 버린다
+  const max = d.maxBytes ?? 5 * 1024 * 1024;
+  let total = sizeOf(b);
+  while (total > max && b.logs.length) {
+    const last = b.logs[b.logs.length - 1];
+    if (b.logs.length > 1 || !last.lines.length) b.logs.pop();
+    else {
+      let drop = 0;
+      for (let freed = 0; drop < last.lines.length && freed < total - max; drop++) freed += Buffer.byteLength(JSON.stringify(last.lines[drop])) + 6;
+      last.lines.splice(0, drop);
+    }
+    b.truncated = true;
+    total = sizeOf(b);
+  }
+  return b;
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** dir 안에 새 파일로만 쓴다(같은 이름이 있으면 EEXIST). 쓰기 직전에 한 번 더 가린다. 반환값은 파일 이름뿐이다 */
+export async function writeBundle(dir: string, b: DiagBundle, home = homedir()): Promise<string> {
+  const t = new Date(b.createdAt);
+  const name = `claude-office-diag-${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.json`;
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, name), JSON.stringify(clean(b, home), null, 2), { flag: "wx" });
+  return name;
+}
+
+/** `claude --version`의 버전 숫자. 못 구하면 null */
+export function readClaudeVersion(claudePath: string | null): Promise<string | null> {
+  if (!claudePath) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile(claudePath, ["--version"], { timeout: 5000, shell: process.platform === "win32" }, (err, stdout) => {
+      resolve(err ? null : (/\d+\.\d+\.\d+\S*/.exec(String(stdout))?.[0] ?? null));
+    });
+  });
+}

@@ -2,7 +2,8 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
-import type { HookStats } from "./events/stats";
+import type { DoctorItem } from "./diag/doctor";
+import type { HookStats, HookStatsView } from "./events/stats";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
 
@@ -32,9 +33,28 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
   return ALLOWED_HOSTNAMES.has(hostnameOf(hostHeader).toLowerCase());
 }
 
+export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView; errorsLastHour: number; logDir: string; diagDir: string } // 경로는 "~" 치환
+export interface DiagnosticsDeps { summary(): Promise<DiagnosticsSummary>; makeBundle(): Promise<string>; diagDir: string }
+
+const BUNDLE_NAME = /^claude-office-diag-\d{8}-\d{6}\.json$/;
+
+/**
+ * 화면용 쓰기 API의 Origin 규칙(Ruling B1). Origin이 없으면(CLI·curl) 통과 — Host 검사는 앞 미들웨어가 했다.
+ * 있으면 http이고, Host와 같은 host:port이며, 그 호스트가 로컬 주소여야 한다. 다른 웹페이지의 요청을 막는다.
+ */
+export function isSameOrigin(origin: string | undefined, host: string | undefined): boolean {
+  if (origin === undefined) return true;
+  try {
+    const u = new URL(origin);
+    return u.protocol === "http:" && !!host && u.host.toLowerCase() === host.trim().toLowerCase() && isAllowedHost(u.host);
+  } catch {
+    return false;
+  }
+}
+
 export function createApp(
   hub: Pick<SnapshotHub, "current" | "subscribe">,
-  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void; stats?: HookStats } = {},
+  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void; stats?: HookStats; diagnostics?: DiagnosticsDeps } = {},
 ): Express {
   const app = express();
 
@@ -98,6 +118,40 @@ export function createApp(
     opts.stats?.reject(status === 413 ? "413" : "400");
     res.status(status).end();
   });
+
+  if (opts.diagnostics) {
+    const diag = opts.diagnostics;
+    app.get("/api/diagnostics", async (_req, res) => {
+      try {
+        res.json(await diag.summary());
+      } catch (e) {
+        getLogger().error("diag", "summary failed", { error: errInfo(e) });
+        res.status(500).json({ error: "진단 정보를 만들지 못했습니다" });
+      }
+    });
+    // 본문은 읽지 않는다(빈 {}). 파일 이름과 위치는 서버가 정한다
+    app.post("/api/diagnostics/bundle", async (req, res) => {
+      if (!isSameOrigin(req.headers.origin, req.headers.host)) return void res.status(403).end();
+      if (!req.is("application/json")) return void res.status(415).end();
+      try {
+        const file = await diag.makeBundle();
+        getLogger().info("diag", "bundle created", { file });
+        res.status(201).json({ file });
+      } catch (e) {
+        getLogger().error("diag", "bundle failed", { error: errInfo(e) });
+        res.status(500).json({ error: "진단 파일을 만들지 못했습니다" });
+      }
+    });
+    app.get("/api/diagnostics/files/:name", (req, res) => {
+      const name = req.params.name;
+      if (!BUNDLE_NAME.test(name)) return void res.status(404).end();
+      // root를 주면 점 파일 검사는 root 아래 경로(= 이름 규칙을 통과한 파일 이름)에만 적용된다.
+      // 설치 위치 ~/.claude-office가 점 폴더라 전체 경로를 넘기면 기본값(dotfiles: ignore)에 걸려 404가 된다
+      res.download(name, name, { root: diag.diagDir }, (err) => {
+        if (err && !res.headersSent) res.status(404).end();
+      });
+    });
+  }
 
   app.get("/api/snapshot", (_req, res) => {
     res.json(hub.current());
