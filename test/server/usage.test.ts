@@ -15,6 +15,24 @@ beforeEach(async () => {
 });
 afterEach(() => h.cleanup());
 
+// assistant() 헬퍼는 requestId만 지정할 수 있다. 중복 제거 키의 fallback 단계
+// (requestId → message.id → file:uuid)를 개별적으로 검증하려면 그 아래 단계들을 직접 만들어야
+// 한다(Ruling 18 — 코드는 이미 이렇게 fallback하므로 테스트만 추가한다).
+function assistantWithId(o: { messageId?: string; uuid?: string; ts: number; output?: number }) {
+  return {
+    type: "assistant",
+    uuid: o.uuid,
+    timestamp: new Date(o.ts).toISOString(),
+    message: {
+      role: "assistant",
+      id: o.messageId,
+      model: "claude-opus-5-5",
+      content: [{ type: "text", text: "hi" }],
+      usage: { input_tokens: 0, output_tokens: o.output ?? 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    },
+  };
+}
+
 describe("UsageCollector", () => {
   it("같은 requestId는 한 번만 세고 total이 더 큰 줄을 남긴다", async () => {
     await h.append(F, [
@@ -24,6 +42,24 @@ describe("UsageCollector", () => {
     ]);
     await c.refresh();
     expect(c.summary(NOW).last5h).toEqual({ input: 11, output: 51, cacheRead: 100, cacheWrite: 3, total: 65 });
+  });
+
+  it("requestId가 없고 message.id가 같으면 하나로 세되, total이 더 큰 줄을 남긴다(fallback 1단계)", async () => {
+    await h.append(F, [
+      assistantWithId({ messageId: "m1", ts: NOW - 2000, output: 1 }),
+      assistantWithId({ messageId: "m1", ts: NOW - 1000, output: 5 }), // 같은 message.id, total이 더 큼
+    ]);
+    await c.refresh();
+    expect(c.summary(NOW).today.total).toBe(5); // 1+5(=6)가 아니라 더 큰 쪽 5만 남는다
+  });
+
+  it("requestId와 message.id가 둘 다 없으면 파일 경로:uuid로 구분해 각각 센다(fallback 2단계)", async () => {
+    await h.append(F, [
+      assistantWithId({ uuid: "u1", ts: NOW - 2000, output: 1 }),
+      assistantWithId({ uuid: "u2", ts: NOW - 1000, output: 2 }),
+    ]);
+    await c.refresh();
+    expect(c.summary(NOW).today.total).toBe(3); // 서로 다른 키로 취급되어 둘 다 더해진다(1+2)
   });
 
   it("5시간·7일 경계를 지킨다", async () => {
