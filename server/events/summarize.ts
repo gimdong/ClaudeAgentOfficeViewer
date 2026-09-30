@@ -28,25 +28,48 @@ const toGraphemes: (s: string) => string[] = (() => {
   }
 })();
 
-// Ruling P9(team-lead 확장): summarize()가 남기는 모든 문자열 필드는 EventStore → 스냅샷 → SSE → 브라우저로
+// Ruling P9/P10(team-lead 확장): summarize()가 남기는 모든 문자열 필드는 EventStore → 스냅샷 → SSE → 브라우저로
 // 그대로 이어지므로 비밀값으로 보이는 형식을 지운다. 잘린 토큰 조각이 남지 않도록 cut(200자)보다 먼저 적용한다.
-// 값은 공백이나 닫는 따옴표·괄호 앞에서 멈춘다 — curl -H "Authorization: Bearer xyz" 같은 형태에서 닫는 "를 삼키지 않기 위해
+// 이름(NAME)은 token/secret/password/passwd/pwd를 포함하거나, key로 끝나되 앞에 _·-·api·access·private가
+// 붙은 경우만 잡는다 — monkey/keyboard/sort --key=2 같은 단어 중간 "key"는 걸리지 않게(reviewer Minor).
+const NAME = `(?:\\w*(?:token|secret|password|passwd|pwd)\\w*|\\w+[-_]key|(?:api|access|private)key)`;
+// 이름 뒤 구분자는 JSON처럼 이름에 닫는 따옴표가 붙는 경우까지 허용한다: "token":
+const SEP = `["']?\\s*[:=]\\s*`;
+// AUTH 계열 값은 JWT처럼 점(.)이 들어갈 수 있어 점을 막지 않는다. 공백이나 닫는 따옴표·괄호 앞에서 멈춘다.
 const VALUE = `[^\\s"')\\]}]+`;
-const SECRET_NAME = new RegExp(`\\b(\\w*(?:token|secret|key|password|passwd|pwd)\\w*)(\\s*[:=]\\s*)(${VALUE})`, "gi");
+// NAME=값 계열 값은 점을 막아 token-notes.md, api_key_rotation.md 같은 파일명의 확장자를 삼키지 않는다.
+const BARE_VALUE_NO_DOT = `[^\\s"')\\]}.]+`;
+// 따옴표로 감싼 값은 같은 따옴표가 다시 나올 때까지 전부(공백 포함) 값으로 본다. 따옴표 자체는 남긴다.
+const QUOTED_VALUE = `(?<q>["'])(?:(?!\\k<q>).)*\\k<q>`;
+
+const SECRET_NAME = new RegExp(`\\b(${NAME})\\b(${SEP})(${QUOTED_VALUE}|${BARE_VALUE_NO_DOT})`, "gi");
+// mysql --password FAKEPASS123처럼 공백으로만 구분된 값은, 흔한 문장과 안 겹치도록 --옵션 형태에만 적용한다
+const CLI_FLAG_VALUE = new RegExp(`(--(?:password|token|api-key|secret))(\\s+)(${QUOTED_VALUE}|${VALUE})`, "gi");
 const AUTH_BEARER = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(bearer)(\\s+)(${VALUE})`, "gi");
 const AUTH_BARE = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(?!bearer\\b)(${VALUE})`, "gi");
 const BEARER_BARE = new RegExp(`\\b(bearer)(\\s+)(${VALUE})`, "gi");
+// curl -u user:pass — 사용자 이름은 남기고 비밀번호만 가린다
+const CURL_U = /(-u\s+[^\s:]+:)(\S+)/g;
 const PREFIX_TOKEN = /\b(?:sk|ghp|gho|xox[abp]|AKIA)[-_A-Za-z0-9]{8,}/g;
 const URL_CREDS = /\/\/[^/\s:@]+:[^/\s@]+@/g;
-// 이름·접두어로 잡히지 않은, 32자 이상 이어진 16진수/base64 형태의 문자열을 통째로 가리는 마지막 안전망
-const LONG_RANDOM = /(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{32,}(?![A-Za-z0-9+/=_-])/g;
+// 이름·접두어로 잡히지 않은, 32자 이상 이어진 16진수/base64 형태의 문자열을 통째로 가리는 마지막 안전망.
+// /와 =는 넣지 않는다 — 절대경로 전체나 NAME=값의 이름+값이 하나로 합쳐져 통째로 가려지는 오탐이 있었다(reviewer Important A).
+// 숫자와 영문이 둘 다 있을 때만 가린다 — 글자만 있는 긴 식별자(경로 조각, 함수 이름)는 그대로 둔다.
+const LONG_RANDOM = /(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*\d)(?=[A-Za-z0-9+_-]*[A-Za-z])[A-Za-z0-9+_-]{32,}(?![A-Za-z0-9+_-])/g;
+
+const maskValue = (value: string): string => {
+  const q = value[0];
+  return q === '"' || q === "'" ? `${q}***${q}` : "***";
+};
 
 export function redact(s: string): string {
   return s
-    .replace(SECRET_NAME, (_m, name: string, sep: string) => `${name}${sep}***`)
+    .replace(SECRET_NAME, (_m, name: string, sep: string, value: string) => `${name}${sep}${maskValue(value)}`)
+    .replace(CLI_FLAG_VALUE, (_m, flag: string, sp: string, value: string) => `${flag}${sp}${maskValue(value)}`)
     .replace(AUTH_BEARER, (_m, kw: string, sep: string, bearer: string, sp: string) => `${kw}${sep}${bearer}${sp}***`)
     .replace(AUTH_BARE, (_m, kw: string, sep: string) => `${kw}${sep}***`)
     .replace(BEARER_BARE, (_m, kw: string, sp: string) => `${kw}${sp}***`)
+    .replace(CURL_U, (_m, prefix: string) => `${prefix}***`)
     .replace(PREFIX_TOKEN, "***")
     .replace(URL_CREDS, "//***@")
     .replace(LONG_RANDOM, "***");

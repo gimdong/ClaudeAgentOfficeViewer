@@ -101,13 +101,17 @@ describe("redact (Ruling P9)", () => {
   });
 
   it("32자 이상의 16진수/영숫자 연속 문자열은 통째로 가린다", () => {
-    const hex = "a".repeat(40) + "f";
+    // 숫자와 영문이 섞여 있어야 가려진다(글자만 있으면 안 가려짐 — 아래 "오탐 없음" 테스트 참고)
+    const hex = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"; // 40자
     expect(summarize("Bash", { command: `git show ${hex}` }).command).toBe("git show ***");
   });
 
   it("filePath·query·question에도 가림이 적용된다", () => {
-    // 접두어 토큰 규칙은 값의 문자 집합이 정해져 있어 .txt 같은 확장자 앞에서 멈춘다
-    expect(summarize("Write", { file_path: "/tmp/fake/AKIAFAKEFAKE1234.txt" }).filePath).toBe("/tmp/fake/***.txt");
+    // Fix round 2에서 SECRET_NAME의 값이 .을 삼키지 않도록 고쳐서, round 1에서 접두어 토큰 예시로
+    // 바꿨던 것을 원래 의도(NAME=값이 확장자를 삼키지 않는지)로 되돌린다.
+    expect(summarize("Write", { file_path: "/tmp/fake/GITHUB_TOKEN=ghp_FAKEFAKEFAKE1234.txt" }).filePath).toBe(
+      "/tmp/fake/GITHUB_TOKEN=***.txt",
+    );
     expect(summarize("WebSearch", { query: "Authorization: Bearer FAKE_TOKEN_123 login" }).query).toBe(
       "Authorization: Bearer *** login",
     );
@@ -117,10 +121,85 @@ describe("redact (Ruling P9)", () => {
 
   it("ZWJ로 묶인 이모지는 그래핌 경계에서 쪼개지지 않는다", () => {
     const family = "👨‍👩‍👧"; // 코드포인트 5개, 그래핌 1개
-    // "가"는 32자 연속 규칙([A-Za-z0-9+/=_-])에 안 걸리는 채움말이다
-    const s = summarize("Bash", { command: "가".repeat(198) + family });
-    expect(s.command).toBe("가".repeat(198) + family);
+    // Fix round 2에서 LONG_RANDOM에 숫자+영문 혼합 조건을 넣어서, 글자만 있는 채움말은 더 이상 안 걸린다.
+    // round 1에서 "가"로 바꿨던 것을 원래 의도(x 198개)로 되돌린다.
+    const s = summarize("Bash", { command: "x".repeat(198) + family });
+    expect(s.command).toBe("x".repeat(198) + family);
     expect(s.command!.endsWith(family)).toBe(true);
+  });
+});
+
+describe("redact 오탐 없음 (Ruling P10)", () => {
+  it("긴 절대경로·파일명은 가리지 않는다(filePath)", () => {
+    const paths = [
+      "/Users/fake/Code/claude_project/ClaudeAgentOfficeViewer/server/events/summarize.ts",
+      "src/foo/bar.test.ts",
+      "/tmp/fake/token-notes.md",
+      "docs/secret-sauce.md",
+      "api_key_rotation.md",
+    ];
+    for (const p of paths) expect(summarize("Read", { file_path: p }).filePath).toBe(p);
+  });
+
+  it("긴 절대경로·파일명은 가리지 않는다(command의 cat)", () => {
+    const paths = [
+      "/Users/fake/Code/claude_project/ClaudeAgentOfficeViewer/server/events/summarize.ts",
+      "src/foo/bar.test.ts",
+      "/tmp/fake/token-notes.md",
+      "docs/secret-sauce.md",
+      "api_key_rotation.md",
+    ];
+    for (const p of paths) expect(summarize("Bash", { command: `cat ${p}` }).command).toBe(`cat ${p}`);
+  });
+
+  it("긴 식별자·명령·흔한 단어는 가리지 않는다", () => {
+    const untouched = [
+      "ClaudeAgentOfficeViewerDashboardComponent.tsx",
+      "test_summarize_redacts_long_identifiers_ok",
+      "npm run build:production-with-sourcemaps",
+      "SOME_REALLY_LONG_ENVIRONMENT_VARIABLE_NAME_HERE=1 npm test",
+      "monkey=banana",
+      "keyboard=us-intl",
+      "sort --key=2",
+      "cd /Users/fake/Code/claude_project/docs/superpowers",
+      "x".repeat(198),
+    ];
+    for (const c of untouched) expect(summarize("Bash", { command: c }).command).toBe(c);
+  });
+
+  it("40자 git sha(숫자·영문 혼합)는 가려져도 된다(수용)", () => {
+    const sha = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"; // 40자, 숫자·영문 섞임
+    expect(summarize("Bash", { command: `git checkout ${sha}` }).command).toBe("git checkout ***");
+  });
+});
+
+describe("redact 확장 규칙 (Ruling P10, reviewer Important B)", () => {
+  it("따옴표로 감싼 값은 따옴표를 남기고 안만 가린다", () => {
+    expect(summarize("Bash", { command: "export API_KEY='FAKE_KEY_QUOTED'" }).command).toBe(
+      "export API_KEY='***'",
+    );
+    expect(summarize("Bash", { command: 'export PASSWORD="FAKE PASS WITH SPACE"' }).command).toBe(
+      'export PASSWORD="***"',
+    );
+  });
+
+  it("JSON 형태의 token/api_key 필드도 가린다", () => {
+    expect(summarize("Bash", { command: `curl -d '{"token":"FAKE_TOKEN_ABC"}'` }).command).toBe(
+      `curl -d '{"token":"***"}'`,
+    );
+    expect(summarize("Bash", { command: `curl -d '{"api_key": "FAKE_KEY_ABC"}'` }).command).toBe(
+      `curl -d '{"api_key": "***"}'`,
+    );
+  });
+
+  it("--password 같은 공백 구분 옵션값을 가린다", () => {
+    expect(summarize("Bash", { command: "mysql --password FAKEPASS123" }).command).toBe("mysql --password ***");
+  });
+
+  it("curl -u user:pass 형태를 가린다", () => {
+    expect(summarize("Bash", { command: "curl -u admin:FAKEPASS https://example.com/api" }).command).toBe(
+      "curl -u admin:*** https://example.com/api",
+    );
   });
 });
 
