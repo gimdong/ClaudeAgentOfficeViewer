@@ -93,10 +93,24 @@ describe("useDecisionAnnouncer", () => {
     const one = makeSnapshot({ sessions: [makeSession({ id: "a", floor: 3, members: [makeMember({ name: "team-lead" })] })] });
     const two = makeSnapshot({ sessions: [makeSession({ id: "a", floor: 3, members: [decide("team-lead", "2026-10-01T05:00:00Z")] })], decisionCount: 1 });
     const { result, rerender } = renderHook(({ s }) => useDecisionAnnouncer(s), { initialProps: { s: one } });
-    expect(result.current).toBe("");
+    expect(result.current.text).toBe("");
     act(() => rerender({ s: two }));
-    expect(result.current).toBe("3F team-lead이(가) 결정을 기다립니다");
+    expect(result.current.text).toBe("3F team-lead이(가) 결정을 기다립니다");
     act(() => rerender({ s: { ...two, generatedAt: "later" } }));
-    expect(result.current).toBe("3F team-lead이(가) 결정을 기다립니다");
+    expect(result.current.text).toBe("3F team-lead이(가) 결정을 기다립니다");
+  });
+
+  it("같은 사람의 두 번째 결정도 다시 알린다(Ruling P16 — 텍스트가 같아도 n이 늘어난다)", () => {
+    const none = makeSnapshot({ sessions: [makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer" })] })] });
+    const withDecision = (since: string) => makeSnapshot({ sessions: [makeSession({ id: "a", floor: 3, members: [decide("reviewer", since)] })], decisionCount: 1 });
+    const { result, rerender } = renderHook(({ s }) => useDecisionAnnouncer(s), { initialProps: { s: none } });
+    expect(result.current).toEqual({ text: "", n: 0 });
+    act(() => rerender({ s: withDecision("2026-10-01T05:00:00Z") }));
+    expect(result.current.text).toBe("3F reviewer이(가) 결정을 기다립니다");
+    expect(result.current.n).toBe(1);
+    act(() => rerender({ s: none })); // 해제
+    act(() => rerender({ s: withDecision("2026-10-01T05:10:00Z") })); // 다시 결정 — 문장은 같지만 n이 늘어야 한다
+    expect(result.current.text).toBe("3F reviewer이(가) 결정을 기다립니다");
+    expect(result.current.n).toBe(2);
   });
 });

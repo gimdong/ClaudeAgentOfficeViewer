@@ -5,7 +5,7 @@ import { useSnapshot } from "./useSnapshot";
 
 export function App() {
   const { snapshot, live } = useSnapshot();
-  const announce = useDecisionAnnouncer(snapshot);
+  const { text: announce, n: announceN } = useDecisionAnnouncer(snapshot);
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
   return (
     <div className="app">
@@ -16,7 +16,8 @@ export function App() {
       )}
       <Hud snapshot={snapshot} live={live} />
       <Building sessions={snapshot.sessions} />
-      <div className="sr-only" role="status">
+      {/* 같은 문장이 다시 와도 스크린 리더가 다시 읽도록 새 결정마다 key를 바꿔 다시 마운트한다(Ruling P16) */}
+      <div className="sr-only" role="status" key={announceN}>
         {announce}
       </div>
     </div>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeSession, makeSnapshot } from "./fixtures";
+import { makeMember, makeSession, makeSnapshot } from "./fixtures";
 
 const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: false } }));
 vi.mock("../../web/useSnapshot", () => ({ useSnapshot: () => state.value }));
@@ -24,5 +24,20 @@ describe("App", () => {
     expect(screen.getByText("● LIVE")).toBeTruthy();
     expect(screen.getAllByTestId("floor")).toHaveLength(1);
     expect(screen.getByTestId("vacant-floor")).toBeTruthy();
+  });
+
+  it("새 결정이 생기면 상태 알림 영역이 새 노드로 바뀐다(Ruling P16)", () => {
+    const base = makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer" })] });
+    state.value = { snapshot: makeSnapshot({ sessions: [base] }), live: true };
+    const { rerender } = render(<App />);
+    const before = screen.getByRole("status");
+
+    const decided = makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer", state: "decision", decision: { kind: "permission", since: "2026-10-01T05:00:00Z" } })] });
+    state.value = { snapshot: makeSnapshot({ sessions: [decided], decisionCount: 1 }), live: true };
+    rerender(<App />);
+    const after = screen.getByRole("status");
+
+    expect(after).not.toBe(before);
+    expect(after.textContent).toBe("3F reviewer이(가) 결정을 기다립니다");
   });
 });
