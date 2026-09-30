@@ -15,6 +15,8 @@ npm start            # http://127.0.0.1:4317
 
 옵션: `npm start -- --port 5000 --claude-home /path/to/.claude --config ./my.config.json`
 
+Claude 데이터 폴더는 `--claude-home` > `CLAUDE_HOME` 환경변수 > `CLAUDE_CONFIG_DIR` 환경변수 > 기본값 `~/.claude` 순으로 정해집니다(Claude Code 자체가 설정 폴더를 옮길 때 쓰는 `CLAUDE_CONFIG_DIR`도 인식합니다).
+
 ## 예산과 컨텍스트 창 설정 (선택)
 
 `claude-office.config.example.json`을 `claude-office.config.json`으로 복사해 값을 바꿉니다.

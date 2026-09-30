@@ -16,6 +16,27 @@ describe("parseCliArgs", () => {
     expect(() => parseCliArgs(["--port", "abc"], {})).toThrow("잘못된 포트");
     expect(() => parseCliArgs(["--port", "70000"], {})).toThrow("잘못된 포트");
   });
+
+  // final review I-1(Ruling 17): --claude-home > CLAUDE_HOME > CLAUDE_CONFIG_DIR > 기본값.
+  it("CLAUDE_CONFIG_DIR만 설정돼 있으면 그것을 쓴다", () => {
+    expect(parseCliArgs([], { CLAUDE_CONFIG_DIR: "/cfg/dir" })).toMatchObject({ claudeHome: "/cfg/dir" });
+  });
+
+  it("CLAUDE_HOME이 CLAUDE_CONFIG_DIR보다 우선한다", () => {
+    expect(parseCliArgs([], { CLAUDE_HOME: "/env/home", CLAUDE_CONFIG_DIR: "/cfg/dir" })).toMatchObject({ claudeHome: "/env/home" });
+  });
+
+  it("CLAUDE_HOME이 빈 문자열이면 건너뛰고 CLAUDE_CONFIG_DIR을 쓴다", () => {
+    expect(parseCliArgs([], { CLAUDE_HOME: "", CLAUDE_CONFIG_DIR: "/cfg/dir" })).toMatchObject({ claudeHome: "/cfg/dir" });
+  });
+
+  it("선행 ~/는 homedir()로 확장된다", () => {
+    expect(parseCliArgs(["--claude-home", "~/mydir"], {})).toMatchObject({ claudeHome: join(homedir(), "mydir") });
+  });
+
+  it("단독 ~도 homedir()로 확장된다", () => {
+    expect(parseCliArgs(["--claude-home", "~"], {})).toMatchObject({ claudeHome: homedir() });
+  });
 });
 
 describe("CLI", () => {

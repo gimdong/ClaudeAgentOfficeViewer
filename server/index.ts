@@ -13,6 +13,13 @@ export interface CliOptions {
   configPath: string;
 }
 
+/** 선행 "~/"나 단독 "~"를 homedir()로 치환한다(그 외 경로는 그대로 둔다). */
+function expandHome(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
+  return p;
+}
+
 export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
   const { values } = parseArgs({
     args: argv,
@@ -20,9 +27,13 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
   });
   const port = values.port === undefined ? 4317 : Number(values.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`잘못된 포트: ${values.port}`);
+  // --claude-home > CLAUDE_HOME > CLAUDE_CONFIG_DIR > 기본값(~/.claude). Claude Code 자신은
+  // CLAUDE_CONFIG_DIR로 설정 폴더 전체(sessions/projects/teams)를 옮기므로, 이 변수만 설정한
+  // 사용자도 서버가 올바른 폴더를 읽어야 한다. ??가 아니라 ||를 써서 빈 문자열도 건너뛴다.
+  const claudeHomeRaw = values["claude-home"] || env.CLAUDE_HOME || env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   return {
     port,
-    claudeHome: resolve(values["claude-home"] ?? env.CLAUDE_HOME ?? join(homedir(), ".claude")),
+    claudeHome: resolve(expandHome(claudeHomeRaw)),
     configPath: resolve(values.config ?? "claude-office.config.json"),
   };
 }
