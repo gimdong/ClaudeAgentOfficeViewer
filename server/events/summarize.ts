@@ -20,6 +20,30 @@ export interface ToolSummary {
 const cut = (v: unknown): string | undefined =>
   typeof v === "string" && v.trim() ? Array.from(v).slice(0, MAX_FIELD).join("") : undefined;
 
+// Ruling P9: command/description/query/question은 EventStore → 스냅샷 → SSE → 브라우저로 그대로 이어지므로
+// 비밀값으로 보이는 형식을 지운다. 잘린 토큰 조각이 남지 않도록 cut(200자)보다 먼저 적용해야 한다.
+// 값은 공백이나 닫는 따옴표·괄호 앞에서 멈춘다 — curl -H "Authorization: Bearer xyz" 같은 형태에서 닫는 "를 삼키지 않기 위해
+const VALUE = `[^\\s"')\\]}]+`;
+const SECRET_NAME = new RegExp(`\\b(\\w*(?:token|secret|key|password|passwd|pwd)\\w*)(\\s*[:=]\\s*)(${VALUE})`, "gi");
+const AUTH_BEARER = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(bearer)(\\s+)(${VALUE})`, "gi");
+const AUTH_BARE = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(?!bearer\\b)(${VALUE})`, "gi");
+const BEARER_BARE = new RegExp(`\\b(bearer)(\\s+)(${VALUE})`, "gi");
+const PREFIX_TOKEN = /\b(?:sk|ghp|gho|xox[abp]|AKIA)[-_A-Za-z0-9]{8,}/g;
+const URL_CREDS = /\/\/[^/\s:@]+:[^/\s@]+@/g;
+
+export function redact(s: string): string {
+  return s
+    .replace(SECRET_NAME, (_m, name: string, sep: string) => `${name}${sep}***`)
+    .replace(AUTH_BEARER, (_m, kw: string, sep: string, bearer: string, sp: string) => `${kw}${sep}${bearer}${sp}***`)
+    .replace(AUTH_BARE, (_m, kw: string, sep: string) => `${kw}${sep}***`)
+    .replace(BEARER_BARE, (_m, kw: string, sp: string) => `${kw}${sp}***`)
+    .replace(PREFIX_TOKEN, "***")
+    .replace(URL_CREDS, "//***@");
+}
+
+const cutRedacted = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? Array.from(redact(v)).slice(0, MAX_FIELD).join("") : undefined;
+
 function domainOf(url: unknown): string | undefined {
   if (typeof url !== "string") return undefined;
   try {
@@ -48,15 +72,15 @@ export function summarize(toolName: string | undefined, input: unknown): ToolSum
   const i = input as Record<string, unknown>;
   const firstQuestion = Array.isArray(i.questions) ? (i.questions[0] as { question?: unknown } | undefined)?.question : undefined;
   const out: ToolSummary = {
-    command: cut(i.command),
-    description: cut(i.description),
+    command: cutRedacted(i.command),
+    description: cutRedacted(i.description),
     filePath: cut(i.file_path ?? i.notebook_path),
     pattern: cut(i.pattern),
-    query: cut(i.query),
+    query: cutRedacted(i.query),
     domain: domainOf(i.url),
     to: cut(i.to),
     activeForm: activeFormOf(toolName, i),
-    question: cut(firstQuestion),
+    question: cutRedacted(firstQuestion),
   };
   for (const k of Object.keys(out) as (keyof ToolSummary)[]) if (out[k] === undefined) delete out[k];
   return out;

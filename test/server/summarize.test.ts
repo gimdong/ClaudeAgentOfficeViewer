@@ -51,6 +51,45 @@ describe("summarize", () => {
   });
 });
 
+describe("redact (Ruling P9)", () => {
+  it("Authorization/Bearer: 키워드는 남기고 값만 가린다", () => {
+    const s = summarize("Bash", { command: 'curl -H "Authorization: Bearer FAKE_TOKEN_123"' });
+    expect(s.command).toBe('curl -H "Authorization: Bearer ***"');
+  });
+
+  it("NAME=값 형태의 비밀값은 이름은 남기고 값만 가린다", () => {
+    const s = summarize("Bash", { command: "export GITHUB_TOKEN=ghp_FAKEFAKEFAKE1234" });
+    expect(s.command).toBe("export GITHUB_TOKEN=***");
+  });
+
+  it("접두어 형식 토큰은 단독으로 나와도 통째로 가린다", () => {
+    expect(summarize("Bash", { command: "aws configure set aws_access_key_id AKIAFAKEFAKE1234" }).command).toBe(
+      "aws configure set aws_access_key_id ***",
+    );
+    expect(summarize("Bash", { command: "echo sk-FAKE12345678" }).command).toBe("echo ***");
+  });
+
+  it("URL의 사용자:비밀번호는 가린다", () => {
+    const s = summarize("Bash", { command: "psql postgres://u:FAKEPASS@h/db" });
+    expect(s.command).toBe("psql postgres://***@h/db");
+  });
+
+  it("흔한 비밀 형식이 없는 명령은 그대로 둔다", () => {
+    expect(summarize("Bash", { command: "npm test" }).command).toBe("npm test");
+    expect(summarize("Bash", { command: "ls -la" }).command).toBe("ls -la");
+  });
+
+  it("200자로 자르기 전에 가려서 잘린 자리에 원문 조각이 남지 않는다", () => {
+    const filler = "x".repeat(150);
+    const secret = "ghp_" + "F".repeat(36); // 접두어 + 36자, 이 예시에선 이름이 없어 접두어 규칙으로 가려진다
+    const raw = `${filler} GITHUB_TOKEN=${secret}`;
+    expect(raw.length).toBeGreaterThan(MAX_FIELD);
+    const s = summarize("Bash", { command: raw });
+    expect(s.command).toBe(`${filler} GITHUB_TOKEN=***`);
+    expect(s.command).not.toContain("FFFFFF");
+  });
+});
+
 describe("agentOf", () => {
   it("agent_id가 없으면 리드", () => {
     expect(agentOf({ hook_event_name: "PreToolUse" })).toEqual({ name: "team-lead", sub: false });
