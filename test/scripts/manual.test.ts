@@ -65,6 +65,15 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
   });
 
+  it("designer 그림 11개가 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
+    const ids = [...html.matchAll(/<figure class="fig" data-fig="([\w-]+)">\s*(?:<!--[\s\S]*?-->\s*)?<svg /g)].map((m) => m[1]).sort();
+    expect(ids).toEqual(["fig-diag-chip-panel", "fig-diag-file", "fig-err-managed", "fig-err-nobubble", "fig-err-node", "fig-err-offline", "fig-err-port", "fig-first-screen", "fig-install-ok", "fig-overview", "fig-screen-guide"]);
+    expect(html).not.toMatch(/<!-- FIG\(fig-/);
+    expect(html).not.toContain('class="fig-slot"');
+    const dup = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]).filter((id, i, all) => all.indexOf(id) !== i);
+    expect(dup).toEqual([]);
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);
