@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Limits } from "../../src/shared/types";
+import { warnCaught } from "../log";
 
 type Obj = Record<string, unknown> | undefined;
 
@@ -46,7 +47,8 @@ export async function readLimits(claudeHome: string, now = Date.now()): Promise<
   let raw: Obj;
   try {
     raw = JSON.parse(await readFile(join(claudeHome, "claude-office", "limits.json"), "utf8"));
-  } catch {
+  } catch (e) {
+    warnCaught("limits", "cannot read limits", e, "limits.json"); // ENOENT = statusline tap 미설치, 조용히
     return null;
   }
   const rl = pick(raw, "rate_limits", "rateLimits") as Obj;

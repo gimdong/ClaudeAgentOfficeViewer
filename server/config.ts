@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { warnCaught } from "./log";
 
 export interface OfficeConfig {
   budget: { fiveHour?: number; weekly?: number };
@@ -17,6 +19,7 @@ export async function loadConfig(path: string): Promise<OfficeConfig> {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
       console.warn(`[config] ${path}을 읽지 못해 기본값을 씁니다: ${(e as Error).message}`);
     }
+    warnCaught("config", "cannot read config, using defaults", e, basename(path));
     return { budget: {}, contextWindows: {} };
   }
   const contextWindows: Record<string, number> = {};

@@ -7,6 +7,8 @@ export interface HubOptions {
   debounceMs?: number;
   watchDir?: string;
   pokeMs?: number;
+  /** 첫 빌드가 실패해 아직 스냅샷이 없을 때 대신 쓸 스냅샷(error 필드에 쉬운 말 원인). 다음 주기에 다시 빌드한다 */
+  fallback?: (e: unknown) => Snapshot;
 }
 
 const WATCHED = /^(projects|sessions|teams|claude-office)([\\/]|$)/;
@@ -96,6 +98,10 @@ export class SnapshotHub {
         } while (this.again);
       } catch (e) {
         getLogger().error("hub", "snapshot build failed", { error: String((e as Error)?.message ?? e) });
+        if (!this.snapshot && this.opts.fallback) {
+          this.snapshot = this.opts.fallback(e);
+          for (const l of this.listeners) l(this.snapshot);
+        }
       } finally {
         this.running = null;
       }

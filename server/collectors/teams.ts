@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { MemberState } from "../../src/shared/types";
+import { warnCaught } from "../log";
 
 export interface TeamMemberRecord {
   name: string;
@@ -28,7 +29,8 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 async function readdirOrEmpty(dir: string): Promise<string[]> {
   try {
     return await readdir(dir);
-  } catch {
+  } catch (e) {
+    warnCaught("teams", "cannot list folder", e, basename(dir));
     return [];
   }
 }
@@ -38,7 +40,9 @@ export async function countUnread(inboxPath: string): Promise<number> {
     const v: unknown = JSON.parse(await readFile(inboxPath, "utf8"));
     if (!Array.isArray(v)) return 0;
     return v.filter((m) => !(m && typeof m === "object" && (m as { read?: unknown }).read === true)).length;
-  } catch {
+  } catch (e) {
+    // 파일 이름이 팀원 이름이라 넣지 않는다
+    warnCaught("teams", "cannot read inbox", e);
     return 0;
   }
 }
@@ -52,7 +56,8 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
       let name: string | undefined;
       try {
         name = str(JSON.parse(await readFile(join(dir, n), "utf8"))?.name);
-      } catch {
+      } catch (e) {
+        warnCaught("teams", "cannot read subagent meta", e, n);
         continue;
       }
       if (!name) continue;
@@ -61,8 +66,8 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
         const { mtimeMs } = await stat(path);
         const cur = best.get(name);
         if (!cur || mtimeMs > cur.mtime) best.set(name, { path, mtime: mtimeMs });
-      } catch {
-        // meta만 있고 기록 파일이 없는 경우
+      } catch (e) {
+        warnCaught("teams", "cannot stat transcript", e, basename(path)); // ENOENT = meta만 있고 기록 파일이 없는 경우
       }
     }
   }
@@ -93,7 +98,8 @@ export async function findTeamNameForSession(
         if (!teamName || !valid.has(teamName)) continue;
         const { mtimeMs } = await stat(metaPath);
         if (!best || mtimeMs > best.mtime) best = { name: teamName, mtime: mtimeMs };
-      } catch {
+      } catch (e) {
+        warnCaught("teams", "cannot read subagent meta", e, n);
         continue;
       }
     }
@@ -123,7 +129,8 @@ export async function readTeams(claudeHome: string): Promise<TeamRecord[]> {
     let config: { name?: unknown; leadSessionId?: unknown; members?: unknown };
     try {
       config = JSON.parse(await readFile(join(teamDir, "config.json"), "utf8"));
-    } catch {
+    } catch (e) {
+      warnCaught("teams", "cannot read team config", e, "config.json");
       continue; // config가 없으면 이 세션은 리드만 있는 1인 사무실이 된다
     }
     // JSON.parse는 "null"/숫자/문자열도 성공적으로 파싱하므로(예: config.json 내용이 "null"),

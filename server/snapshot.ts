@@ -10,7 +10,7 @@ import { readLimits } from "./collectors/limits";
 import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
-import { getLogger } from "./log";
+import { getLogger, warnCaught } from "./log";
 import { readLastEntry } from "./lib/jsonlTail";
 
 export interface BuilderOptions {
@@ -23,7 +23,7 @@ export interface BuilderOptions {
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-function emptySnapshot(now: number, config: OfficeConfig, error?: string): Snapshot {
+export function emptySnapshot(now: number, config: OfficeConfig, error?: string): Snapshot {
   return {
     generatedAt: iso(now),
     ...(error ? { error } : {}),
@@ -84,7 +84,7 @@ export class SnapshotBuilder {
     const teams = (this.prevTeams = await guard("teams", () => readTeams(claudeHome), this.prevTeams));
     // readLimits에 now를 넘겨, 스냅샷이 판단하는 "현재 시각"과 rate limit 창의 만료 판정 기준을 맞춘다
     // (Task 7 fix round 1에서 readLimits가 now를 받아 이미 지난 창을 걸러내도록 바뀌었다).
-    const limits = await readLimits(claudeHome, now).catch(() => null);
+    const limits = await readLimits(claudeHome, now).catch((e) => (warnCaught("snapshot", "limits collect failed", e), null));
     this.opts.events?.prune(now);
 
     const byStart = [...sessions].sort((a, b) => a.startedAt - b.startedAt || a.sessionId.localeCompare(b.sessionId));
@@ -128,7 +128,7 @@ export class SnapshotBuilder {
       return list ? deriveAgent(list, now) : undefined;
     };
 
-    const leadEntry = leadFile ? await readLastEntry(leadFile).catch(() => undefined) : undefined;
+    const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, basename(leadFile))) : undefined;
     const leadAt = s.updatedAt ? iso(s.updatedAt) : undefined;
     const members: Member[] = [
       withEvents(
@@ -149,7 +149,7 @@ export class SnapshotBuilder {
     ];
     for (const m of team?.members ?? []) {
       const mtime = m.transcript ? this.usage.mtime(m.transcript) : undefined;
-      const lastEntry = m.transcript ? await readLastEntry(m.transcript).catch(() => undefined) : undefined;
+      const lastEntry = m.transcript ? await readLastEntry(m.transcript).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, basename(m.transcript!))) : undefined;
       const at = mtime ? iso(mtime) : undefined;
       members.push(
         withEvents(

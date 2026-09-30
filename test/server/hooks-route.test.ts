@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../../server/app";
+import { HookStats } from "../../server/events/stats";
 import type { Snapshot } from "../../src/shared/types";
 import { emptySum } from "../../src/shared/tokens";
 
@@ -18,11 +19,13 @@ let server: Server;
 let port: number;
 let received: Array<Record<string, unknown>>;
 let onHookEvent: (input: Record<string, unknown>) => void;
+let stats: HookStats;
 
 beforeEach(async () => {
   received = [];
   onHookEvent = (input) => received.push(input);
-  server = createApp(hub, { onHookEvent: (i) => onHookEvent(i) }).listen(0, "127.0.0.1");
+  stats = new HookStats();
+  server = createApp(hub, { onHookEvent: (i) => onHookEvent(i), stats }).listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
   port = (server.address() as AddressInfo).port;
 });
@@ -50,6 +53,21 @@ function post(body: string, headers: Record<string, string> = {}): Promise<{ sta
 const ok = JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s-fake", tool_name: "Bash", tool_input: { command: "echo fake" } });
 
 describe("POST /hooks/event", () => {
+  it("수신 통계: 성공은 이벤트별로, 거부는 이유별로 센다", async () => {
+    await post(ok);
+    await post(ok, { Origin: "https://evil.example" });
+    await post(ok, { Host: "evil.example" });
+    await post(ok, { "Content-Type": "text/plain" });
+    await post(JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s", tool_input: { content: "x".repeat(2_000_000) } }));
+    await post("{broken");
+    await post(JSON.stringify({ hook_event_name: "PreToolUse" }));
+    expect(stats.view()).toMatchObject({
+      total: 1,
+      byEvent: { PreToolUse: 1 },
+      rejected: { "403": 2, "415": 1, "413": 1, "400": 2 },
+    });
+  });
+
   it("정상 요청은 200과 빈 본문, 입력을 넘긴다", async () => {
     const r = await post(ok);
     expect(r).toEqual({ status: 200, body: "" });

@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
+import type { HookStats } from "./events/stats";
 import type { SnapshotHub } from "./hub";
 import { getLogger } from "./log";
 
@@ -33,12 +34,14 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
 
 export function createApp(
   hub: Pick<SnapshotHub, "current" | "subscribe">,
-  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void } = {},
+  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void; stats?: HookStats } = {},
 ): Express {
   const app = express();
 
   app.use((req, res, next) => {
     if (!isAllowedHost(req.headers.host)) {
+      // 사내 프록시가 Host를 바꿔 hook이 막히는 경우를 진단에서 볼 수 있게 센다
+      if (req.path === "/hooks/event") opts.stats?.reject("403");
       res.status(403).type("text/plain").send("로컬 주소로만 접속할 수 있습니다");
       return;
     }
@@ -52,10 +55,12 @@ export function createApp(
     "/hooks/event",
     (req, res, next) => {
       if (req.headers.origin !== undefined) {
+        opts.stats?.reject("403");
         res.status(403).end();
         return;
       }
       if (!req.is("application/json")) {
+        opts.stats?.reject("415");
         res.status(415).end();
         return;
       }
@@ -69,9 +74,11 @@ export function createApp(
         typeof (body as Record<string, unknown>).hook_event_name === "string" &&
         typeof (body as Record<string, unknown>).session_id === "string";
       if (!valid) {
+        opts.stats?.reject("400");
         res.status(400).end();
         return;
       }
+      opts.stats?.accept((body as Record<string, string>).hook_event_name);
       try {
         opts.onHookEvent?.(body as Record<string, unknown>);
       } catch (e) {
@@ -87,7 +94,9 @@ export function createApp(
       next(err);
       return;
     }
-    res.status(err.status === 413 ? 413 : 400).end();
+    const status = err.status === 413 ? 413 : 400;
+    opts.stats?.reject(status === 413 ? "413" : "400");
+    res.status(status).end();
   });
 
   app.get("/api/snapshot", (_req, res) => {
@@ -112,6 +121,13 @@ export function createApp(
     app.use((req, res, next) => {
       if (req.method === "GET" && !req.path.startsWith("/api/")) res.sendFile(join(staticDir, "index.html"));
       else next();
+    });
+  } else if (staticDir) {
+    // 경로는 넣지 않는다(설치 폴더 이름). 설치본인지 여부는 start 로그의 webExists·mode로 안다
+    getLogger().error("server", "static files missing");
+    app.use((req, res, next) => {
+      if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+      res.status(503).type("html").send('<!doctype html><meta charset="utf-8"><title>Claude Agent Office</title><p>화면 파일이 없습니다 — 다시 설치해 주세요</p>');
     });
   }
   return app;

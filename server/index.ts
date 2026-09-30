@@ -1,15 +1,16 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { arch, homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
+import { HookStats } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
 import { Logger, setLogger } from "./log";
 import { resolvePaths } from "./paths";
-import { SnapshotBuilder } from "./snapshot";
+import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import pkg from "../package.json" with { type: "json" };
 
 export interface CliOptions {
@@ -45,7 +46,22 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
   };
 }
 
+/** 플러그인 hooks.json의 주소에 고정된 포트 */
+const HOOK_PORT = 4317;
+
+/** Node가 24 미만이면 쉬운 말 안내를, 아니면 null을 돌려준다(스펙 5장 1번) */
+export function checkNode(version: string): string | null {
+  const major = Number(/^v(\d+)/.exec(version)?.[1] ?? 0);
+  return major >= 24 ? null : `Claude Agent Office는 Node.js 24 이상이 필요합니다(지금 ${version}). https://nodejs.org 에서 LTS를 설치한 뒤 다시 실행해 주세요.`;
+}
+
 async function main(): Promise<void> {
+  // 로거를 만들기 전이라 콘솔에만 알린다
+  const nodeProblem = checkNode(process.version);
+  if (nodeProblem) {
+    console.error(nodeProblem);
+    process.exit(1);
+  }
   let opts: CliOptions;
   try {
     opts = parseCliArgs(process.argv.slice(2));
@@ -72,16 +88,25 @@ async function main(): Promise<void> {
   process.on("exit", (code) => log.info("server", "exit", { code }));
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
+  if (opts.port !== HOOK_PORT) {
+    console.warn(`참고: 플러그인은 ${HOOK_PORT} 포트로 이벤트를 보냅니다. ${opts.port} 포트에서는 말풍선·손들기가 보이지 않습니다.`);
+    log.warn("server", "port is not 4317; plugin hooks go to 4317", { port: opts.port });
+  }
 
   const config = await loadConfig(opts.configPath);
   const events = new EventStore();
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events }), { watchDir: opts.claudeHome });
+  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events }), {
+    watchDir: opts.claudeHome,
+    fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
+  });
   await hub.start();
 
+  const stats = new HookStats();
+  setInterval(() => stats.summarize(), 60_000).unref();
   const onHookEvent = (input: Record<string, unknown>) => {
     if (events.add(input, Date.now())) hub.poke();
   };
-  const server = createApp(hub, { staticDir, onHookEvent }).listen(opts.port, "127.0.0.1", () => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats }).listen(opts.port, "127.0.0.1", () => {
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
@@ -97,4 +122,16 @@ async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void main();
+// 번들(server.mjs)을 심볼릭 링크가 낀 경로(예: macOS os.tmpdir()의 /var/folders/... → /private/var/folders/...)
+// 에서 node로 직접 실행하면 import.meta.url은 실제 경로로, process.argv[1]은 호출한 그대로(링크 경로)라
+// 문자열 비교가 어긋나 main()이 전혀 안 불린다(Task 6에서 패키지 실행 테스트로 발견). 양쪽 다
+// realpath로 풀어서 비교한다(Task 6 패키지 실행 테스트에서 발견).
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+if (isMainModule()) void main();
