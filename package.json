@@ -1,5 +1,6 @@
 {
   "name": "claude-agent-office-viewer",
+  "version": "2.0.0-beta.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -9,6 +10,8 @@
   "scripts": {
     "dev": "concurrently -k -n api,web \"tsx watch server/index.ts\" \"vite\"",
     "build": "vite build",
+    "build:server": "vite build -c vite.server.config.ts",
+    "package:beta": "node scripts/package-beta.mjs",
     "start": "tsx server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
