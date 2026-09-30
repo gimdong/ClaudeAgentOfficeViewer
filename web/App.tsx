@@ -7,6 +7,10 @@ export function App() {
   const { snapshot, live } = useSnapshot();
   const { text: announce, n: announceN } = useDecisionAnnouncer(snapshot);
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
+  // aria-live(role=status)는 같은 노드의 "내용이 바뀔 때" 알린다 — key로 다시 마운트하면 새 영역의
+  // "등장"이라 일부 스크린 리더(VoiceOver+Safari 등)가 안 읽을 수 있다(Ruling P16 수정).
+  // 같은 노드를 유지하고, 문장이 이전과 같아도 텍스트 자체가 바뀌도록 짝/홀에 따라 끝에 공백을 더한다.
+  const shown = announceN % 2 === 0 ? announce : `${announce} `;
   return (
     <div className="app">
       {snapshot.error && (
@@ -16,9 +20,8 @@ export function App() {
       )}
       <Hud snapshot={snapshot} live={live} />
       <Building sessions={snapshot.sessions} />
-      {/* 같은 문장이 다시 와도 스크린 리더가 다시 읽도록 새 결정마다 key를 바꿔 다시 마운트한다(Ruling P16) */}
-      <div className="sr-only" role="status" key={announceN}>
-        {announce}
+      <div className="sr-only" role="status">
+        {shown}
       </div>
     </div>
   );

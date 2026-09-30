@@ -26,18 +26,20 @@ describe("App", () => {
     expect(screen.getByTestId("vacant-floor")).toBeTruthy();
   });
 
-  it("새 결정이 생기면 상태 알림 영역이 새 노드로 바뀐다(Ruling P16)", () => {
+  it("새 결정이 생기면 같은 상태 알림 노드의 글자가 바뀐다(Ruling P16 수정 — aria-live는 같은 노드의 내용 변경에만 반응)", () => {
     const base = makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer" })] });
     state.value = { snapshot: makeSnapshot({ sessions: [base] }), live: true };
     const { rerender } = render(<App />);
     const before = screen.getByRole("status");
+    const beforeText = before.textContent;
 
     const decided = makeSession({ id: "a", floor: 3, members: [makeMember({ name: "reviewer", state: "decision", decision: { kind: "permission", since: "2026-10-01T05:00:00Z" } })] });
     state.value = { snapshot: makeSnapshot({ sessions: [decided], decisionCount: 1 }), live: true };
     rerender(<App />);
     const after = screen.getByRole("status");
 
-    expect(after).not.toBe(before);
-    expect(after.textContent).toBe("3F reviewer이(가) 결정을 기다립니다");
+    expect(after).toBe(before); // 같은 노드를 유지한다
+    expect(after.textContent).not.toBe(beforeText); // 글자 자체는 바뀐다
+    expect(after.textContent!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
   });
 });
