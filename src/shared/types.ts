@@ -76,6 +76,10 @@ export interface SessionView {
 export interface Limits {
   fiveHourPct?: number;
   weeklyPct?: number;
+  /** gateway 지출 한도 사용률(0~100으로 자른 값) */
+  spendPct?: number;
+  /** 자르기 전 원래 값. 100을 넘을 수 있다 */
+  spendRawPct?: number;
   resetsAt?: string;
   source: string;
 }

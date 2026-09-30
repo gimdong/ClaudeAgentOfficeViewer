@@ -76,4 +76,12 @@ describe("Hud", () => {
     expect(meter.getAttribute("aria-valuenow")).toBe("50");
     expect(within(meter.parentElement!).getByText("5H")).toBeTruthy();
   });
+
+  it("PLAN은 5H·WEEK·SPEND 가운데 가장 많이 쓴 창을 보여준다", () => {
+    const snap = makeSnapshot({ limits: { fiveHourPct: 10, weeklyPct: 40, spendPct: 97, spendRawPct: 97, source: "statusline" } });
+    render(<Hud snapshot={snap} live />);
+    const meter = screen.getByRole("meter");
+    expect(meter.getAttribute("aria-valuenow")).toBe("3");
+    expect(within(meter.parentElement!).getByText("SPEND")).toBeTruthy();
+  });
 });

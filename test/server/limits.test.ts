@@ -70,4 +70,14 @@ describe("readLimits", () => {
     await h.write(P, { rate_limits: { five_hour: { used_percentage: 5, resets_at: 1e20 }, seven_day: { used_percentage: 6, resets_at: -1e300 } } });
     expect(await readLimits(h.home)).toEqual({ fiveHourPct: 5, weeklyPct: 6, resetsAt: undefined, source: "statusline" });
   });
+
+  it("spend_limit을 읽고, 100을 넘는 원래 값을 따로 보존한다", async () => {
+    await h.write("claude-office/limits.json", { rate_limits: { spend_limit: { used_percentage: 130, resets_at: "2026-10-31T00:00:00Z" } } });
+    expect(await readLimits(h.home, FIXED_NOW)).toMatchObject({ spendPct: 100, spendRawPct: 130, source: "statusline" });
+  });
+
+  it("초기화 시각이 지난 spend 창은 버린다", async () => {
+    await h.write("claude-office/limits.json", { rate_limits: { spend_limit: { used_percentage: 50, resets_at: "2020-01-01T00:00:00Z" } } });
+    expect(await readLimits(h.home, FIXED_NOW)).toBeNull();
+  });
 });
