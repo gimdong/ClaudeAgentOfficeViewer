@@ -162,10 +162,10 @@ const MIXED = {
     { id: "managed", status: "fail", title: "회사 관리자 설정", detail: "관리자 설정이 플러그인 hook을 막고 있습니다", fix: "사용설명서 부록 A를 회사 관리자에게 전달해 주세요" },
     { id: "proxy", status: "warn", title: "프록시", detail: "NO_PROXY에 127.0.0.1이 없습니다", fix: "NO_PROXY에 127.0.0.1,localhost를 추가해 주세요" },
     { id: "hooks", status: "ok", title: "hook 수신", detail: "최근 10분 5건", fix: "" },
-    { id: "statusline", status: "warn", title: "요금제 한도(PLAN 바)", detail: "limits.json 없음", fix: "선택 기능입니다. 필요하면 사용설명서 4장을 보세요" },
+    { id: "statusline", status: "ok", title: "요금제 한도(선택)", detail: "없음", fix: "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다" },  // B12: 베타에서는 정보(ok)
   ],
 };
-const ALLOK = { ...MIXED, errorsLastHour: 0, doctor: MIXED.doctor.map((d) => ({ ...d, status: "ok", fix: "", detail: d.id === "managed" ? "없음" : d.id === "proxy" ? "프록시 없음" : d.id === "statusline" ? "있음" : d.detail })) };
+const ALLOK = { ...MIXED, errorsLastHour: 0, doctor: MIXED.doctor.map((d) => ({ ...d, status: "ok", fix: "", detail: d.id === "managed" ? "없음" : d.id === "proxy" ? "프록시 없음" : d.detail })) };
 
 const RANK = { fail: 0, warn: 1, ok: 2 };
 const LABEL = { fail: "문제", warn: "확인 필요", ok: "정상" };
