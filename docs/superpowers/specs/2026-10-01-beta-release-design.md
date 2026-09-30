@@ -79,7 +79,8 @@
 5. **doctor 실행.** 결과를 보여 준다.
 6. **사용설명서 열기.** 마지막 안내("대시보드 켜기: `claude-office`")를 출력한다.
 
-- 테스트를 위해 `--prefix <폴더>` 옵션(기본 `~/.claude-office`)과 `--yes`(모든 질문에 y) 옵션을 둔다.
+- 테스트를 위해 `--prefix <폴더>`(기본 `~/.claude-office`), `--yes`(모든 질문에 y), `--no-path`(3단계 PATH 등록을 건너뜀) 옵션을 둔다.
+- **테스트 안전 규칙:** 셸 설정 파일과 PATH는 `$HOME` 기준으로 고친다. 그래서 테스트는 항상 `HOME=<임시 폴더>`와 `--no-path`를 함께 쓴다. 이 Mac 사용자의 `~/.zshrc`와 `~/.claude`는 절대 고치지 않는다.
 
 ### `claude-office` 명령
 
@@ -93,7 +94,8 @@
 ## 4. 실행 로그와 에러 로그
 
 - 서버 로거는 `server/log.ts` 하나로 둔다. 기존의 모든 `console.*` 호출은 이 로거를 거친다. 콘솔 출력도 그대로 유지한다.
-- 파일 위치는 `~/.claude-office/logs/office-YYYY-MM-DD.log`이다. `--log-dir`로 바꿀 수 있고, 개발 중(`npm run dev`)에는 저장소의 `.logs/`를 쓴다.
+- 파일 위치는 `~/.claude-office/logs/office-YYYY-MM-DD.log`이다. `--log-dir`로 바꿀 수 있고, 개발 중(`npm run dev`)에는 저장소의 `.logs/`를 쓴다. 테스트는 항상 임시 `--log-dir`를 쓴다.
+- `.gitignore`에 `.logs/`, `release/`, `beta-feedback/`를 추가한다.
 - 형식은 한 줄에 JSON 하나(JSON Lines)다: `{"t":"ISO 시각","level":"info|warn|error","src":"hub|hooks|sessions|…","msg":"…","data":{…}}`
 - **보관 규칙**
   - 7일이 지난 파일은 시작할 때 지운다.
@@ -182,7 +184,7 @@
 | 현재 스냅샷 요약(층 수, 팀원 수, 오류 필드. 이름은 빼고 개수만) | 세션 이름, 팀원 이름, 폴더 이름 |
 
 - **보안**
-  - `POST /api/diagnostics/bundle`에는 기존 Host 검사와 Origin 검사(hook과 같은 규칙)를 적용한다.
+  - `POST /api/diagnostics/bundle`은 Phase 1 이후 처음 생기는 화면용 쓰기 API다. hook과 같은 규칙으로 Host 검사, Origin 검사, `Content-Type: application/json` 강제를 적용한다.
   - 파일은 `diagnostics/` 폴더 안에만 쓰고, 요청이 경로를 정할 수 없게 한다.
   - 파일을 쓰기 직전에 전체 내용을 `redact()`로 한 번 더 가린다.
 
@@ -194,7 +196,7 @@
   3. 오류 묶음(`src`와 `msg`가 같은 것끼리 묶고, 건수와 처음·마지막 시각)
   4. hook 수신 통계
   5. `[QA 인폼]` 초안(증상 / 재현 조건 / 근거 / 추정 원인 / 제안)
-- 고객이 보낸 진단 파일은 `beta-feedback/` 폴더(`.gitignore` 대상)에 넣는다. 진단 파일은 커밋하지 않는다.
+- 고객이 보낸 진단 파일은 `beta-feedback/` 폴더(`.gitignore` 대상)에 넣는다. 진단 파일은 고객 데이터라 **커밋하지 않는다.** 이 규칙은 qa와 reviewer 체크리스트에 넣는다.
 
 ## 10. 사용설명서
 
@@ -236,7 +238,8 @@
 
 1. **mac에서 끝에서 끝까지 확인**
    - 패키지를 만들어 임시 폴더에 푼다.
-   - `install.sh --prefix <임시> --yes`로 설치한다. 플러그인 단계는 임시 `CLAUDE_CONFIG_DIR`에 대해 실행한다.
+   - `HOME=<임시> CLAUDE_CONFIG_DIR=<임시>/.claude install.sh --prefix <임시>/.claude-office --yes --no-path`로 설치한다. 실제 홈의 설정 파일은 바뀌지 않아야 한다.
+   - PATH 등록은 `HOME=<임시>`에서 따로 한 번 실행해, 임시 `.zshrc`에 표식 줄이 들어가고 uninstall 때 빠지는지 확인한다.
    - `claude-office`가 **tsx와 npm 없이** 켜지고, `/`가 200을 돌려준다.
    - `doctor` 결과가 나온다.
    - 실험 세션(패키지의 `plugin/`을 `--plugin-dir`로 로드)에서 hook이 들어와 수신 통계가 0보다 크다.
