@@ -1,10 +1,42 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+// @ts-expect-error package-beta.mjs는 스크립트라 타입 선언이 없다(scripts/는 tsconfig.json include 밖)
+import { pkgChain, resolveDepPath } from "../../scripts/package-beta.mjs";
+
+// resolveDepPath는 package:beta 전체를 실행하지 않아도 되는 순수 함수라 작은 단위 테스트로 직접
+// 확인한다(Task 6 fix round 1 — 스코프 패키지(@scope/pkg) 대응). package-beta.mjs는 이 두 함수를
+// import할 때 빌드 파이프라인이 같이 실행되지 않도록 main()을 실행 가드 뒤에 둔다.
+describe("resolveDepPath / pkgChain (스코프 패키지, Task 6 fix round 1)", () => {
+  it("pkgChain은 스코프 패키지(@scope/pkg)를 세그먼트 하나로 다룬다", () => {
+    expect(pkgChain("node_modules/express")).toEqual(["express"]);
+    expect(pkgChain("node_modules/@scope/pkg-a")).toEqual(["@scope/pkg-a"]);
+    expect(pkgChain("node_modules/body-parser/node_modules/@scope/pkg-b")).toEqual(["body-parser", "@scope/pkg-b"]);
+  });
+
+  it("가까운 node_modules부터 위로 올라가며 스코프 의존성을 찾는다(중첩 오버라이드 우선)", () => {
+    const pkgs = {
+      "node_modules/express": {},
+      "node_modules/@scope/pkg-a": {},
+      "node_modules/express/node_modules/@scope/pkg-a": {}, // express 전용 오버라이드
+    };
+    expect(resolveDepPath(pkgs, "node_modules/express", "@scope/pkg-a")).toBe("node_modules/express/node_modules/@scope/pkg-a");
+    expect(resolveDepPath(pkgs, "node_modules/other", "@scope/pkg-a")).toBe("node_modules/@scope/pkg-a");
+  });
+
+  it("루트에서는 'node_modules/node_modules/...'를 만들지 않는다(회귀 방지)", () => {
+    const pkgs = { "node_modules/accepts": {} };
+    expect(resolveDepPath(pkgs, "node_modules/express", "accepts")).toBe("node_modules/accepts");
+  });
+
+  it("못 찾으면 undefined(호출부가 오류로 처리)", () => {
+    expect(resolveDepPath({}, "node_modules/express", "@scope/missing")).toBeUndefined();
+  });
+});
 
 // index.ts의 CLI 파서는 포트 0(OS가 알아서 고르는 포트)을 "잘못된 포트"로 거부하므로, 직접 빈 포트
 // 하나를 골라 그 번호로 --port를 준다(팀 규칙: 4317·4318 금지, 테스트는 빈 포트).
@@ -82,14 +114,15 @@ describe("npm run package:beta", () => {
     async () => {
       requireBuildOk();
       const home = mkdtempSync(join(tmpdir(), "claude-office-pkgtest-home-"));
-      const copy = mkdtempSync(join(tmpdir(), "claude-office-pkgtest-copy-"));
-      const appDir = join(copy, "app");
-      const { cpSync } = await import("node:fs");
-      cpSync(join(RELEASE_DIR, "app"), appDir, { recursive: true });
+      // release/app을 그대로 복사하지 않고 실제 배포물인 .tar.gz를 풀어서 실행한다(Task 6 fix
+      // round 1 Minor 2) — tar 담는 과정 자체의 문제(예: 권한, 심볼릭 링크)도 같이 잡아낸다.
+      const extracted = mkdtempSync(join(tmpdir(), "claude-office-pkgtest-extracted-"));
+      execFileSync("tar", ["-xzf", TAR, "-C", extracted]);
+      const appDir = join(extracted, `claude-office-${VERSION}`, "app");
 
       const port = await getFreePort();
       const nodeBinDir = dirname(process.execPath);
-      const child = spawn(process.execPath, [join(appDir, "server.mjs"), "--port", String(port), "--claude-home", home, "--log-dir", join(copy, "logs")], {
+      const child = spawn(process.execPath, [join(appDir, "server.mjs"), "--port", String(port), "--claude-home", home, "--log-dir", join(extracted, "logs")], {
         env: { PATH: nodeBinDir, HOME: home },
       });
 
@@ -116,11 +149,18 @@ describe("npm run package:beta", () => {
       } finally {
         child.kill();
         rmSync(home, { recursive: true, force: true });
-        rmSync(copy, { recursive: true, force: true });
+        rmSync(extracted, { recursive: true, force: true });
       }
     },
     30_000,
   );
+
+  it("tar.gz와 zip 모두 20MB 이하다(메일 첨부 한도, Task 6 fix round 1)", () => {
+    requireBuildOk();
+    const CAP = 20 * 1024 * 1024;
+    expect(statSync(TAR).size).toBeLessThanOrEqual(CAP);
+    if (existsSync(ZIP)) expect(statSync(ZIP).size).toBeLessThanOrEqual(CAP);
+  });
 
   it.skipIf(!existsSync(join(ROOT, "packaging/install.ps1")))("zip 안의 .ps1·.cmd는 CRLF, .sh는 LF", () => {
     requireBuildOk();

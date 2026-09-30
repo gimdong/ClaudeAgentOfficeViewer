@@ -1,4 +1,35 @@
-@import "galmuri/dist/galmuri.css";
+/*
+ * galmuri/dist/galmuri.css 전체를 그대로 @import하면 그 패키지의 모든 변형(Galmuri7/9/11/14,
+ * Condensed, Mono...)의 woff2뿐 아니라 ttf 폴백까지 통째로 딸려 와 app/web만 40MB가 된다(베타
+ * 패키지 크기 20MB 제한을 넘김). 화면이 실제로 쓰는 두 글꼴(Galmuri11 en 400/700, Galmuri14
+ * 400)만 woff2로 직접 선언한다. font-family 이름·font-weight·font-style·font-display 값은
+ * node_modules/galmuri/dist/galmuri.css 원본 그대로 옮겼다(화면 글꼴이 바뀌면 안 됨).
+ * ttf 폴백은 뺀다(woff2만 있으면 이 앱이 지원하는 모든 브라우저에서 충분하다).
+ */
+@font-face {
+  font-family: Galmuri11;
+  font-style: normal;
+  font-stretch: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Galmuri11 Regular"), url("../node_modules/galmuri/dist/Galmuri11.woff2") format("woff2");
+}
+@font-face {
+  font-family: Galmuri11;
+  font-style: normal;
+  font-stretch: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local("Galmuri11 Bold"), url("../node_modules/galmuri/dist/Galmuri11-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: Galmuri14;
+  font-style: normal;
+  font-stretch: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Galmuri14 Regular"), url("../node_modules/galmuri/dist/Galmuri14.woff2") format("woff2");
+}
 
 /* ───────── 토큰 (디자인 3장) ───────── */
 :root {
