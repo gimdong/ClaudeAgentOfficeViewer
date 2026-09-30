@@ -79,14 +79,31 @@ describe("readTeams", () => {
 describe("findTeamNameForSession / withTranscriptsFor (Ruling P19)", () => {
   it("leadSessionId와 다른 세션이어도, 그 세션의 subagent meta에 적힌 teamName으로 팀을 찾을 수 있다", async () => {
     await h.write("projects/-p/sess-fake-A/subagents/agent-aquill-1.meta.json", { name: "quill", teamName: "team-fake" });
-    expect(await findTeamNameForSession(h.path("projects"), "sess-fake-A")).toBe("team-fake");
-    expect(await findTeamNameForSession(h.path("projects"), "no-such-session")).toBeUndefined();
+    expect(await findTeamNameForSession(h.path("projects"), "sess-fake-A", new Set(["team-fake"]))).toBe("team-fake");
+    expect(await findTeamNameForSession(h.path("projects"), "no-such-session", new Set(["team-fake"]))).toBeUndefined();
   });
 
   it("meta 파일이 깨져 있으면 그 파일만 건너뛰고 나머지에서 찾는다", async () => {
     await h.write("projects/-p/s/subagents/agent-bad.meta.json", "{");
     await h.write("projects/-p/s/subagents/agent-aok.meta.json", { name: "ok", teamName: "team-ok" });
-    expect(await findTeamNameForSession(h.path("projects"), "s")).toBe("team-ok");
+    expect(await findTeamNameForSession(h.path("projects"), "s", new Set(["team-ok"]))).toBe("team-ok");
+  });
+
+  // 최종 리뷰 Important 3: teams에 실제로 존재하는 이름만 후보로 삼는다 — 파일 이름 순서상 사라진
+  // 팀(team-gone)이 먼저 읽혀도 현재 존재하는 팀(team-live)을 돌려줘야 한다.
+  it("현재 teams에 없는 teamName은 후보에서 빼고, 있는 이름만 돌려준다", async () => {
+    await h.write("projects/-p/sess-mixed/subagents/agent-agone.meta.json", { name: "x", teamName: "team-gone" });
+    await h.write("projects/-p/sess-mixed/subagents/agent-blive.meta.json", { name: "y", teamName: "team-live" });
+    const found = await findTeamNameForSession(h.path("projects"), "sess-mixed", new Set(["team-live"]));
+    expect(found).toBe("team-live");
+  });
+
+  it("유효한 후보가 여럿이면 meta 파일 mtime이 가장 최근인 쪽을 쓴다", async () => {
+    await h.write("projects/-p/sess-multi/subagents/agent-aold.meta.json", { name: "x", teamName: "team-old" });
+    await utimes(h.path("projects/-p/sess-multi/subagents/agent-aold.meta.json"), new Date(2020, 0, 1), new Date(2020, 0, 1));
+    await h.write("projects/-p/sess-multi/subagents/agent-bnew.meta.json", { name: "y", teamName: "team-new" });
+    const found = await findTeamNameForSession(h.path("projects"), "sess-multi", new Set(["team-old", "team-new"]));
+    expect(found).toBe("team-new");
   });
 
   it("withTranscriptsFor는 원래 팀 정보(이름·unread 등)는 두고 transcript만 새 세션 기준으로 다시 찾는다", async () => {

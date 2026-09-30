@@ -15,7 +15,7 @@ export function App() {
   // 같은 노드를 유지하고, 문장이 이전과 같아도 텍스트 자체가 바뀌도록 짝/홀에 따라 끝에 한 글자를 더한다.
   // 일반 공백(U+0020)은 HTML에서 접히고 접근성 트리도 정규화해 두 문장이 같은 텍스트로 보일 수 있어,
   // 접히지 않는 줄바꿈 없는 공백(U+00A0, NBSP)을 쓴다.
-  const shown = announceN % 2 === 0 ? announce : `${announce} `;
+  const shown = announceN % 2 === 0 ? announce : `${announce}\u00A0`;
   return (
     <div className="app">
       {snapshot.error && (

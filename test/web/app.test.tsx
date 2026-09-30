@@ -64,5 +64,11 @@ describe("App", () => {
     expect(afterSecond).not.toBe(afterFirst);
     expect(afterFirst!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
     expect(afterSecond!.trim()).toBe("3F reviewer이(가) 결정을 기다립니다");
+    // 끝에 붙는 한 글자가 일반 공백이 아니라 NBSP(U+00A0)인지 직접 확인한다(최종 리뷰 Important 1) —
+    // n=1(첫 결정, 홀수)은 NBSP가 붙고 n=2(두 번째 결정, 짝수)는 안 붙는다. 이걸 일반 공백으로
+    // 바꾸면 endsWith(" ")가 false가 되어 이 단언이 회귀를 잡아낸다.
+    expect(afterFirst!.endsWith(" ")).toBe(true);
+    expect(afterSecond!.endsWith(" ")).toBe(false);
+    expect(afterFirst).not.toMatch(/ $/);
   });
 });

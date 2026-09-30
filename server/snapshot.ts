@@ -96,7 +96,7 @@ export class SnapshotBuilder {
       if (direct) return direct;
       // leadSessionId로 못 찾으면, 이 세션 자신의 subagents meta에 적힌 teamName으로 역으로 찾는다
       // (Ruling P19) — 그 팀의 transcript는 이 세션 폴더 기준으로 다시 찾는다.
-      const teamName = await findTeamNameForSession(projectsDir, sessionId);
+      const teamName = await findTeamNameForSession(projectsDir, sessionId, new Set(teams.map((t) => t.name)));
       const byName = teamName ? teams.find((t) => t.name === teamName) : undefined;
       return byName ? withTranscriptsFor(byName, projectsDir, sessionId) : undefined;
     };

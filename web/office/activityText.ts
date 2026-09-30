@@ -107,7 +107,14 @@ export function activityLine(m: Member, opts: { paused?: boolean } = {}): Line {
   return line("wait", "저는 지금 다음 지시를 기다리고 있습니다");
 }
 
-/** 보조 줄(디자인 7.1): {모델} · 토큰 {n} · {경과}초째. 결정 대기와 퇴근은 따로 */
+/** 경과 시간 단위(디자인 7.1, SPEC 7.1): 60초 미만 N초째, 60분 미만 N분째, 그 이상 N시간째. 모두 내림 */
+function elapsedLabel(secs: number): string {
+  if (secs < 60) return `${secs}초째`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}분째`;
+  return `${Math.floor(secs / 3600)}시간째`;
+}
+
+/** 보조 줄(디자인 7.1): {모델} · 토큰 {n} · {경과}. 결정 대기와 퇴근은 따로 */
 export function metaLine(m: Member, now: number): string {
   if (m.state === "decision") return "결정 보고서는 다음 버전에서 열립니다";
   if (m.state === "offline") return "";
@@ -118,7 +125,7 @@ export function metaLine(m: Member, now: number): string {
   parts.push(`토큰 ${formatTokens(m.tokens.total)}`);
   if (m.activity && m.activity.kind !== "said") {
     const secs = Math.floor((now - Date.parse(m.activity.startedAt)) / 1000);
-    if (Number.isFinite(secs) && secs >= 0) parts.push(`${secs}초째`);
+    if (Number.isFinite(secs) && secs >= 0) parts.push(elapsedLabel(secs));
   }
   return parts.join(" · ");
 }

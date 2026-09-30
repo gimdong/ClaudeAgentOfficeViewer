@@ -73,21 +73,32 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
  * team config의 leadSessionId가 실제로 그 팀을 쓰는 세션과 다를 수 있다(Ruling P19 — Phase 0 T0.1/T0.1-review
  * 관찰: in-process 팀원의 세션 id가 나중에 leadSessionId와 어긋남). leadSessionId로 못 찾으면 이 세션
  * 자신의 subagents meta에 적힌 teamName으로 팀을 역으로 찾는다. meta 파일 하나가 깨져도 그 파일만 건너뛴다.
+ * validNames에 없는 teamName(이미 사라진 팀)은 후보에서 빼고, 유효한 후보가 여럿이면 meta 파일
+ * mtime이 가장 최근인 쪽을 쓴다(최종 리뷰 Important 3).
  */
-export async function findTeamNameForSession(projectsDir: string, sessionId: string): Promise<string | undefined> {
+export async function findTeamNameForSession(
+  projectsDir: string,
+  sessionId: string,
+  validNames: ReadonlySet<string> | Iterable<string>,
+): Promise<string | undefined> {
+  const valid = validNames instanceof Set ? validNames : new Set(validNames);
+  let best: { name: string; mtime: number } | undefined;
   for (const project of await readdirOrEmpty(projectsDir)) {
     const dir = join(projectsDir, project, sessionId, "subagents");
     for (const n of await readdirOrEmpty(dir)) {
       if (!n.endsWith(".meta.json")) continue;
+      const metaPath = join(dir, n);
       try {
-        const teamName = str(JSON.parse(await readFile(join(dir, n), "utf8"))?.teamName);
-        if (teamName) return teamName;
+        const teamName = str(JSON.parse(await readFile(metaPath, "utf8"))?.teamName);
+        if (!teamName || !valid.has(teamName)) continue;
+        const { mtimeMs } = await stat(metaPath);
+        if (!best || mtimeMs > best.mtime) best = { name: teamName, mtime: mtimeMs };
       } catch {
         continue;
       }
     }
   }
-  return undefined;
+  return best?.name;
 }
 
 /** team을 leadSessionId가 아닌 다른 세션에 붙일 때, 팀원 transcript를 그 세션 폴더 기준으로 다시 찾는다(Ruling P19) */

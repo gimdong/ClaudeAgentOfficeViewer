@@ -131,4 +131,15 @@ describe("metaLine (디자인 7.1)", () => {
     expect(metaLine(member({ state: "decision", decision: { kind: "permission", since: "t" } }), T)).toBe("결정 보고서는 다음 버전에서 열립니다");
     expect(metaLine(member({ state: "offline" }), T)).toBe("");
   });
+
+  it.each([
+    [59, "59초째"],
+    [60, "1분째"],
+    [125, "2분째"],
+    [3599, "59분째"],
+    [7200, "2시간째"],
+  ] as const)("경과 %i초는 '%s'로 단위를 바꿔 쓴다(SPEC 7.1, 최종 리뷰 Important 2)", (elapsedSec, want) => {
+    const m = member({ activity: { kind: "tool", tool: "Bash", target: "x", startedAt: new Date(T - elapsedSec * 1000).toISOString() } });
+    expect(metaLine(m, T)).toBe(`토큰 0 · ${want}`);
+  });
 });
