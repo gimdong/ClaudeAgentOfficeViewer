@@ -128,7 +128,7 @@ export class SnapshotBuilder {
       return list ? deriveAgent(list, now) : undefined;
     };
 
-    const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, basename(leadFile))) : undefined;
+    const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, "transcript")) : undefined;
     const leadAt = s.updatedAt ? iso(s.updatedAt) : undefined;
     const members: Member[] = [
       withEvents(
@@ -149,7 +149,7 @@ export class SnapshotBuilder {
     ];
     for (const m of team?.members ?? []) {
       const mtime = m.transcript ? this.usage.mtime(m.transcript) : undefined;
-      const lastEntry = m.transcript ? await readLastEntry(m.transcript).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, basename(m.transcript!))) : undefined;
+      const lastEntry = m.transcript ? await readLastEntry(m.transcript).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, "transcript")) : undefined;
       const at = mtime ? iso(mtime) : undefined;
       members.push(
         withEvents(

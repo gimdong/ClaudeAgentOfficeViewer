@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -118,6 +119,22 @@ describe("빈 catch 대신 warn 로그", () => {
     const text = JSON.stringify(w);
     expect(text).not.toContain("secret-team");
     expect(text).not.toContain("SECRETCONTENT");
+  });
+
+  it("팀원 이름이 든 파일 이름은 warn에 남지 않는다", async () => {
+    await h.write("teams/t/config.json", { leadSessionId: "s1", members: [{ name: "fakemate", agentType: "general-purpose" }] });
+    await h.write("teams/t/inboxes/fakemate.json", "{broken");
+    await h.write("projects/-p/s1/subagents/agent-afakemate-1.meta.json", "{broken");
+    // 기록 파일 자리에 폴더를 두면 읽기가 EISDIR로 실패한다(usage·snapshot 경로)
+    await mkdir(h.path("projects/-p/s1/subagents/agent-afakemate-2.jsonl"), { recursive: true });
+    await h.write("projects/-p/s1/subagents/agent-afakemate-2.meta.json", { name: "fakemate" });
+    const { UsageCollector } = await import("../../server/collectors/usage");
+    await readTeams(h.home);
+    await new UsageCollector(h.path("projects")).refresh();
+    const text = readdirSync(logDir).map((f) => readFileSync(join(logDir, f), "utf8")).join("");
+    expect(text).toContain('"src":"teams"');
+    expect(text).toContain('"src":"usage"');
+    expect(text).not.toContain("fakemate");
   });
 
   it("readTeams: 받은편지함이 없는(ENOENT) 것은 조용히 넘긴다", async () => {

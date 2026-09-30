@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HookStats } from "../../server/events/stats";
+import { HookStats, KNOWN_EVENTS } from "../../server/events/stats";
 import { Logger, setLogger } from "../../server/log";
 
 const T0 = Date.UTC(2026, 9, 1, 3);
@@ -31,6 +31,21 @@ describe("HookStats", () => {
       rejected: { "403": 1, "415": 0, "413": 1, "400": 0 },
       last10min: 3,
     });
+  });
+
+  it("알려진 이벤트 이름만 따로 세고 나머지는 other 한 칸", () => {
+    const s = new HookStats(() => T0);
+    s.accept("constructor");
+    s.accept("__proto__");
+    for (let i = 0; i < 100; i++) s.accept(`Random${i}`);
+    s.accept("Stop");
+    expect(s.view().byEvent).toEqual({ other: 102, Stop: 1 });
+    expect(s.view().total).toBe(103);
+  });
+
+  it("KNOWN_EVENTS는 플러그인 hooks.json의 이벤트와 같다", () => {
+    const hooks = JSON.parse(readFileSync(join(__dirname, "../../plugins/claude-office/hooks/hooks.json"), "utf8")).hooks;
+    expect([...KNOWN_EVENTS].sort()).toEqual(Object.keys(hooks).sort());
   });
 
   it("아무것도 받지 않았으면 lastAt은 null", () => {

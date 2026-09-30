@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import type { TokenSum, UsageSummary } from "../../src/shared/types";
 import { addSum, emptySum, usageToSum } from "../../src/shared/tokens";
 import { readNewLines, type TailState } from "../lib/jsonlTail";
@@ -61,7 +61,7 @@ export class UsageCollector {
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code === "ENOENT") this.dropFile(f);
         // 그 외 오류(EISDIR, EACCES 등)는 이 파일만 건너뛰고 기존 상태를 유지한 채 다음 파일을 계속 읽는다.
-        else warnCaught("usage", "cannot read transcript", e, basename(f));
+        else warnCaught("usage", "cannot read transcript", e, "transcript"); // 팀원 기록 파일 이름에 팀원 이름이 들어간다
       }
     }
   }

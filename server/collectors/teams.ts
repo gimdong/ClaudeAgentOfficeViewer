@@ -57,7 +57,7 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
       try {
         name = str(JSON.parse(await readFile(join(dir, n), "utf8"))?.name);
       } catch (e) {
-        warnCaught("teams", "cannot read subagent meta", e, n);
+        warnCaught("teams", "cannot read subagent meta", e, "meta.json"); // 파일 이름에 팀원 이름이 들어가 종류만 남긴다
         continue;
       }
       if (!name) continue;
@@ -67,7 +67,7 @@ async function findTranscripts(projectsDir: string, sessionId: string): Promise<
         const cur = best.get(name);
         if (!cur || mtimeMs > cur.mtime) best.set(name, { path, mtime: mtimeMs });
       } catch (e) {
-        warnCaught("teams", "cannot stat transcript", e, basename(path)); // ENOENT = meta만 있고 기록 파일이 없는 경우
+        warnCaught("teams", "cannot stat transcript", e, "transcript"); // ENOENT = meta만 있고 기록 파일이 없는 경우
       }
     }
   }
@@ -99,7 +99,7 @@ export async function findTeamNameForSession(
         const { mtimeMs } = await stat(metaPath);
         if (!best || mtimeMs > best.mtime) best = { name: teamName, mtime: mtimeMs };
       } catch (e) {
-        warnCaught("teams", "cannot read subagent meta", e, n);
+        warnCaught("teams", "cannot read subagent meta", e, "meta.json"); // 파일 이름에 팀원 이름이 들어가 종류만 남긴다
         continue;
       }
     }

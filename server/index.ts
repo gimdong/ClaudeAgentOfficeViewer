@@ -56,12 +56,6 @@ export function checkNode(version: string): string | null {
 }
 
 async function main(): Promise<void> {
-  // 로거를 만들기 전이라 콘솔에만 알린다
-  const nodeProblem = checkNode(process.version);
-  if (nodeProblem) {
-    console.error(nodeProblem);
-    process.exit(1);
-  }
   let opts: CliOptions;
   try {
     opts = parseCliArgs(process.argv.slice(2));
@@ -76,7 +70,7 @@ async function main(): Promise<void> {
   log.cleanup();
   const staticDir = paths.staticDir;
   log.info("server", "start", {
-    version: (pkg as { version?: string }).version ?? "dev", // version은 T6에서 package.json에 들어온다
+    version: pkg.version,
     os: platform(),
     arch: arch(),
     node: process.version,
@@ -86,6 +80,13 @@ async function main(): Promise<void> {
     webExists: existsSync(join(staticDir, "index.html")),
   });
   process.on("exit", (code) => log.info("server", "exit", { code }));
+  // 옛 Node에서 번들을 아예 못 읽는 경우는 런처(T7)가 먼저 막는다. 여기는 읽을 수는 있는 옛 Node용
+  const nodeProblem = checkNode(process.version);
+  if (nodeProblem) {
+    console.error(nodeProblem);
+    log.error("server", "node too old", { node: process.version });
+    process.exit(1);
+  }
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
   if (opts.port !== HOOK_PORT) {
@@ -124,8 +125,8 @@ async function main(): Promise<void> {
 
 // 번들(server.mjs)을 심볼릭 링크가 낀 경로(예: macOS os.tmpdir()의 /var/folders/... → /private/var/folders/...)
 // 에서 node로 직접 실행하면 import.meta.url은 실제 경로로, process.argv[1]은 호출한 그대로(링크 경로)라
-// 문자열 비교가 어긋나 main()이 전혀 안 불린다(Task 6에서 패키지 실행 테스트로 발견). 양쪽 다
-// realpath로 풀어서 비교한다(Task 6 패키지 실행 테스트에서 발견).
+// 문자열 비교가 어긋나 main()이 전혀 안 불린다(Task 6 패키지 실행 테스트에서 발견). 양쪽 다
+// realpath로 풀어서 비교한다.
 function isMainModule(): boolean {
   if (!process.argv[1]) return false;
   try {
