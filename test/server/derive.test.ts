@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DECISION_TTL, deriveAgent, targetOf, TOOL_TTL } from "../../server/events/derive";
+import { DECISION_TTL, deriveAgent, lastSentence, targetOf, TOOL_TTL } from "../../server/events/derive";
 import type { StoredEvent } from "../../server/events/store";
 
 const T0 = 1_790_000_000_000;
@@ -284,5 +284,19 @@ describe("deriveAgent: UserPromptSubmit과 재요청 (Ruling P13)", () => {
       undefined, // PostToolUse(FAKE2)
       undefined, // Stop
     ]);
+  });
+});
+
+describe("lastSentence", () => {
+  const a = (text: string) => ({ type: "assistant", message: { content: [{ type: "tool_use" }, { type: "text", text }] } });
+  it("assistant 텍스트의 마지막 문장", () => {
+    expect(lastSentence(a("첫 문장입니다. 둘째 문장입니다."))).toBe("둘째 문장입니다.");
+    expect(lastSentence(a("줄 하나\n\n줄 둘"))).toBe("줄 둘");
+  });
+  it("assistant가 아니거나 텍스트가 없으면 undefined, 200자로 자른다", () => {
+    expect(lastSentence({ type: "user", message: { content: [{ type: "text", text: "x" }] } })).toBeUndefined();
+    expect(lastSentence({ type: "assistant", message: { content: [{ type: "tool_use" }] } })).toBeUndefined();
+    expect(lastSentence(undefined)).toBeUndefined();
+    expect(Array.from(lastSentence(a("가".repeat(300)))!)).toHaveLength(200);
   });
 });

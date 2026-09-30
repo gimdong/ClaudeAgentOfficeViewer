@@ -6,7 +6,7 @@ export function makeMember(p: Partial<Member> = {}): Member {
 }
 
 export function makeSession(p: Partial<SessionView> = {}): SessionView {
-  return { id: "s1", name: "alpha", cwd: "/x", alive: true, isCurrent: false, status: "idle", context: null, members: [makeMember({ name: "team-lead", role: "lead" })], ...p };
+  return { id: "s1", name: "alpha", cwd: "/x", alive: true, isCurrent: false, status: "idle", floor: 1, floorStatus: "idle", context: null, members: [makeMember({ name: "team-lead", role: "lead" })], ...p };
 }
 
 export function makeSnapshot(p: Partial<Snapshot> = {}): Snapshot {
@@ -16,6 +16,7 @@ export function makeSnapshot(p: Partial<Snapshot> = {}): Snapshot {
     budget: {},
     limits: null,
     sessions: [],
+    decisionCount: 0,
     ...p,
   };
 }

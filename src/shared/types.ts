@@ -52,6 +52,9 @@ export interface ContextInfo {
   estimated: boolean;
 }
 
+/** "paused"는 Phase 4에서 추가한다 */
+export type FloorStatus = "working" | "idle" | "ended";
+
 export interface SessionView {
   id: string;
   name: string;
@@ -60,6 +63,12 @@ export interface SessionView {
   isCurrent: boolean;
   status: MemberState;
   stale?: boolean;
+  /** 1F = 시작 시각이 가장 오래된 세션(디자인 A1, 사용자 확정) */
+  floor: number;
+  floorStatus: FloorStatus;
+  startedAt?: string;
+  /** 종료된 층의 "종료됨 HH:MM"에 쓴다 */
+  endedAt?: string;
   context: ContextInfo | null;
   members: Member[];
 }
@@ -86,4 +95,6 @@ export interface Snapshot {
   budget: { fiveHour?: number; weekly?: number };
   limits: Limits | null;
   sessions: SessionView[];
+  /** HUD "결정 대기 N" 칩 */
+  decisionCount: number;
 }

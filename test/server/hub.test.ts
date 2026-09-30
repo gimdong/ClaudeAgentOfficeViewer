@@ -11,7 +11,8 @@ function snap(tag: string, n: number): Snapshot {
     usage: { today: emptySum(), last5h: emptySum(), last7d: emptySum(), byModel: [], hourly: [] },
     budget: {},
     limits: null,
-    sessions: [{ id: tag, name: tag, cwd: "", alive: true, isCurrent: true, status: "idle", context: null, members: [] }],
+    sessions: [{ id: tag, name: tag, cwd: "", alive: true, isCurrent: true, status: "idle", floor: 1, floorStatus: "idle", context: null, members: [] }],
+    decisionCount: 0,
   };
 }
 

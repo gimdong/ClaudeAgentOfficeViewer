@@ -150,3 +150,17 @@ export function deriveAgent(events: readonly StoredEvent[], now: number): Derive
   }
   return out;
 }
+
+/** 대화 기록 마지막 항목이 assistant 텍스트면 그 마지막 문장(최대 200자). "저는 방금 「…」라고 말했습니다"에 쓴다 */
+export function lastSentence(entry: unknown): string | undefined {
+  const e = entry as { type?: string; message?: { content?: unknown } } | undefined;
+  if (e?.type !== "assistant" || !Array.isArray(e.message?.content)) return undefined;
+  const text = e.message.content
+    .filter((c): c is { type: "text"; text: string } => (c as { type?: unknown } | null)?.type === "text" && typeof (c as { text?: unknown }).text === "string")
+    .map((c) => c.text)
+    .join(" ")
+    .trim();
+  if (!text) return undefined;
+  const last = text.split(/(?<=[.!?。])\s+|\n+/).map((p) => p.trim()).filter(Boolean).at(-1);
+  return last === undefined ? undefined : Array.from(last).slice(0, 200).join("");
+}

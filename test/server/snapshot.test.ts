@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
+import { EventStore } from "../../server/events/store";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
 
 const NOW = Date.now();
@@ -84,5 +85,71 @@ describe("SnapshotBuilder", () => {
     expect(snap.sessions[0].stale).toBe(true);
     expect(snap.sessions[0].members.map((m) => m.name)).toEqual(["team-lead"]);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("teams"));
+  });
+});
+
+describe("SnapshotBuilder v2", () => {
+  const T = NOW;
+  async function seedFloors() {
+    await h.write("sessions/1.json", { pid: 1, sessionId: "old", name: "old", cwd: "/o", status: "idle", startedAt: T - 3_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/2.json", { pid: 2, sessionId: "mid", name: "mid", cwd: "/m", status: "busy", startedAt: T - 2_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/3.json", { pid: 3, sessionId: "new", name: "new", cwd: "/n", status: "idle", startedAt: T - 1_000_000, updatedAt: T - 2 * 3_600_000 });
+  }
+  const alive = (pid: number) => pid !== 3;
+
+  it("시작 시각이 가장 오래된 세션이 1F, floorStatus와 endedAt", async () => {
+    await seedFloors();
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: alive }).build(T);
+    const by = Object.fromEntries(snap.sessions.map((s) => [s.id, s]));
+    expect([by.old.floor, by.mid.floor, by.new.floor]).toEqual([1, 2, 3]);
+    expect([by.old.floorStatus, by.mid.floorStatus, by.new.floorStatus]).toEqual(["idle", "working", "ended"]);
+    expect(by.new.endedAt).toBe(new Date(T - 2 * 3_600_000).toISOString());
+    expect(by.old.endedAt).toBeUndefined();
+    expect(by.old.startedAt).toBe(new Date(T - 3_000_000).toISOString());
+    expect(snap.decisionCount).toBe(0);
+  });
+
+  it("이벤트의 진행 중 도구가 파일 판정보다 우선하고, 결정은 decision 상태와 decisionCount로 나온다", async () => {
+    await seed();
+    const events = new EventStore();
+    events.add({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Read", tool_input: { file_path: "/x/a.md" } }, T - 500);
+    events.add({ hook_event_name: "PermissionRequest", session_id: "s1", agent_id: "areviewer-1", agent_type: "reviewer", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/fake" } }, T - 400);
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events }).build(T);
+    const s1 = snap.sessions.find((s) => s.id === "s1")!;
+    const lead = s1.members.find((m) => m.name === "team-lead")!;
+    const reviewer = s1.members.find((m) => m.name === "reviewer")!;
+    expect(lead.state).toBe("working");
+    expect(lead.activity).toEqual({ kind: "tool", tool: "Read", target: "/x/a.md", startedAt: new Date(T - 500).toISOString() });
+    expect(reviewer.state).toBe("decision");
+    expect(reviewer.decision).toEqual({ kind: "permission", since: new Date(T - 400).toISOString(), summary: "rm -rf /tmp/fake" });
+    expect(snap.decisionCount).toBe(1);
+    expect(s1.floorStatus).toBe("working");
+  });
+
+  it("세션이 죽었으면 이벤트가 있어도 offline이고 결정을 세지 않는다", async () => {
+    await seed();
+    const events = new EventStore();
+    events.add({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" } }, T - 100);
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => false, events }).build(T);
+    const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.state).toBe("offline");
+    expect(lead.decision).toBeUndefined();
+    expect(snap.decisionCount).toBe(0);
+  });
+
+  it("세션 파일이 없는 이벤트는 층을 만들지 않는다", async () => {
+    await seed();
+    const events = new EventStore();
+    events.add({ hook_event_name: "PreToolUse", session_id: "ghost", tool_name: "Bash", tool_input: { command: "ls" } }, T);
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events }).build(T);
+    expect(snap.sessions.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("이벤트가 없으면 리드의 마지막 문장을 said 활동으로 쓴다", async () => {
+    await seed();
+    await h.append("projects/-p/s1.jsonl", [assistant({ requestId: "r9", ts: NOW - 100, content: [{ type: "text", text: "빌드를 확인했습니다. 다음은 리뷰입니다." }] })]);
+    const snap = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true }).build(T);
+    const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.activity).toMatchObject({ kind: "said", target: "다음은 리뷰입니다." });
   });
 });

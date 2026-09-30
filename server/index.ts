@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   }
   const config = await loadConfig(opts.configPath);
   const events = new EventStore();
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config }), { watchDir: opts.claudeHome });
+  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events }), { watchDir: opts.claudeHome });
   await hub.start();
 
   const staticDir = fileURLToPath(new URL("../dist/web", import.meta.url));

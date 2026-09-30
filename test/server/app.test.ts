@@ -12,6 +12,7 @@ const base: Snapshot = {
   budget: {},
   limits: null,
   sessions: [],
+  decisionCount: 0,
 };
 
 let current = base;
