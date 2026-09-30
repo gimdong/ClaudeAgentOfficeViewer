@@ -224,6 +224,10 @@ describe("redact 확장 규칙 (Ruling P10, reviewer Important B)", () => {
       summarize("Bash", { command: "npm config set //registry.npmjs.org/:_authToken FAKETOKEN123" }).command,
     ).toBe("npm config set //registry.npmjs.org/:_authToken ***");
     expect(summarize("Bash", { command: "_authToken=FAKETOKEN123" }).command).toBe("_authToken=***");
+    // .npmrc 형식(레지스트리 경로 + 콜론 + = 구분자)
+    expect(summarize("Bash", { command: "//registry.npmjs.org/:_authToken=FAKETOKEN123" }).command).toBe(
+      "//registry.npmjs.org/:_authToken=***",
+    );
   });
 });
 
