@@ -29,6 +29,38 @@ Claude 데이터 폴더는 `--claude-home` > `CLAUDE_HOME` 환경변수 > `CLAUD
 기존에 직접 만든 `command` 타입 statusline이 있었다면 그 모양이 그대로 유지됩니다. statusline을 따로 설정한 적이 없어 Claude Code 기본 상태줄을 쓰고 있었다면, 설치 후에는 상태줄이 빈 줄로 보일 수 있습니다(한도 수집 자체에는 영향 없음) — 원래 statusline 설정이 없어 다시 실행할 명령이 없기 때문입니다.
 되돌리기: `npm run remove:statusline`. Claude Code가 한도 정보를 넘겨주지 않는 버전에서는 PLAN 바가 `-- 데이터 없음`으로 표시됩니다.
 
+## 실시간 활동 표시 (플러그인, 선택)
+
+`claude-office` 플러그인을 설치하면 Claude Code가 hook 이벤트를 이 서버(`http://127.0.0.1:4317/hooks/event`)로 보냅니다. 대시보드는 에이전트가 지금 하는 일을 말풍선으로 보여주고, 권한 요청·질문·계획 승인을 기다리는 캐릭터는 손을 들고 머리 위에 노란 ?가 뜹니다. **플러그인은 보기만 합니다.** 서버는 hook에 어떤 결정도 돌려주지 않고, 서버가 꺼져 있으면 연결 실패로 끝나 세션은 그대로 진행합니다.
+
+요약 필드와 마지막 문장의 비밀값은 흔한 형식(Authorization/Bearer, 이름=토큰, ghp_·sk-·AKIA 등 접두어, URL 자격 증명, 긴 무작위 문자열)만 가리며 모든 형식을 막지는 못합니다.
+
+설치(사용자가 직접 결정):
+1. Claude Code에서 `/plugin marketplace add gimdong/ClaudeAgentOfficeViewer`
+2. `/plugin install claude-office@claude-office`
+
+서버에는 요약된 값(명령·설명·파일 경로·검색어·도메인·받는 사람·할 일·질문, 각 200자)만 메모리에 남고, 파일로 쓰지 않습니다.
+
+조직이 `allowedHttpHookUrls`를 설정했다면 `http://127.0.0.1:4317/*`을 허용 목록에 넣어야 합니다. `allowManagedHooksOnly`가 켜져 있으면 관리자가 플러그인을 강제 활성화해야 합니다.
+
+### 개발용 플러그인
+
+사용자의 대시보드(4317)와 겹치지 않게 개발 서버는 다른 포트에서 띄우고, 포트만 바꾼 플러그인 복사본을 실험 세션에 로드합니다. 사용자 설정(`enabledPlugins`)은 바꾸지 않습니다.
+
+```bash
+npm run build && npm start -- --port 4318
+node scripts/make-dev-plugin.mjs --port 4318 --out /tmp/claude-office-dev-plugin
+claude --plugin-dir /tmp/claude-office-dev-plugin
+```
+
+### PLAN 바와 요금제
+
+PLAN 바는 statusline이 넘겨 주는 `rate_limits`의 5시간·주간·지출 한도(`spend_limit`) 가운데 가장 많이 쓴 창을 보여줍니다. Pro/Max 구독이나 지출 한도가 있는 gateway 뒤에서만 값이 오고, 그 밖에는 `-- 데이터 없음`입니다.
+
+## 글꼴
+
+화면의 도트 한글 글꼴은 [Galmuri](https://github.com/quiple/galmuri)(SIL Open Font License 1.1)입니다. 저작권 표시는 `THIRD_PARTY_NOTICES.md`에 있습니다.
+
 ## 알아두면 좋은 점
 
 - **1M 컨텍스트 창을 쓰는 경우:** `claude-office.config.json`의 `contextWindows`에 실제 쓰는 모델의 창 크기를 설정하는 것을 권장합니다. 설정이 없으면 사용량이 200k를 넘을 때만 1M으로 추정하므로, 150k~200k 구간에서는 아직 200k 창으로 간주되어 경고색이 보일 수 있습니다. `contextWindows`의 키는 모델 ID의 접두어이며, `"[1m]"` 같은 접미사 없이 적습니다(예: `"claude-opus-5-5"`).
