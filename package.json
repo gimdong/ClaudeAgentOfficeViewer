@@ -1,6 +1,7 @@
 {
   "name": "claude-agent-office-viewer",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"

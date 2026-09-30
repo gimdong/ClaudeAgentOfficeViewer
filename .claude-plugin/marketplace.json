@@ -1,0 +1,12 @@
+{
+  "name": "claude-office",
+  "owner": { "name": "gimdong" },
+  "plugins": [
+    {
+      "name": "claude-office",
+      "source": "./plugins/claude-office",
+      "description": "Claude Agent Office Viewer에 hook 이벤트를 보내는 플러그인",
+      "version": "0.1.0"
+    }
+  ]
+}

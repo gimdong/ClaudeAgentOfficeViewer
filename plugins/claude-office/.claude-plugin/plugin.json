@@ -1,0 +1,7 @@
+{
+  "name": "claude-office",
+  "version": "0.1.0",
+  "description": "Claude Code의 hook 이벤트를 로컬 Claude Agent Office Viewer(127.0.0.1:4317)로 보냅니다. 결정은 돌려주지 않습니다.",
+  "author": { "name": "gimdong" },
+  "license": "MIT"
+}
