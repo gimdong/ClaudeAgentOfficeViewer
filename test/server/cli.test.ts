@@ -60,7 +60,8 @@ function run(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<{ co
   let stderr = "";
   child.stdout.on("data", (d) => (stdout += d));
   child.stderr.on("data", (d) => (stderr += d));
-  return new Promise((r) => child.on("exit", (code) => r({ code, stdout, stderr })));
+  // "exit"은 자식이 끝난 순간이고 파이프에 남은 출력은 그 뒤에 올 수 있다. 출력을 다 읽은 뒤인 "close"를 기다린다
+  return new Promise((r) => child.on("close", (code) => r({ code, stdout, stderr })));
 }
 
 describe("CLI", () => {
@@ -95,7 +96,7 @@ describe("CLI", () => {
     const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", String(await freePort()), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     child.stdout.on("data", (d) => (stdout += d));
-    const code = await new Promise<number | null>((r) => child.on("exit", r));
+    const code = await new Promise<number | null>((r) => child.on("close", r)); // 출력을 다 읽은 뒤("exit"은 더 이를 수 있다)
     const items = JSON.parse(stdout) as Array<{ id: string; status: string }>;
     const logFiles = readdirSync(logDir);
     rmSync(home, { recursive: true, force: true });
@@ -112,12 +113,14 @@ describe("CLI", () => {
     const port = (blocker.address() as { port: number }).port;
     // 저장소 .logs/에 시험 산출물을 남기지 않도록 임시 로그 폴더를 준다
     const logDir = mkdtempSync(join(tmpdir(), "office-cli-log-"));
-    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", tmpdir(), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
+    // OS 임시 폴더 전체를 데이터 폴더로 주면 서버가 켜지기 전에 그 전체를 감시·수집해 부하 때 느려진다. 빈 폴더를 준다
+    const home = mkdtempSync(join(tmpdir(), "office-cli-home-"));
+    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", home, "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     let stdout = "";
     child.stderr.on("data", (d) => (stderr += d));
     child.stdout.on("data", (d) => (stdout += d));
-    const code = await new Promise<number | null>((r) => child.on("exit", r));
+    const code = await new Promise<number | null>((r) => child.on("close", r)); // 출력을 다 읽은 뒤("exit"은 더 이를 수 있다)
     blocker.close();
     expect(code).toBe(1);
     expect(stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
@@ -125,7 +128,8 @@ describe("CLI", () => {
     expect(stdout).not.toContain("Claude Agent Office: http");
     const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
     rmSync(logDir, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
     expect(log).toContain('"msg":"port in use"');
     expect(log).toContain('"msg":"exit"');
-  });
+  }, 20_000); // 다른 CLI 테스트와 같게. 전체 테스트 부하에서는 tsx 시작만 몇 초 걸릴 수 있다
 });
