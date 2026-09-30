@@ -110,6 +110,16 @@ describe("statusline-setup.mjs", () => {
     expect(JSON.parse(await readFile(h.path(`claude-office/${renamed[0]}`), "utf8")).statusLine.command).toBe("echo A");
   });
 
+  // final review I-3: settings.json/백업 쓰기를 원자적으로(tmp + rename) 만든다.
+  it("install/remove 후 tmp 파일이 남지 않는다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo hi" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    execFileSync("node", [SETUP, "remove"], { env });
+    const rootFiles = await readdir(h.home);
+    const officeFiles = await readdir(h.path("claude-office"));
+    for (const f of [...rootFiles, ...officeFiles]) expect(f).not.toMatch(/\.tmp-/);
+  });
+
   it("백업 없이 remove하면 종료 코드 1", async () => {
     await h.write("settings.json", {});
     expect(() => execFileSync("node", [SETUP, "remove"], { env, stdio: "pipe" })).toThrow();
@@ -128,6 +138,22 @@ describe("statusline-setup.mjs", () => {
     await h.write("settings.json", "{not json"); // 그 뒤에 settings.json이 깨졌다고 가정
     expect(() => execFileSync("node", [SETUP, "remove"], { env, stdio: "pipe" })).toThrow();
     expect(await readFile(h.path("settings.json"), "utf8")).toBe("{not json");
+  });
+
+  // final review I-4: 기존 command가 없으면(기본 상태줄 사용자) 설치 후 상태줄이 비어 보일 수
+  // 있다는 사실을 install 시점에 안내한다.
+  it("기존 command가 없으면 설치 시 안내를 stderr에 출력한다", async () => {
+    await h.write("settings.json", { theme: "dark" });
+    const result = spawnSync("node", [SETUP, "install"], { env });
+    expect(result.status).toBe(0);
+    expect(result.stderr.toString()).toContain("비어 보일 수");
+  });
+
+  it("기존 command가 있으면 안내를 출력하지 않는다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo hi" } });
+    const result = spawnSync("node", [SETUP, "install"], { env });
+    expect(result.status).toBe(0);
+    expect(result.stderr.toString()).not.toContain("비어 보일 수");
   });
 
   // director 검토 관점(미리 알림): 경로에 공백이 있을 때 인용.

@@ -24,7 +24,15 @@ async function readSettings() {
   }
 }
 
-const writeJson = (path, data) => writeFile(path, JSON.stringify(data, null, 2) + "\n");
+// ~/.claude/settings.json은 Claude Code가 수시로 읽고 쓰는 핵심 설정 파일이다. writeFile은
+// truncate 후 쓰기라서 중간에 끊기면(Ctrl-C, 디스크 가득 참) 잘린 JSON이 남아 Claude Code
+// 자체가 설정을 잃을 수 있다. 같은 폴더 안의 임시 파일에 먼저 쓰고 rename으로 바꿔치기하면
+// (POSIX에서 원자적) 그런 중간 상태가 절대 보이지 않는다.
+async function writeJson(path, data) {
+  const tmp = `${path}.tmp-${process.pid}`;
+  await writeFile(tmp, JSON.stringify(data, null, 2) + "\n");
+  await rename(tmp, path);
+}
 
 async function install() {
   const settings = await readSettings();
@@ -35,6 +43,9 @@ async function install() {
   await mkdir(officeDir, { recursive: true });
   if (!existsSync(backupPath)) await writeJson(backupPath, settings);
   const original = settings.statusLine?.type === "command" ? settings.statusLine.command : "";
+  if (original === "") {
+    console.warn("기존 statusline 명령이 없어 설치 후 상태줄이 비어 보일 수 있습니다. 되돌리기: npm run remove:statusline");
+  }
   await writeFile(origPath, `#!/bin/sh\n${original}\n`);
   await chmod(origPath, 0o755);
   settings.statusLine = { ...(settings.statusLine ?? {}), type: "command", command: `sh '${tapPath}'` };
