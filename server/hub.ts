@@ -37,7 +37,7 @@ export class SnapshotHub {
       });
       this.watcher.on("error", (e) => getLogger().warn("hub", "watch error, polling continues", { error: e.message }));
     } catch (e) {
-      getLogger().warn("hub", "watch unavailable, polling only", { error: (e as Error).message });
+      getLogger().warn("hub", "watch unavailable, polling only", { error: String((e as Error)?.message ?? e) });
     }
   }
 
@@ -95,7 +95,7 @@ export class SnapshotHub {
           }
         } while (this.again);
       } catch (e) {
-        getLogger().error("hub", "snapshot build failed", { error: (e as Error).message });
+        getLogger().error("hub", "snapshot build failed", { error: String((e as Error)?.message ?? e) });
       } finally {
         this.running = null;
       }

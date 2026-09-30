@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Logger, getLogger, type LogLine } from "../../server/log";
+import { Logger, getLogger, scrub, type LogLine } from "../../server/log";
 
 const T0 = Date.UTC(2026, 9, 1, 3);
 const MIN = 60_000;
@@ -92,9 +92,40 @@ describe("Logger", () => {
     expect(log.errorsSince(T0 + 1)).toBe(1);
   });
 
+  it("순환 객체와 BigInt가 있어도 던지지 않는다", () => {
+    const log = new Logger({ dir, now: () => T0 });
+    const c: Record<string, unknown> = {};
+    c.self = c;
+    expect(() => log.info("t", "x", { c })).not.toThrow();
+    expect(() => log.info("t", "x", { n: 1n })).not.toThrow();
+  });
+
+  it("errors 기록은 24시간보다 오래된 것을 버린다", () => {
+    let now = T0;
+    const log = new Logger({ dir, now: () => now });
+    log.error("a", "old");
+    now = T0 + 86_400_000 + 1;
+    log.error("a", "new");
+    expect(log.errorsSince(0)).toBe(1);
+  });
+
   it("getLogger 기본값은 아무 것도 쓰지 않는다", () => {
     const log = getLogger();
     expect(log.dir).toBe("");
     expect(() => log.error("x", "y")).not.toThrow();
+  });
+});
+
+describe("scrub", () => {
+  it("인코딩된 홈 경로(-Users-name-…)도 가린다", () => {
+    const out = scrub("open '/Users/fakeuser/.claude/projects/-Users-fakeuser-Code-secret/a.jsonl'", "/Users/fakeuser") as string;
+    expect(out).not.toContain("fakeuser");
+    expect(out).toBe("open '~/.claude/projects/~-Code-secret/a.jsonl'");
+  });
+
+  it("객체 키도 가린다", () => {
+    const out = JSON.stringify(scrub({ "/Users/fakeuser/x": { "api_key=FAKEKEY123": 1 } }, "/Users/fakeuser"));
+    expect(out).not.toContain("fakeuser");
+    expect(out).not.toContain("FAKEKEY123");
   });
 });

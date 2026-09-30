@@ -76,7 +76,7 @@ export function createApp(
         opts.onHookEvent?.(body as Record<string, unknown>);
       } catch (e) {
         // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
-        getLogger().error("hooks", "event handling failed", { error: (e as Error).message });
+        getLogger().error("hooks", "event handling failed", { error: String((e as Error)?.message ?? e) });
       }
       res.status(200).end();
     },

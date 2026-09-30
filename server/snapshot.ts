@@ -73,7 +73,7 @@ export class SnapshotBuilder {
       try {
         return await fn();
       } catch (e) {
-        getLogger().warn("snapshot", `${label} collect failed, using previous value`, { error: (e as Error).message });
+        getLogger().warn("snapshot", `${label} collect failed, using previous value`, { error: String((e as Error)?.message ?? e) });
         stale = true;
         return fallback;
       }
