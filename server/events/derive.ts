@@ -114,12 +114,19 @@ export function deriveAgent(events: readonly StoredEvent[], now: number): Derive
       if (i >= 0) pending.splice(i, 1); // 짝이 없는 Post는 무시한다
       if (!bound(decision)) decision = undefined; // 묶인 호출이 닫혔거나, 애초에 묶이지 않았으면 내린다
     } else if (e.event === "PermissionRequest") {
-      // 질문·계획은 PreToolUse에서 이미 올라가 있다. 같은 도구의 권한 요청이 종류를 덮어쓰지 않게 한다(Ruling P6)
-      if (!(decision && decision.tool === e.tool)) raise(e);
+      // 질문·계획은 PreToolUse에서 이미 올라가 있다. 묶여 있는 question/plan만 건너뛴다(Ruling P13 — P6을 좁힘).
+      // permission은 매번 다시 올려 pickPending이 이번 요청에 맞는 호출(보통 방금 연 두 번째 시도)에 새로 묶게 한다.
+      const skip = decision !== undefined && bound(decision) && (decision.kind === "question" || decision.kind === "plan");
+      if (!skip) raise(e);
     } else if (TURN_END.has(e.event)) {
       // 합쳐진 서브에이전트가 끝나면 그 서브에이전트가 연 것만 닫는다(Ruling P3)
       pending = e.sub ? pending.filter((p) => !p.sub) : [];
       if (!e.sub || decision?.sub) decision = undefined;
+    } else if (e.event === "UserPromptSubmit" && !e.sub) {
+      // 리드의 새 턴 시작(Ruling P13) — 터미널에서 권한을 거부하면 Post/Failure/Denied/Stop이 전혀 오지 않아
+      // 거부된 Pre가 영원히 pending에 남을 수 있다. 사용자가 다음 메시지를 보내면 이전 턴은 끝난 것으로 본다.
+      pending = [];
+      decision = undefined;
     }
   }
 

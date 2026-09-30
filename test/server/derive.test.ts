@@ -216,3 +216,73 @@ describe("deriveAgent: 결정을 특정 Pre에 묶기 (Ruling P12)", () => {
     expect(deriveAgent(events, T0 + 4).decision).toEqual({ kind: "permission", since: iso(T0 + 2), summary: "cmd2" });
   });
 });
+
+describe("deriveAgent: UserPromptSubmit과 재요청 (Ruling P13)", () => {
+  it("UserPromptSubmit은 이전 결정과 진행 중 도구를 지운다", () => {
+    const events = [
+      bash(T0, { toolUseId: "a" }),
+      ev("PermissionRequest", T0 + 1, { tool: "Bash", summary: { command: "npm test" } }),
+      ev("UserPromptSubmit", T0 + 2),
+    ];
+    const d = deriveAgent(events, T0 + 3);
+    expect(d.decision).toBeUndefined();
+    expect(d.toolRunning).toBe(false);
+  });
+
+  it("서브에이전트의 UserPromptSubmit은 무시한다(턴 시작이 아니다)", () => {
+    const events = [
+      bash(T0, { toolUseId: "a" }),
+      ev("PermissionRequest", T0 + 1, { tool: "Bash", summary: { command: "npm test" } }),
+      ev("UserPromptSubmit", T0 + 2, { sub: true }),
+    ];
+    const d = deriveAgent(events, T0 + 3);
+    expect(d.toolRunning).toBe(true);
+    expect(d.decision?.kind).toBe("permission");
+  });
+
+  it("같은 도구의 두 번째 권한 요청은 새 호출에 묶이고 그 Post로 내려간다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Write", toolUseId: "a", summary: { filePath: "/x/a.md" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Write", summary: { filePath: "/x/a.md" } }),
+      ev("PreToolUse", T0 + 2, { tool: "Write", toolUseId: "b", summary: { filePath: "/x/b.md" } }),
+      ev("PermissionRequest", T0 + 3, { tool: "Write", summary: { filePath: "/x/b.md" } }),
+      ev("PostToolUse", T0 + 4, { tool: "Write", toolUseId: "b" }),
+    ];
+    expect(deriveAgent(events, T0 + 5).decision).toBeUndefined();
+  });
+
+  it("허용 흐름(Pre→PermissionRequest→Notification→Post)에서 Post 직후 내려간다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Write", toolUseId: "toolu_ok", summary: { filePath: "/x/ok.md" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Write", summary: { filePath: "/x/ok.md" } }),
+      ev("Notification", T0 + 2),
+      ev("PostToolUse", T0 + 3, { tool: "Write", toolUseId: "toolu_ok" }),
+    ];
+    expect(deriveAgent(events, T0 + 4).decision).toBeUndefined();
+  });
+
+  it("실측 순서 회귀: 거부(아무 이벤트 없음) 뒤 UserPromptSubmit으로 리셋되고, 재시도가 새로 묶인다", () => {
+    const events = [
+      ev("PreToolUse", T0, { tool: "Write", toolUseId: "toolu_FAKE1", summary: { filePath: "/x/fake.md" } }),
+      ev("PermissionRequest", T0 + 1, { tool: "Write", summary: { filePath: "/x/fake.md" } }),
+      // 거부: 아무 이벤트도 오지 않는다(reviewer 실측)
+      ev("UserPromptSubmit", T0 + 2),
+      ev("PreToolUse", T0 + 3, { tool: "Write", toolUseId: "toolu_FAKE2", summary: { filePath: "/x/fake.md" } }),
+      ev("PermissionRequest", T0 + 4, { tool: "Write", summary: { filePath: "/x/fake.md" } }),
+      ev("Notification", T0 + 5),
+      ev("PostToolUse", T0 + 6, { tool: "Write", toolUseId: "toolu_FAKE2" }),
+      ev("Stop", T0 + 7),
+    ];
+    const kinds = events.map((_, i) => deriveAgent(events.slice(0, i + 1), T0 + 8).decision?.kind);
+    expect(kinds).toEqual([
+      undefined, // Pre(FAKE1)
+      "permission", // PermissionRequest(FAKE1)
+      undefined, // UserPromptSubmit
+      undefined, // Pre(FAKE2)
+      "permission", // PermissionRequest(FAKE2) — FAKE2에 새로 묶임
+      "permission", // Notification
+      undefined, // PostToolUse(FAKE2)
+      undefined, // Stop
+    ]);
+  });
+});
