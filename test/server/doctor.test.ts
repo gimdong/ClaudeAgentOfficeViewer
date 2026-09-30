@@ -187,8 +187,12 @@ describe("runDoctor", () => {
     expect(rej.detail).toContain("3");
   });
 
-  it("statusline: limits.json 없음·최근·오래됨", async () => {
-    expect((await item("statusline")).status).toBe("warn");
+  it("statusline: limits.json 없음(베타 미지원, ok)·최근·오래됨", async () => {
+    expect(await item("statusline")).toMatchObject({
+      status: "ok",
+      detail: "없음",
+      fix: "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다",
+    });
     await h.write(".claude/claude-office/limits.json", {});
     const t = new Date(NOW - 10 * 60_000);
     await utimes(h.path(".claude/claude-office/limits.json"), t, t);

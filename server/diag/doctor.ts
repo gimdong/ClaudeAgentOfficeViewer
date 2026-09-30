@@ -180,7 +180,8 @@ const checks: Check[] = [
     try {
       mtime = (await stat(join(d.claudeHome, "claude-office", "limits.json"))).mtimeMs;
     } catch {
-      return item("statusline", "warn", title, "없음", "PLAN 바는 선택 기능입니다. 쓰려면 사용설명서의 요금제 한도 설정을 따라 주세요.");
+      // Ruling B12: PLAN 바는 베타에서 지원하지 않는다. 없는 것이 보통이라 경고하지 않는다(정보)
+      return item("statusline", "ok", title, "없음", "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다");
     }
     return d.now() - mtime <= 3_600_000
       ? item("statusline", "ok", title, "최근 1시간 안에 갱신됨")
