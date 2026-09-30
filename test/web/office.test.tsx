@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Desk } from "../../web/office/Desk";
 import { OfficeGrid } from "../../web/office/OfficeGrid";
 import { OfficeTile } from "../../web/office/OfficeTile";
@@ -39,11 +39,77 @@ describe("Desk", () => {
     expect(within(desk).getByTestId("empty-chair")).toBeTruthy();
   });
 
-  it("popover에 모델·토큰을 보여준다", () => {
-    render(<Desk member={makeMember({ model: "sonnet", tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 12345 } })} />);
-    const pop = screen.getByRole("tooltip");
-    expect(pop.textContent).toContain("모델: sonnet");
-    expect(pop.textContent).toContain("토큰: 12.3k");
+  it("팝오버를 그리지 않는다(디자인 A4) — 모델·토큰은 말풍선 보조 줄로 옮겼다", () => {
+    render(<Desk member={makeMember({ model: "sonnet" })} />);
+    const desk = screen.getByTestId("desk-developer");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(desk.querySelector(".popover")).toBeNull();
+    expect(desk.querySelector(".nametag")!.textContent).toBe("developer");
+  });
+
+  it("평소 책상은 포커스 가능한 img이고 aria-label이 '{이름}, {상태}'", () => {
+    render(<Desk member={makeMember({ state: "working" })} />);
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.tagName).toBe("DIV");
+    expect(desk.getAttribute("role")).toBe("img");
+    expect(desk.getAttribute("tabindex")).toBe("0");
+    expect(desk.getAttribute("aria-label")).toBe("developer, 작업 중");
+  });
+
+  it("결정 대기(Phase 1): 누를 수 있다는 신호 없이 손든 캐릭터와 ?, 켜진 모니터, 말머리 없음", () => {
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t" } })} />);
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.tagName).toBe("DIV");
+    expect(desk.getAttribute("role")).toBe("img");
+    expect(desk.getAttribute("tabindex")).toBe("0");
+    expect(desk.className).toContain("desk--decision");
+    expect(desk.className).toContain("state-decision");
+    expect(desk.getAttribute("aria-label")).toBe("developer, 결정 필요");
+    expect(desk.getAttribute("aria-haspopup")).toBeNull();
+    expect(desk.getAttribute("title")).toBeNull();
+    expect(desk.querySelector(".hand .hop")).not.toBeNull();
+    expect(desk.querySelector(".qmark")).not.toBeNull();
+    expect(desk.querySelector(".q-ring")).toBeNull();
+    expect(within(desk).queryByTestId("bubble")).toBeNull();
+    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOn);
+  });
+
+  it("손든 캐릭터는 BODY_UP이다: 8번째 열 0행(손)이 피부색", () => {
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "question", since: "t" } })} />);
+    const hop = screen.getByTestId("desk-developer").querySelector(".hop")!;
+    const hand = [...hop.querySelectorAll("rect")].find((r) => r.getAttribute("x") === "7" && r.getAttribute("y") === "0");
+    expect(hand?.getAttribute("fill")).toBe(NEON.skin);
+  });
+
+  it("CSS로 움직이는 .hop, .qmark 그룹에는 transform 속성이 없다", () => {
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "plan", since: "t" } })} />);
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.querySelector(".hop")!.getAttribute("transform")).toBeNull();
+    expect(desk.querySelector(".qmark")!.getAttribute("transform")).toBeNull();
+  });
+
+  it("휴업이면 말머리를 숨기고 모니터를 끄고 idle 모습", () => {
+    render(<Desk member={makeMember({ state: "working" })} paused />);
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.className).toContain("state-idle");
+    expect(within(desk).queryByTestId("bubble")).toBeNull();
+    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOff);
+    expect(desk.querySelector(".frame-b")).toBeNull();
+  });
+
+  it("마우스·포커스·터치를 말풍선 핸들러에 key와 함께 넘긴다", () => {
+    const bubble = { enter: vi.fn(), leave: vi.fn(), focus: vi.fn(), blur: vi.fn() };
+    render(<Desk member={makeMember()} bubbleKey="s1:developer" bubble={bubble} />);
+    const desk = screen.getByTestId("desk-developer");
+    fireEvent.mouseEnter(desk);
+    fireEvent.mouseLeave(desk);
+    fireEvent.focus(desk);
+    fireEvent.blur(desk);
+    fireEvent.pointerDown(desk, { pointerType: "touch" });
+    expect(bubble.enter).toHaveBeenCalledWith(desk, "s1:developer");
+    expect(bubble.leave).toHaveBeenCalledTimes(1);
+    expect(bubble.focus).toHaveBeenCalledTimes(2);
+    expect(bubble.blur).toHaveBeenCalledTimes(1);
   });
 });
 
