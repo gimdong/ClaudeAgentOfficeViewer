@@ -22,6 +22,7 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByRole("alert").textContent).toContain("/x");
     expect(screen.getByText("● LIVE")).toBeTruthy();
-    expect(screen.getAllByTestId("office")).toHaveLength(1);
+    expect(screen.getAllByTestId("floor")).toHaveLength(1);
+    expect(screen.getByTestId("vacant-floor")).toBeTruthy();
   });
 });

@@ -2,8 +2,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Desk } from "../../web/office/Desk";
-import { OfficeGrid } from "../../web/office/OfficeGrid";
-import { OfficeTile } from "../../web/office/OfficeTile";
 import { NEON } from "../../web/pixel/palette";
 import { makeMember, makeSession } from "./fixtures";
 
@@ -110,40 +108,5 @@ describe("Desk", () => {
     expect(bubble.leave).toHaveBeenCalledTimes(1);
     expect(bubble.focus).toHaveBeenCalledTimes(2);
     expect(bubble.blur).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("OfficeTile", () => {
-  it("현재 세션 별표, CTX 잔여 바, 추정 표시", () => {
-    render(<OfficeTile session={makeSession({ isCurrent: true, context: { used: 60000, window: 200000, pct: 30, estimated: true } })} />);
-    const tile = screen.getByTestId("office");
-    expect(tile.textContent).toContain("★");
-    expect(within(tile).getByRole("meter").getAttribute("aria-valuenow")).toBe("70");
-    expect(tile.textContent).toContain("추정");
-  });
-
-  it("종료된 세션은 off 클래스, stale이면 경고, context가 없으면 --", () => {
-    render(<OfficeTile session={makeSession({ alive: false, stale: true, context: null })} />);
-    const tile = screen.getByTestId("office");
-    expect(tile.className).toContain("off");
-    expect(tile.textContent).toContain("갱신 지연");
-    expect(tile.textContent).toContain("CTX --");
-  });
-
-  it("팀원 수만큼 책상을 그린다", () => {
-    render(<OfficeTile session={makeSession({ members: [makeMember({ name: "team-lead" }), makeMember({ name: "developer" }), makeMember({ name: "reviewer" })] })} />);
-    expect(screen.getAllByTestId(/^desk-/)).toHaveLength(3);
-  });
-});
-
-describe("OfficeGrid", () => {
-  it("세션이 없으면 안내 문구", () => {
-    render(<OfficeGrid sessions={[]} />);
-    expect(screen.getByText("실행 중인 Claude Code 세션이 없습니다")).toBeTruthy();
-  });
-
-  it("세션 순서대로 타일을 그린다", () => {
-    render(<OfficeGrid sessions={[makeSession({ id: "a", name: "first" }), makeSession({ id: "b", name: "second" })]} />);
-    expect(screen.getAllByTestId("office").map((t) => t.getAttribute("aria-label"))).toEqual(["first 사무실", "second 사무실"]);
   });
 });

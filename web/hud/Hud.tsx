@@ -1,5 +1,7 @@
 import type { Snapshot } from "../../src/shared/types";
 import { formatTokens, remainingPct } from "../format";
+import { DecisionChip } from "./DecisionChip";
+import { Elevator } from "./Elevator";
 import { HeartBar } from "./HeartBar";
 import { TokenCounter } from "./TokenCounter";
 
@@ -30,7 +32,9 @@ export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
       <HeartBar label="5H" remaining={five} emptyText="-- 설정 필요" />
       <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
       <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
+      <DecisionChip snapshot={snapshot} />
       <span className={`live ${live ? "on" : "off"}`}>{live ? "● LIVE" : "○ 재연결 중"}</span>
+      <Elevator sessions={snapshot.sessions} />
     </header>
   );
 }
