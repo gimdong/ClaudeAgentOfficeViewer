@@ -67,6 +67,8 @@ describe("redact (Ruling P9)", () => {
       "aws configure set aws_access_key_id ***",
     );
     expect(summarize("Bash", { command: "echo sk-FAKE12345678" }).command).toBe("echo ***");
+    expect(summarize("Bash", { command: "echo xoxb-FAKE12345678" }).command).toBe("echo ***");
+    expect(summarize("Bash", { command: "echo xoxp-FAKE12345678" }).command).toBe("echo ***");
   });
 
   it("URL의 사용자:비밀번호는 가린다", () => {
