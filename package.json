@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
+    "galmuri": "^2.40.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

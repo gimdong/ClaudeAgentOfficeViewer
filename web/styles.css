@@ -1,26 +1,48 @@
+@import "galmuri/dist/galmuri.css";
+
+/* ───────── 토큰 (디자인 3장) ───────── */
 :root {
-  --bg: #12111f;
-  --wall: #1d1b33;
-  --floor: #2a2446;
-  --desk: #3b3460;
-  --panel: #0e0d18;
-  --ink: #e8e4ff;
-  --muted: #9d97c7;
-  --green: #39ffb6;
-  --pink: #ff5fa2;
-  --cyan: #3fd0ff;
-  --violet: #b98cff;
-  --yellow: #fff7a8;
+  --bg: #12111f;  --wall: #1d1b33;  --floor: #2a2446;  --desk: #3b3460;  --desk-dark: #241f40;
+  --panel: #0e0d18;  --ink: #e8e4ff;  --muted: #9d97c7;
+  --green: #39ffb6;  --pink: #ff5fa2;  --cyan: #3fd0ff;  --violet: #b98cff;  --yellow: #fff7a8;
+
+  --yellow-deep: #ffd84a;
+  --pink-deep: #c23c7a;
+  --shell: #2e2852;
+  --slab: #0b0a17;
+  --shaft: #16142a;
+  --lights-off: #121020;
+  --shutter: #4a4470;
+  --shutter-gap: #2a2548;
+  --shutter-bar: #5d568f;
+  --focus: #3fd0ff;
+
+  --px: 4px;
+  --font-pixel: "Galmuri11", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-text: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+
+  --shaft-w: 56px;
+  --head-h: 44px;
+  --room-min-h: 156px;
+  --slab-h: 8px;
+  --report-w: 440px;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font-family: var(--font-pixel); font-size: 12px; line-height: 1.5; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block; }
+
 .app { max-width: 1200px; margin: 0 auto; padding: 16px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); }
 .banner { background: var(--pink); color: var(--bg); padding: 8px 12px; margin-bottom: 12px; font-weight: bold; }
 
-.hud { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: var(--panel); border: 2px solid var(--desk); padding: 10px 12px; margin-bottom: 16px; }
+/* ───────── HUD (v1 유지 + 결정 대기 칩 + 층 바로가기) ───────── */
+.hud { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; background: var(--panel); border: 2px solid var(--desk); padding: 10px 12px; margin-bottom: 16px; position: sticky; top: 0; z-index: 20; }
 .counter .label, .heartbar-label { font-size: 11px; color: var(--muted); }
-.counter .value { font-size: 20px; font-weight: bold; color: var(--green); }
+.counter .value { font-size: 18px; color: var(--green); }
 .counter .sub { font-size: 10px; color: var(--muted); }
 .hint { margin-left: 4px; font-size: 10px; color: var(--yellow); }
 .heartbar { flex: 1; min-width: 140px; }
@@ -34,33 +56,148 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-mono
 .live { margin-left: auto; font-size: 12px; }
 .live.on { color: var(--green); }
 .live.off { color: var(--pink); }
+.q-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--yellow); color: var(--wall); border: 0; padding: 4px 10px 4px 6px; cursor: pointer; box-shadow: 0 2px 0 var(--yellow-deep); }
+.q-chip:active { transform: translateY(2px); box-shadow: none; }
+.elevator { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; align-items: center; }
+.elevator .lbl { font-size: 11px; color: var(--muted); margin-right: 4px; }
+.el-btn { position: relative; min-width: 36px; height: 24px; padding: 0 6px 0 14px; background: var(--shaft); border: 2px solid var(--desk); font-size: 11px; cursor: pointer; text-align: right; }
+.el-btn .led { position: absolute; left: 4px; top: 7px; }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-.empty { padding: 40px; text-align: center; color: var(--muted); border: 2px dashed var(--desk); }
-.office { background: linear-gradient(var(--wall) 0 72%, var(--floor) 72% 100%); border: 2px solid var(--desk); padding: 8px; }
-.office.off { opacity: 0.45; filter: grayscale(0.6); }
-.office-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
-.star { margin-right: 4px; color: var(--yellow); }
-.stale { color: var(--pink); }
-.office-bg { display: block; width: 100%; image-rendering: pixelated; }
-.desks { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-.desk { position: relative; width: 96px; text-align: center; outline: none; }
-.desk-svg { display: block; width: 96px; height: 120px; image-rendering: pixelated; overflow: visible; }
-.desk-name { font-size: 11px; }
-.popover { display: none; position: absolute; z-index: 10; left: 50%; top: 0; transform: translate(-50%, -100%); background: var(--panel); border: 2px solid var(--cyan); padding: 6px 8px; font-size: 11px; text-align: left; white-space: nowrap; }
-.desk:hover .popover, .desk:focus .popover { display: block; }
-.ctx { margin-top: 6px; }
+/* LED (6×6) */
+.led { display: inline-block; width: 6px; height: 6px; background: var(--muted); }
+.led--working { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.led--idle { background: var(--muted); }
+.led--paused { background: repeating-linear-gradient(var(--shutter-bar) 0 2px, var(--shutter-gap) 2px 3px); }
+.led--ended { background: var(--desk-dark); }
+.led--empty { background: transparent; outline: 1px dashed var(--muted); outline-offset: -1px; }
+.led--decision { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: blink 1s steps(1) infinite; }
+.led--budget { background: var(--pink); box-shadow: 0 0 6px var(--pink); animation: blink .5s steps(1) infinite; }
 
+/* ───────── 빌딩 (디자인 5.1) ───────── */
+.building { position: relative; }
+.roof { position: relative; height: 72px; margin: 0 24px; }
+.roof svg { position: absolute; left: 0; bottom: 0; width: 100%; height: 72px; }
+.roof-sign { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); font-family: "Galmuri14", var(--font-pixel); font-size: 18px; color: var(--pink); text-shadow: 0 0 6px var(--pink); letter-spacing: 2px; white-space: nowrap; }
+.tower { border: 8px solid var(--shell); border-bottom: 0; background: var(--shell); }
+.ground { height: 24px; background: repeating-linear-gradient(90deg, var(--desk-dark) 0 12px, var(--slab) 12px 16px); border-top: 4px solid var(--shell); }
+.empty { margin: 0; padding: 16px; text-align: center; color: var(--muted); background: var(--wall); border-bottom: var(--slab-h) solid var(--slab); }
+
+.floor { display: grid; grid-template-columns: var(--shaft-w) 1fr; border-bottom: var(--slab-h) solid var(--slab); background: var(--wall); scroll-margin-top: 120px; }
+.floor:last-child { border-bottom: 0; }
+.shaft { background: var(--shaft); display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 8px; border-right: 4px solid var(--slab); }
+.fl-no { font-family: "Galmuri14", var(--font-pixel); font-size: 16px; color: var(--ink); }
+.floor-body { min-width: 0; }
+
+.floor-head { min-height: var(--head-h); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; background: var(--panel); border-bottom: 2px solid var(--desk); }
+.fold { width: 24px; height: 24px; background: none; border: 2px solid transparent; cursor: pointer; color: var(--muted); padding: 0; }
+.fold:hover { border-color: var(--desk); color: var(--ink); }
+.fold svg { width: 14px; height: 14px; margin: auto; transition: transform .12s steps(2); }
+.floor.collapsed .fold svg { transform: rotate(-90deg); }
+.floor-name { margin: 0; font-size: 14px; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.floor-name .star { color: var(--yellow); margin-right: 4px; }
+.chip { font-size: 11px; padding: 1px 6px; border: 2px solid currentColor; white-space: nowrap; }
+.chip--working { color: var(--green); }
+.chip--idle { color: var(--muted); }
+.chip--paused { color: var(--yellow); }
+.chip--ended { color: var(--muted); border-style: dashed; }
+.chip--decision { color: var(--wall); background: var(--yellow); border-color: var(--yellow); }
+.chip--budget { color: var(--wall); background: var(--pink); border-color: var(--pink); }
+.stale { font-size: 11px; color: var(--pink); white-space: nowrap; }
+.summary { font-size: 11px; color: var(--muted); display: none; }
+.floor.collapsed .summary { display: inline; }
+
+.bars { display: flex; gap: 12px; align-items: center; }
+.mini { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.mini .track { position: relative; width: 80px; height: 10px; background: #2c2a40; border: 2px solid var(--desk); box-sizing: content-box; }
+.mini .fill { position: absolute; inset: 0 auto 0 0; background: var(--green); }
+.mini.warn .fill { background: var(--yellow); }
+.mini.danger .fill { background: var(--pink); animation: blink 1s steps(1) infinite; }
+.mini .val { color: var(--ink); min-width: 32px; }
+.mini.none .val { color: var(--muted); }
+
+/* 층 컨트롤 (디자인 5.4) */
+.controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.pbtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; background: var(--panel); border: 2px solid var(--desk); box-shadow: 0 2px 0 var(--slab); cursor: pointer; white-space: nowrap; font-size: 12px; }
+.pbtn svg { width: 14px; height: 14px; }
+.pbtn:hover { border-color: var(--cyan); }
+.pbtn:active { transform: translateY(2px); box-shadow: none; }
+.pbtn--danger { color: var(--pink); }
+.pbtn--danger:hover { border-color: var(--pink); }
+.pbtn--primary { background: var(--green); color: var(--wall); border-color: var(--green); }
+.pbtn--primary:hover { border-color: var(--ink); }
+.pbtn[aria-disabled="true"], .pbtn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: 0 2px 0 var(--slab); border-color: var(--desk); }
+.switch { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; }
+.switch .track { position: relative; width: 36px; height: 20px; background: var(--desk-dark); border: 2px solid var(--desk); }
+.switch .knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); transition: left .12s steps(3); }
+.switch[aria-checked="true"] .track { border-color: var(--green); }
+.switch[aria-checked="true"] .knob { left: 18px; background: var(--green); box-shadow: 0 0 4px var(--green); }
+.switch[aria-checked="false"] .lbl { color: var(--yellow); }
+.switch[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+
+/* 방 */
+.room { position: relative; min-height: var(--room-min-h); background: linear-gradient(var(--wall) 0 70%, var(--floor) 70% 100%); padding: 8px 12px 6px; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
+.floor.collapsed .room { display: none; }
+.backdrop { flex: none; width: 88px; height: 64px; align-self: flex-start; margin-top: 8px; }
+.desks { display: flex; flex-wrap: wrap; gap: 8px 4px; align-items: flex-end; flex: 1; min-width: 0; }
+
+.desk { position: relative; width: 96px; text-align: center; background: none; border: 0; padding: 0; outline-offset: 0; }
+.desk svg { width: 96px; height: 120px; overflow: visible; }
+.nametag { display: inline-block; max-width: 92px; margin-top: 2px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.desk--decision .nametag { background: var(--yellow); color: var(--wall); }
+/* Phase 1: 결정 대기 책상은 누를 수 없다 — pointer 커서와 QRING은 Phase 2에서 넣는다(디자인 6장 끝 표) */
+
+/* 종료 층 */
+.floor--ended { background: var(--lights-off); }
+.floor--ended .room { background: linear-gradient(var(--lights-off) 0 70%, #1a1730 70% 100%); filter: grayscale(.7); opacity: .6; }
+.floor--ended .floor-name { color: var(--muted); }
+
+/* 빈 층 */
+.floor--empty .room { justify-content: center; align-items: center; background: repeating-linear-gradient(45deg, var(--wall) 0 12px, #211e3a 12px 24px); }
+.vacant { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 12px; }
+.vacant .sign { border: 2px solid var(--muted); color: var(--muted); padding: 4px 12px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; }
+.vacant p { margin: 0; font-size: 11px; color: var(--muted); }
+
+/* 스프라이트 애니메이션 (v1 + 손들기, 디자인 6장·10장) */
 .frame-b { opacity: 0; }
-.state-working .frame-a { animation: frameA 0.5s steps(1) infinite; }
-.state-working .frame-b { animation: frameB 0.5s steps(1) infinite; }
-.state-working .code { animation: blink 0.4s steps(1) infinite; }
+.state-working .frame-a { animation: frameA .5s steps(1) infinite; }
+.state-working .frame-b { animation: frameB .5s steps(1) infinite; }
+.state-working .code { animation: blink .4s steps(1) infinite; }
 .state-idle .char, .bubble-idle { animation: nod 2s steps(1) infinite; }
+.hand .hop { animation: hop .9s steps(1) infinite; }
+.qmark { animation: bob 1.2s steps(1) infinite; filter: drop-shadow(0 0 1.5px #fff7a8); }
+.urgent .qmark { filter: drop-shadow(0 0 1.5px #ff5fa2); animation: bob 1.2s steps(1) infinite, blink .5s steps(1) infinite; }
 @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes frameB { 0% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes nod { 0% { transform: translateY(0); } 50% { transform: translateY(1px); } }
-@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes hop { 0% { transform: translateY(0); } 66.667% { transform: translateY(-1px); } }
+@keyframes bob { 0% { transform: translateY(0); } 50% { transform: translateY(1px); } }
+@keyframes blink { 0% { opacity: 1; } 50% { opacity: .3; } }
+
+/* ───────── 말풍선 (디자인 7.1) ───────── */
+.say { position: fixed; z-index: 40; max-width: 340px; background: var(--panel); border: 2px solid var(--cyan); padding: 6px 10px 6px 8px; pointer-events: none; box-shadow: 0 4px 0 var(--slab); }
+.say[hidden] { display: none; }
+.say .line { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.say .line svg { flex: none; width: 14px; height: 14px; }
+.say .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.say .meta { font-size: 10px; color: var(--muted); margin-top: 2px; padding-left: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.say .tail { position: absolute; width: 8px; height: 8px; background: var(--panel); border: 2px solid var(--cyan); border-top: 0; border-left: 0; bottom: -6px; transform: translateX(-50%) rotate(45deg); }
+.say.below .tail { bottom: auto; top: -6px; transform: translateX(-50%) rotate(225deg); }
+.say.q { border-color: var(--yellow); }
+.say.q .tail { border-color: var(--yellow); }
+.say.q .meta { color: var(--yellow); }
+
+/* ───────── 좁은 화면 (디자인 5.6) ───────── */
+@media (max-width: 720px) {
+  :root { --shaft-w: 40px; }
+  .roof { margin: 0 8px; }
+  .floor-name { max-width: 60vw; }
+  .controls { margin-left: 0; flex-basis: 100%; }
+  .bars { flex-basis: 100%; }
+  .backdrop { display: none; }
+}
+
+/* ───────── 움직임 줄이기 (디자인 10장) ───────── */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
   .frame-b { opacity: 0 !important; }
 }

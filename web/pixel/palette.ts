@@ -17,6 +17,8 @@ export const NEON = {
   violet: "#b98cff",
   yellow: "#fff7a8",
   green: "#39ffb6",
+  yellowDeep: "#ffd84a",
+  pinkDeep: "#c23c7a",
 } as const;
 
 export type Role = "lead" | "dev" | "reviewer" | "generic";
