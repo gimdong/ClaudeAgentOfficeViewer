@@ -1,6 +1,7 @@
 /**
  * hook 입력의 tool_input에서 화면에 필요한 필드만 남긴다(스펙 5장). 원문은 메모리에도 남기지 않는다.
- * 문자열은 코드포인트 기준 MAX_FIELD자까지 자른다 — 서로게이트 쌍을 가르지 않기 위해 Array.from을 쓴다.
+ * 문자열은 그래핌(사용자가 보는 글자 하나) 단위로 MAX_FIELD자까지 자른다 — ZWJ로 묶인 이모지가
+ * 경계에서 쪼개지지 않게 Intl.Segmenter를 쓰고, 없으면 코드포인트 단위(Array.from)로 대체한다.
  */
 export const MAX_FIELD = 200;
 
@@ -17,11 +18,18 @@ export interface ToolSummary {
   question?: string;
 }
 
-const cut = (v: unknown): string | undefined =>
-  typeof v === "string" && v.trim() ? Array.from(v).slice(0, MAX_FIELD).join("") : undefined;
+// 그래핌 단위 분해. Intl.Segmenter가 없는 런타임을 대비해 코드포인트 단위로 대체한다.
+const toGraphemes: (s: string) => string[] = (() => {
+  try {
+    const seg = new Intl.Segmenter("ko", { granularity: "grapheme" });
+    return (s: string) => Array.from(seg.segment(s), (x) => x.segment);
+  } catch {
+    return (s: string) => Array.from(s);
+  }
+})();
 
-// Ruling P9: command/description/query/question은 EventStore → 스냅샷 → SSE → 브라우저로 그대로 이어지므로
-// 비밀값으로 보이는 형식을 지운다. 잘린 토큰 조각이 남지 않도록 cut(200자)보다 먼저 적용해야 한다.
+// Ruling P9(team-lead 확장): summarize()가 남기는 모든 문자열 필드는 EventStore → 스냅샷 → SSE → 브라우저로
+// 그대로 이어지므로 비밀값으로 보이는 형식을 지운다. 잘린 토큰 조각이 남지 않도록 cut(200자)보다 먼저 적용한다.
 // 값은 공백이나 닫는 따옴표·괄호 앞에서 멈춘다 — curl -H "Authorization: Bearer xyz" 같은 형태에서 닫는 "를 삼키지 않기 위해
 const VALUE = `[^\\s"')\\]}]+`;
 const SECRET_NAME = new RegExp(`\\b(\\w*(?:token|secret|key|password|passwd|pwd)\\w*)(\\s*[:=]\\s*)(${VALUE})`, "gi");
@@ -30,6 +38,8 @@ const AUTH_BARE = new RegExp(`\\b(authorization)(\\s*[:=]\\s*)(?!bearer\\b)(${VA
 const BEARER_BARE = new RegExp(`\\b(bearer)(\\s+)(${VALUE})`, "gi");
 const PREFIX_TOKEN = /\b(?:sk|ghp|gho|xox[abp]|AKIA)[-_A-Za-z0-9]{8,}/g;
 const URL_CREDS = /\/\/[^/\s:@]+:[^/\s@]+@/g;
+// 이름·접두어로 잡히지 않은, 32자 이상 이어진 16진수/base64 형태의 문자열을 통째로 가리는 마지막 안전망
+const LONG_RANDOM = /(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{32,}(?![A-Za-z0-9+/=_-])/g;
 
 export function redact(s: string): string {
   return s
@@ -38,11 +48,12 @@ export function redact(s: string): string {
     .replace(AUTH_BARE, (_m, kw: string, sep: string) => `${kw}${sep}***`)
     .replace(BEARER_BARE, (_m, kw: string, sp: string) => `${kw}${sp}***`)
     .replace(PREFIX_TOKEN, "***")
-    .replace(URL_CREDS, "//***@");
+    .replace(URL_CREDS, "//***@")
+    .replace(LONG_RANDOM, "***");
 }
 
-const cutRedacted = (v: unknown): string | undefined =>
-  typeof v === "string" && v.trim() ? Array.from(redact(v)).slice(0, MAX_FIELD).join("") : undefined;
+const cut = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim() ? toGraphemes(redact(v)).slice(0, MAX_FIELD).join("") : undefined;
 
 function domainOf(url: unknown): string | undefined {
   if (typeof url !== "string") return undefined;
@@ -72,15 +83,15 @@ export function summarize(toolName: string | undefined, input: unknown): ToolSum
   const i = input as Record<string, unknown>;
   const firstQuestion = Array.isArray(i.questions) ? (i.questions[0] as { question?: unknown } | undefined)?.question : undefined;
   const out: ToolSummary = {
-    command: cutRedacted(i.command),
-    description: cutRedacted(i.description),
+    command: cut(i.command),
+    description: cut(i.description),
     filePath: cut(i.file_path ?? i.notebook_path),
     pattern: cut(i.pattern),
-    query: cutRedacted(i.query),
+    query: cut(i.query),
     domain: domainOf(i.url),
     to: cut(i.to),
     activeForm: activeFormOf(toolName, i),
-    question: cutRedacted(firstQuestion),
+    question: cut(firstQuestion),
   };
   for (const k of Object.keys(out) as (keyof ToolSummary)[]) if (out[k] === undefined) delete out[k];
   return out;

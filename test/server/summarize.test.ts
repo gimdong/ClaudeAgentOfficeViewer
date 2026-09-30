@@ -77,16 +77,48 @@ describe("redact (Ruling P9)", () => {
   it("흔한 비밀 형식이 없는 명령은 그대로 둔다", () => {
     expect(summarize("Bash", { command: "npm test" }).command).toBe("npm test");
     expect(summarize("Bash", { command: "ls -la" }).command).toBe("ls -la");
+    expect(summarize("Bash", { command: "git status" }).command).toBe("git status");
   });
 
   it("200자로 자르기 전에 가려서 잘린 자리에 원문 조각이 남지 않는다", () => {
-    const filler = "x".repeat(150);
-    const secret = "ghp_" + "F".repeat(36); // 접두어 + 36자, 이 예시에선 이름이 없어 접두어 규칙으로 가려진다
-    const raw = `${filler} GITHUB_TOKEN=${secret}`;
+    // 공백으로 끊긴 평범한 단어를 채움말로 써서 32자 연속 규칙(아래 테스트)에 우연히 걸리지 않게 한다
+    const filler = "lorem ".repeat(30); // 180자
+    const secret = "ghp_" + "F".repeat(36); // 접두어 + 36자, 이름이 없어 접두어 규칙으로 가려진다
+    const raw = `${filler}GITHUB_TOKEN=${secret}`;
     expect(raw.length).toBeGreaterThan(MAX_FIELD);
     const s = summarize("Bash", { command: raw });
-    expect(s.command).toBe(`${filler} GITHUB_TOKEN=***`);
+    expect(s.command).toBe(`${filler}GITHUB_TOKEN=***`);
     expect(s.command).not.toContain("FFFFFF");
+  });
+
+  it("자르기 경계에 걸린 접두어 토큰도(이름 없이) 조각 없이 가려진다", () => {
+    const filler = "x".repeat(195);
+    const s = summarize("Bash", { command: `${filler} ghp_FAKEFAKEFAKE1234567890ABCDEFGH` });
+    expect(s.command).not.toContain("ghp_");
+    expect(s.command).toContain("***");
+  });
+
+  it("32자 이상의 16진수/영숫자 연속 문자열은 통째로 가린다", () => {
+    const hex = "a".repeat(40) + "f";
+    expect(summarize("Bash", { command: `git show ${hex}` }).command).toBe("git show ***");
+  });
+
+  it("filePath·query·question에도 가림이 적용된다", () => {
+    // 접두어 토큰 규칙은 값의 문자 집합이 정해져 있어 .txt 같은 확장자 앞에서 멈춘다
+    expect(summarize("Write", { file_path: "/tmp/fake/AKIAFAKEFAKE1234.txt" }).filePath).toBe("/tmp/fake/***.txt");
+    expect(summarize("WebSearch", { query: "Authorization: Bearer FAKE_TOKEN_123 login" }).query).toBe(
+      "Authorization: Bearer *** login",
+    );
+    const q = summarize("AskUserQuestion", { questions: [{ question: "token=FAKE_TOKEN_123 맞나요?" }] });
+    expect(q.question).toBe("token=*** 맞나요?");
+  });
+
+  it("ZWJ로 묶인 이모지는 그래핌 경계에서 쪼개지지 않는다", () => {
+    const family = "👨‍👩‍👧"; // 코드포인트 5개, 그래핌 1개
+    // "가"는 32자 연속 규칙([A-Za-z0-9+/=_-])에 안 걸리는 채움말이다
+    const s = summarize("Bash", { command: "가".repeat(198) + family });
+    expect(s.command).toBe("가".repeat(198) + family);
+    expect(s.command!.endsWith(family)).toBe(true);
   });
 });
 
