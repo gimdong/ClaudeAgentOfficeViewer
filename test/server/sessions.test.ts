@@ -1,18 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseCTime, pidAlive, readSessions } from "../../server/collectors/sessions";
+import { Logger, setLogger, type LogLine } from "../../server/log";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
+
+// spawnSync(pidAlive 테스트가 진짜 프로세스로 씀)는 실제로 두고 execFile만 감시용으로 바꾼다(Task 3).
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, execFile: vi.fn() };
+});
 
 const NOW = Date.now();
 let h: FakeHome;
+let logDir: string;
 beforeEach(async () => {
   h = await makeHome();
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  logDir = mkdtempSync(join(tmpdir(), "office-sessions-log-"));
+  setLogger(new Logger({ dir: logDir }));
+  vi.mocked(execFile).mockClear();
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  setLogger(new Logger({ dir: "" }));
+  rmSync(logDir, { recursive: true, force: true });
   await h.cleanup();
 });
+
+const logLines = (): LogLine[] =>
+  readdirSync(logDir).flatMap((f) => readFileSync(join(logDir, f), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)));
 
 describe("readSessions", () => {
   it("살아 있는 세션과 24시간 안에 끝난 세션만 반환하고, 잘못된 파일은 건너뛴다", async () => {
@@ -28,7 +47,8 @@ describe("readSessions", () => {
     expect(Object.keys(byId).sort()).toEqual(["alive", "recent"]);
     expect(byId.alive).toMatchObject({ pid: 1, name: "alpha", cwd: "/a", status: "busy", alive: true, updatedAt: NOW - 1000 });
     expect(byId.recent).toMatchObject({ name: "recent", alive: false, status: "idle" });
-    expect(console.warn).toHaveBeenCalledTimes(2);
+    // console.warn 대신 파일 로거로 남긴다(Task 3) — 깨진 5.json, sessionId 없는 6.json 두 건.
+    expect(logLines().filter((l) => l.src === "sessions")).toHaveLength(2);
   });
 
   it("sessions 폴더가 없으면 빈 배열", async () => {
@@ -84,6 +104,30 @@ describe("readSessions - procStart로 pid 재사용을 감지한다", () => {
     const list = await readSessions(h.home, NOW, () => false, matchProcStart);
     expect(list).toMatchObject([{ sessionId: "s1", alive: false }]);
     expect(matchProcStart).not.toHaveBeenCalled();
+  });
+});
+
+describe("readSessions - Windows 호환(Task 3)", () => {
+  const file = { name: "x", cwd: "/x", status: "busy", startedAt: NOW - 5000 };
+  const PROC_START = "Mon Sep 28 12:59:39 2026";
+
+  it("platform이 win32이면 ps를 부르지 않고 pid 생존만으로 판정한다", async () => {
+    await h.write("sessions/1.json", { ...file, pid: 1, sessionId: "s1", updatedAt: NOW - 1000, procStart: PROC_START });
+    const list = await readSessions(h.home, NOW, () => true, undefined, "win32");
+    expect(list).toMatchObject([{ sessionId: "s1", alive: true }]);
+    expect(execFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("readSessions - 읽을 수 없는 세션 파일(Task 3)", () => {
+  it("읽을 수 없는 세션 파일은 건너뛰고 warn 한 줄, 로그엔 폴더 경로가 없다", async () => {
+    await h.write("sessions/1.json", "{broken");
+    const list = await readSessions(h.home, NOW, () => true);
+    expect(list).toEqual([]);
+    const lines = logLines().filter((l) => l.src === "sessions");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "warn" });
+    expect(JSON.stringify(lines[0])).not.toContain(h.home); // 폴더 경로 없음, 파일 이름만
   });
 });
 

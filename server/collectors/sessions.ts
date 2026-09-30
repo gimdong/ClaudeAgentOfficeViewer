@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { getLogger, warnCaught } from "../log";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +83,7 @@ export async function readSessions(
   now = Date.now(),
   isAlive = pidAlive,
   matchProcStart: ProcStartMatcher = defaultProcStartMatcher,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<SessionRecord[]> {
   const dir = join(claudeHome, "sessions");
   let names: string[];
@@ -98,25 +100,28 @@ export async function readSessions(
     let raw: Record<string, unknown>;
     try {
       raw = JSON.parse(await readFile(join(dir, n), "utf8"));
-    } catch {
-      console.warn(`[sessions] ${n}: JSON을 읽을 수 없어 건너뜁니다`);
+    } catch (e) {
+      warnCaught("sessions", "cannot read session file", e, n); // n은 파일 이름뿐(폴더 경로 없음)
       continue;
     }
     const pid = num(raw?.pid);
     const sessionId = str(raw?.sessionId);
     if (pid === undefined || !sessionId) {
-      console.warn(`[sessions] ${n}: pid 또는 sessionId가 없어 건너뜁니다`);
+      getLogger().warn("sessions", "missing pid or sessionId", { file: n });
       continue;
     }
     let alive = isAlive(pid);
     const procStart = str(raw.procStart);
-    if (alive && procStart) {
+    // Windows에는 ps가 없어 pid 재사용을 못 가린다 — 필요하면 wmic/Get-Process로 시작 시각 비교.
+    // (ponytail: 일단 pid 생존 판정만 쓴다, 필요해지면 위 대안으로 확장)
+    if (alive && procStart && platform !== "win32") {
       // pid 재사용 감지: kill(pid,0)이 살아있다고 해도, 세션이 기록해둔 procStart와
       // 실제 그 pid의 프로세스 시작 시각이 다르면 그 pid는 이미 다른 프로세스에 재할당된 것이다.
       let matches: boolean | undefined;
       try {
         matches = await matchProcStart(pid, procStart);
-      } catch {
+      } catch (e) {
+        warnCaught("sessions", "cannot match proc start", e);
         matches = undefined; // 판단 불가 -> 기존 판정을 그대로 쓴다
       }
       if (matches === false) alive = false;

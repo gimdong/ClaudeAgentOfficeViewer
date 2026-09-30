@@ -72,6 +72,12 @@ async function remove() {
   console.log("statusline 설정을 원래대로 되돌렸습니다.");
 }
 
+// 테스트용으로 STATUSLINE_PLATFORM을 두되 기본은 실제 process.platform이다(Task 3).
+if ((process.env.STATUSLINE_PLATFORM || process.platform) === "win32") {
+  console.log("PLAN 바(statusline 연동)는 Windows에서는 아직 지원하지 않습니다.");
+  process.exit(0);
+}
+
 const cmd = process.argv[2];
 if (cmd === "install") await install();
 else if (cmd === "remove") await remove();

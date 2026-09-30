@@ -156,6 +156,16 @@ describe("statusline-setup.mjs", () => {
     expect(result.stderr.toString()).not.toContain("비어 보일 수");
   });
 
+  // Task 3: Windows에는 아직 이 기능을 안 만든다. 설치를 시도하지 않고 안내만 하고 끝낸다.
+  it("Windows에서는 지원하지 않는다고 알리고 설정을 바꾸지 않는다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo hi" } });
+    const winEnv = { ...env, STATUSLINE_PLATFORM: "win32" };
+    const result = spawnSync("node", [SETUP, "install"], { env: winEnv });
+    expect(result.status).toBe(0);
+    expect(result.stdout.toString()).toContain("Windows에서는 아직 지원하지 않습니다");
+    expect(await json("settings.json")).toEqual({ statusLine: { type: "command", command: "echo hi" } });
+  });
+
   // director 검토 관점(미리 알림): 경로에 공백이 있을 때 인용.
   it("CLAUDE_CONFIG_DIR 경로에 공백이 있어도 install/remove가 정상 동작한다", async () => {
     const rel = "weird dir with space";
