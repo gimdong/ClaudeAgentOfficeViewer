@@ -5,7 +5,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-// @ts-expect-error package-beta.mjs는 스크립트라 타입 선언이 없다(scripts/는 tsconfig.json include 밖)
 import { pkgChain, resolveDepPath } from "../../scripts/package-beta.mjs";
 
 // resolveDepPath는 package:beta 전체를 실행하지 않아도 되는 순수 함수라 작은 단위 테스트로 직접

@@ -2,9 +2,9 @@
 // 베타 릴리스 패키징: 웹·서버를 빌드하고 release/claude-office-<version>/ 폴더와
 // .tar.gz(mac/Linux)·.zip(Windows)을 만든다. 자세한 내용은 task-6-brief.md 참고.
 import { execFileSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const r = (...p) => join(root, ...p);
@@ -197,6 +197,53 @@ function main() {
   console.log(`[package-beta] 완료: ${releaseDir}, ${tarPath}${zipPath ? `, ${zipPath}` : " (zip 실패, 위 오류 참고)"}`);
 }
 
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * 여러 테스트 파일(test/scripts/package.test.ts, test/scripts/install.test.ts)이 각자
+ * beforeAll에서 `npm run package:beta`를 부르는데, vitest는 테스트 파일을 별도 프로세스로 병렬
+ * 실행한다 — 그대로 두면 같은 release/ 폴더를 향해 두 build가 동시에 rm -rf/쓰기를 해 깨진 산출물이
+ * 생길 수 있다(Task 7에서 실제로 재현·확인). mkdir은 POSIX에서 원자적이라 이 락으로 직렬화한다.
+ * 락을 기다렸다 얻은 두 번째 실행도 다시 한 번 전체를 빌드한다(몇 초 낭비되지만 항상 최신 상태를
+ * 보장하는 쪽이 "이미 최신이면 건너뛰기" 같은 캐시 로직보다 단순하고 안전하다).
+ */
+function withLock(fn) {
+  mkdirSync(r("release"), { recursive: true }); // release/ 자체는 여러 프로세스가 같이 만들어도 안전(멱등)하다
+  const lockDir = r("release", ".package-beta.lock");
+  const deadline = Date.now() + 110_000;
+  for (;;) {
+    try {
+      // recursive를 안 쓴다 — recursive: true는 이미 있어도 조용히 성공해 락 구실을 못 한다.
+      // mkdir 자체는 POSIX에서 원자적이라, 두 프로세스가 동시에 시도해도 정확히 하나만 성공한다.
+      mkdirSync(lockDir);
+      break;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      if (Date.now() > deadline) throw new Error("[package-beta] 락을 얻지 못했습니다(다른 package:beta 실행이 너무 오래 걸림)");
+      sleepSync(300);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lockDir, { recursive: true, force: true });
+  }
+}
+
 // 이 파일을 `node scripts/package-beta.mjs`로 직접 실행할 때만 파이프라인을 돌린다 — 다른 모듈이
 // pkgChain/resolveDepPath만 가져다 쓰려고 import할 때 빌드 전체가 부작용으로 실행되면 안 된다.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+// server/index.ts의 isMainModule과 같은 이유로 realpath로 풀어서 비교한다 — 심볼릭 링크가 낀 경로
+// (macOS /tmp·/var 아래 체크아웃 등)에서는 import.meta.url(실제 경로)과 process.argv[1](호출한
+// 그대로의 링크 경로)이 문자열로는 달라서, 단순 비교면 이 가드가 항상 false가 되어 아무 일도 안
+// 하고 조용히 끝나 버린다(T6 재리뷰 지적 — Important).
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+if (isMainModule()) withLock(main);
