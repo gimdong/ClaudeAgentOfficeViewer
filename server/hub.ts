@@ -5,6 +5,7 @@ export interface HubOptions {
   intervalMs?: number;
   debounceMs?: number;
   watchDir?: string;
+  pokeMs?: number;
 }
 
 const WATCHED = /^(projects|sessions|teams|claude-office)([\\/]|$)/;
@@ -18,6 +19,7 @@ export class SnapshotHub {
   private watcher?: FSWatcher;
   private running: Promise<void> | null = null;
   private again = false;
+  private pokeTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly builder: { build(now?: number): Promise<Snapshot> },
@@ -41,7 +43,20 @@ export class SnapshotHub {
   stop(): void {
     clearInterval(this.timer);
     clearTimeout(this.debounce);
+    clearTimeout(this.pokeTimer);
     this.watcher?.close();
+  }
+
+  /**
+   * hook 이벤트가 올 때 부른다. 첫 호출 뒤 pokeMs(기본 200ms) 안에 한 번만 다시 만든다.
+   * debounce가 아니라 throttle이다 — 이벤트가 끊임없이 와도 갱신이 밀리지 않고, 초당 5번을 넘지 않는다.
+   */
+  poke(): void {
+    if (this.pokeTimer) return;
+    this.pokeTimer = setTimeout(() => {
+      this.pokeTimer = undefined;
+      void this.refresh();
+    }, this.opts.pokeMs ?? 200);
   }
 
   current(): Snapshot {

@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
+import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
 import { SnapshotBuilder } from "./snapshot";
 
@@ -47,11 +48,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const config = await loadConfig(opts.configPath);
+  const events = new EventStore();
   const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config }), { watchDir: opts.claudeHome });
   await hub.start();
 
   const staticDir = fileURLToPath(new URL("../dist/web", import.meta.url));
-  const server = createApp(hub, { staticDir }).listen(opts.port, "127.0.0.1", () => {
+  const onHookEvent = (input: Record<string, unknown>) => {
+    if (events.add(input, Date.now())) hub.poke();
+  };
+  const server = createApp(hub, { staticDir, onHookEvent }).listen(opts.port, "127.0.0.1", () => {
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {

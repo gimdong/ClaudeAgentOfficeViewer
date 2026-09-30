@@ -32,7 +32,7 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
 
 export function createApp(
   hub: Pick<SnapshotHub, "current" | "subscribe">,
-  opts: { staticDir?: string; heartbeatMs?: number } = {},
+  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void } = {},
 ): Express {
   const app = express();
 
@@ -42,6 +42,51 @@ export function createApp(
       return;
     }
     next();
+  });
+
+  // hook 이벤트 수신(스펙 5장). 토큰은 Phase 2에서 도입한다. 지금은 Host 검사(위), Origin 거부,
+  // Content-Type 강제로 외부 웹페이지의 위조 요청을 막는다: 다른 출처의 브라우저가 JSON을 보내려면
+  // 사전 확인이 필요한데 이 서버는 CORS를 허용하지 않는다. Claude Code의 hook 요청에는 Origin이 없다.
+  app.post(
+    "/hooks/event",
+    (req, res, next) => {
+      if (req.headers.origin !== undefined) {
+        res.status(403).end();
+        return;
+      }
+      if (!req.is("application/json")) {
+        res.status(415).end();
+        return;
+      }
+      next();
+    },
+    express.json({ limit: "1mb", type: () => true }),
+    (req, res) => {
+      const body = req.body as unknown;
+      const valid =
+        !!body && typeof body === "object" && !Array.isArray(body) &&
+        typeof (body as Record<string, unknown>).hook_event_name === "string" &&
+        typeof (body as Record<string, unknown>).session_id === "string";
+      if (!valid) {
+        res.status(400).end();
+        return;
+      }
+      try {
+        opts.onHookEvent?.(body as Record<string, unknown>);
+      } catch (e) {
+        // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
+        console.error("[hooks] 이벤트 처리 실패:", e);
+      }
+      res.status(200).end();
+    },
+  );
+  // express.json이 낸 오류(본문 초과 413, JSON 문법 400)를 이 경로에서만 짧게 돌려준다
+  app.use((err: { status?: number }, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path !== "/hooks/event") {
+      next(err);
+      return;
+    }
+    res.status(err.status === 413 ? 413 : 400).end();
   });
 
   app.get("/api/snapshot", (_req, res) => {

@@ -83,4 +83,15 @@ describe("SnapshotHub", () => {
       await h.cleanup();
     }
   });
+
+  it("poke를 50번 불러도 한 번만 다시 만든다", async () => {
+    let builds = 0;
+    hub = new SnapshotHub({ build: async () => snap("p", ++builds) }, { pokeMs: 30 });
+    for (let i = 0; i < 50; i++) hub.poke();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(builds).toBe(1);
+    hub.poke();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(builds).toBe(2);
+  });
 });
