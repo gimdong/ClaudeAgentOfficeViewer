@@ -18,14 +18,24 @@ export function readToken(file: string): string | null {
   }
 }
 
-/** 있으면 읽기만 한다. 없거나 비어 있으면 무작위 32바이트(hex)를 0600으로 쓴다 */
+/** 0600으로 좁힌다. 파일이 없거나 바꿀 수 없으면 그대로 둔다(Windows는 사용자 프로필 아래라 건너뛴다) */
+function restrict(file: string): void {
+  if (process.platform === "win32") return;
+  try {
+    chmodSync(file, 0o600);
+  } catch {
+    /* 없음(새로 만들 때) 또는 권한 없음 */
+  }
+}
+
+/** 있으면 내용은 그대로 두고 권한만 0600으로 맞춘다. 없거나 비어 있으면 무작위 32바이트(hex)를 0600으로 쓴다 */
 export function loadOrCreateToken(file: string): string {
   const existing = readToken(file);
+  restrict(file); // 이미 있던 파일(빈 파일 포함)은 writeFileSync의 mode가 적용되지 않으므로 쓰기 전에 좁힌다
   if (existing) return existing;
   const token = randomBytes(32).toString("hex");
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, token, { mode: 0o600 });
-  chmodSync(file, 0o600); // 이미 있던 빈 파일은 writeFileSync의 mode가 적용되지 않는다
   return token;
 }
 

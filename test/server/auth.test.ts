@@ -1,6 +1,6 @@
 import { request } from "node:http";
 import type { AddressInfo, Server } from "node:net";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -185,6 +185,21 @@ describe("토큰 파일과 헤더 해석", () => {
       expect(readToken(empty)).toBeNull();
       expect(loadOrCreateToken(empty)).toMatch(/^[0-9a-f]{64}$/);
       if (process.platform !== "win32") expect(statSync(empty).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("0644로 있던 토큰 파일은 내용 그대로 0600이 된다", () => {
+    if (process.platform === "win32") return;
+    const dir = mkdtempSync(join(tmpdir(), "co-token-"));
+    try {
+      const file = join(dir, "token");
+      writeFileSync(file, "b".repeat(64), { mode: 0o644 });
+      chmodSync(file, 0o644); // umask와 무관하게
+      expect(loadOrCreateToken(file)).toBe("b".repeat(64));
+      expect(statSync(file).mode & 0o777).toBe(0o600);
+      expect(readFileSync(file, "utf8")).toBe("b".repeat(64));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

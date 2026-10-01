@@ -270,29 +270,25 @@ describe("defaultProbePort", () => {
     }
   });
 
-  it("401과 app 표시가 있으면 ours, 토큰이 있으면 Bearer로 보낸다", async () => {
+  it("401과 app 표시가 있으면 ours이고, probe는 Authorization을 보내지 않는다(Ruling B52)", async () => {
     const { createServer } = await import("node:http");
-    const TOKEN = "a".repeat(64);
     const seen: Array<string | undefined> = [];
     const s = createServer((req, res) => {
       seen.push(req.headers.authorization);
-      const ok = req.headers.authorization === `Bearer ${TOKEN}`;
-      if (!ok) return void res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "unauthorized", app: "claude-office" }));
-      const body = req.url === "/api/snapshot" ? { generatedAt: "2026-10-02T00:00:00.000Z" } : { doctor: [] };
-      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+      res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "unauthorized", app: "claude-office" }));
     }).listen(0, "127.0.0.1");
     await new Promise((r) => s.once("listening", r));
     const p = (s.address() as { port: number }).port;
-    const other401 = createServer((_req, res) => void res.writeHead(401, { "Content-Type": "application/json" }).end("{}")).listen(0, "127.0.0.1");
+    const other401 = createServer((req, res) => {
+      seen.push(req.headers.authorization);
+      res.writeHead(401, { "Content-Type": "application/json" }).end("{}");
+    }).listen(0, "127.0.0.1");
     await new Promise((r) => other401.once("listening", r));
     try {
       expect(await defaultProbePort(p)).toBe("ours");
-      expect(await defaultProbePort(p, null)).toBe("ours");
-      expect(seen).toEqual([undefined, undefined]);
-      seen.length = 0;
-      expect(await defaultProbePort(p, TOKEN)).toBe("ours");
-      expect(seen).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`]); // snapshot과 diagnostics 둘 다
       expect(await defaultProbePort((other401.address() as { port: number }).port)).toBe("other");
+      expect(defaultProbePort.length).toBe(1); // 토큰 인자를 받지 않는다
+      expect(seen).toEqual([undefined, undefined]);
     } finally {
       s.close();
       other401.close();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -163,6 +163,32 @@ describe("CLI", () => {
       for (const out of [d.stdout, d.stderr, g.stdout, g.stderr]) expect(out).not.toContain(token);
     } finally {
       await s.stop();
+    }
+  }, 40_000);
+
+  it("포트에 다른 프로그램(가짜 http 서버)이 있으면 doctor·diag가 Authorization을 보내지 않는다(Ruling B52)", async () => {
+    const { createServer: createHttp } = await import("node:http");
+    const seen: Array<string | undefined> = [];
+    const fake = createHttp((req, res) => {
+      seen.push(req.headers.authorization);
+      res.writeHead(200, { "Content-Type": "text/html" }).end("<!doctype html>");
+    }).listen(0, "127.0.0.1");
+    await new Promise((r) => fake.once("listening", r));
+    const port = (fake.address() as { port: number }).port;
+    const prefix = mkdtempSync(join(tmpdir(), "office-b52-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-b52-home-"));
+    writeFileSync(join(prefix, "token"), "c".repeat(64), { mode: 0o600 });
+    const env = { ...process.env, CLAUDE_OFFICE_PREFIX: prefix };
+    try {
+      await run(["doctor", "--json", "--claude-home", home, "--port", String(port)], env);
+      const g = await run(["diag", "--claude-home", home, "--port", String(port)], env);
+      expect(g.code).toBe(0); // 서버가 우리 것이 아니므로 직접 만든다
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((a) => a === undefined)).toBe(true);
+    } finally {
+      fake.close();
+      rmSync(prefix, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
   }, 40_000);
 

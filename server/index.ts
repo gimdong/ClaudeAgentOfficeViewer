@@ -8,7 +8,7 @@ import { loadOrCreateToken, readToken } from "./auth";
 import { loadConfig } from "./config";
 import { DecisionQueue } from "./decisions/queue";
 import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
-import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem } from "./diag/doctor";
+import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
@@ -65,24 +65,32 @@ export function checkNode(version: string): string | null {
   return major >= 24 ? null : `Claude Agent Office는 Node.js 24 이상이 필요합니다(지금 ${version}). https://nodejs.org 에서 LTS를 설치한 뒤 다시 실행해 주세요.`;
 }
 
+/** 토큰 파일이 있으면 Bearer 헤더. "ours"로 판정된 포트에만 쓴다(Ruling B52) */
+function bearer(paths: OfficePaths): Record<string, string> {
+  const token = readToken(paths.tokenFile);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /** `doctor [--json]`: 서버를 켜지 않고 환경을 점검한다. 켜져 있는 서버의 hook 통계는 /api/diagnostics에서 읽는다 */
 async function doctorCli(argv: string[]): Promise<void> {
   const json = argv.includes("--json");
   const opts = parseCliArgs(argv.filter((a) => a !== "--json"));
   const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
-  // 켜져 있는 서버에 묻는 데 쓴다(스펙 7.1 CLI). 값은 출력하지 않는다
-  const token = readToken(paths.tokenFile);
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  // 포트 판정은 토큰 없이 한 번만 하고(Ruling B52), 이 프로그램일 때만 토큰을 읽어 hook 통계를 묻는다. 값은 출력하지 않는다
+  let probed: Promise<PortState> | undefined;
+  const probePort = (port: number) => (probed ??= defaultProbePort(port));
   const items = await runDoctor({
     claudeHome: opts.claudeHome,
     paths,
     port: opts.port,
-    probePort: (port) => defaultProbePort(port, token),
-    hooks: () =>
-      fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { headers, signal: AbortSignal.timeout(1500) })
+    probePort,
+    hooks: async () => {
+      if ((await probePort(opts.port)) !== "ours") return null;
+      return fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { headers: bearer(paths), signal: AbortSignal.timeout(1500) })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => (j as { hooks?: HookStatsView } | null)?.hooks ?? null)
-        .catch(() => null),
+        .catch(() => null);
+    },
   });
   console.log(json ? JSON.stringify(items, null, 2) : formatDoctor(items));
   process.exitCode = items.some((i) => i.status === "fail") ? 1 : 0;
@@ -102,13 +110,13 @@ async function diagCli(argv: string[]): Promise<void> {
   const opts = parseCliArgs(argv);
   const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
   let file: string | null = null;
-  const token = readToken(paths.tokenFile);
-  if ((await defaultProbePort(opts.port, token)) === "ours") {
+  // 이 프로그램으로 판정된 포트에만 토큰을 보낸다(Ruling B52)
+  if ((await defaultProbePort(opts.port)) === "ours") {
     try {
       const r = await fetch(`http://127.0.0.1:${opts.port}/api/diagnostics/bundle`, {
         method: "POST",
         // Bearer + Origin 없음(Ruling B32). 토큰이 없거나 틀리면 401 → 아래에서 직접 만든다
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", ...bearer(paths) },
         body: "{}",
         signal: AbortSignal.timeout(30_000),
       });

@@ -83,17 +83,17 @@ export function defaultWhich(env: NodeJS.ProcessEnv, platform: NodeJS.Platform) 
   };
 }
 
-export async function defaultProbePort(port: number, token?: string | null): Promise<PortState> {
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+/** 포트에 무엇이 있는지 모르는 채 토큰을 보내지 않는다 — 헤더 없이 묻는다(Ruling B52) */
+export async function defaultProbePort(port: number): Promise<PortState> {
   try {
-    const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { headers, signal: AbortSignal.timeout(1500) });
+    const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
     const body = (await r.json().catch(() => null)) as { generatedAt?: unknown; app?: unknown } | null;
-    // Phase 2 서버는 토큰 없이는 401과 app 표시를 돌려준다(토큰이 틀리거나 없어도 이 프로그램이다)
+    // Phase 2 서버는 토큰 없이 물으면 401과 app 표시를 돌려준다
     if (r.status === 401 && body?.app === "claude-office") return "ours";
     if (!body || typeof body.generatedAt !== "string") return "other";
     // v1도 같은 /api/snapshot을 갖는다. 진단 API가 있어야 이 프로그램(베타 이후)이다.
     // v1은 이 경로에 404나 화면 HTML(SPA)을 돌려준다
-    const diag = await fetch(`http://127.0.0.1:${port}/api/diagnostics`, { headers, signal: AbortSignal.timeout(3000) });
+    const diag = await fetch(`http://127.0.0.1:${port}/api/diagnostics`, { signal: AbortSignal.timeout(3000) });
     // 5xx는 진단 API가 있는데 내부 오류가 난 것 — 이전 버전이 아니다(hooks 쪽에서 못 읽은 이유가 따로 드러난다)
     if (diag.status >= 500) return "ours";
     const summary = (await diag.json().catch(() => null)) as { doctor?: unknown } | null;
