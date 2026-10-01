@@ -203,7 +203,7 @@
   <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
   <dd>
     <p><kbd>y</kbd>를 누르고 <kbd>Enter</kbd>를 누르면 어느 폴더에서나 <code>claude-office</code>라고만 쳐서 켤 수 있습니다. PATH는 "명령을 찾아보는 폴더 목록"입니다. 파일 이름(<code>~/.zshrc</code>)은 쓰는 셸에 따라 <code>~/.bash_profile</code>이나 <code>~/.bashrc</code>로 보일 수 있습니다. Windows에서는 <code>사용자 PATH에 claude-office 명령 경로를 추가할까요? [y/N]</code>로 묻습니다(Windows 화면은 베타에서 확인 전입니다).</p>
-    <p><kbd>n</kbd>을 누르면 켤 때 전체 경로를 써야 합니다(4장).</p>
+    <p><kbd>n</kbd>을 누르면 설치가 끝날 때 <code>다음부터는 이렇게 켜세요: ~/.claude-office/bin/claude-office</code>처럼 켜는 명령을 알려 줍니다(4장).</p>
   </dd>
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다. [y/N]</code></dt>
   <dd><kbd>y</kbd>를 권장합니다. 플러그인은 Claude Code에 붙이는 작은 추가 기능이고, 말풍선과 손들기를 보여 주려면 필요합니다. 플러그인은 <strong>보기만</strong> 하고 Claude의 동작을 바꾸지 않습니다.</dd>
@@ -243,14 +243,15 @@
   <li>터미널(Windows는 PowerShell)을 새로 엽니다.</li>
   <li>아래 명령을 실행합니다.
     <div class="cmd"><pre><code>claude-office</code></pre><button class="copy" type="button">복사</button></div>
-    <p>설치할 때 PATH 질문에 <kbd>n</kbd>을 눌렀다면 전체 경로로 켭니다.</p>
+    <p>설치할 때 PATH 질문에 <kbd>n</kbd>을 눌렀다면, 설치 마지막 줄(<code>다음부터는 이렇게 켜세요: …</code>)에 나온 전체 경로로 켭니다.</p>
     <div class="cmd"><pre><code>~/.claude-office/bin/claude-office</code></pre><button class="copy" type="button">복사</button></div>
     <p>Windows는 <code>$HOME\.claude-office\bin\claude-office.cmd</code>입니다(Windows 화면은 베타에서 확인 전입니다).</p>
   </li>
   <li>웹 브라우저가 저절로 열리고 대시보드가 보입니다. 열리지 않으면 브라우저 주소 창에 <code>http://127.0.0.1:4317</code>을 입력합니다. <code>127.0.0.1</code>은 "이 컴퓨터 자신"이라는 뜻입니다.</li>
 </ol>
 <div class="box ok-box">
-  <pre class="out">Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre>
+  <pre class="out">이 창을 닫으면 대시보드가 꺼집니다.
+Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre>
   <p>브라우저에 빌딩과 층이 보이고, 위쪽 막대 오른쪽에 <strong>● LIVE</strong>가 보입니다.</p>
 </div>
 <figure class="fig" data-fig="fig-first-screen">
@@ -432,10 +433,16 @@
   <li>아래 명령을 실행합니다.
     <div class="cmd"><pre><code>claude-office uninstall</code></pre><button class="copy" type="button">복사</button></div>
   </li>
-  <li>프로그램 파일과 Claude Code 플러그인, PATH에 넣었던 줄이 함께 지워집니다.</li>
-  <li><code>로그와 진단 파일도 지울까요? [y/N]</code>라고 묻습니다. 담당자에게 보낼 진단 파일이 남아 있다면 <kbd>n</kbd>을 누르세요. 그러면 <code>~/.claude-office</code> 안의 <code>logs</code>와 <code>diagnostics</code> 폴더만 남습니다.</li>
+  <li><code>Claude Code에서 claude-office 플러그인도 지울까요? [y/N]</code>라고 묻습니다. <kbd>y</kbd>를 누르면 Claude Code에서도 빠집니다. <kbd>n</kbd>을 누르면 <code>플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user</code>라고 나중에 지우는 명령을 알려 줍니다.</li>
+  <li><code>로그와 진단 파일도 지울까요? [y/N]</code>라고 묻습니다. 담당자에게 보낼 진단 파일이 남아 있다면 <kbd>n</kbd>을 누르세요.</li>
 </ol>
-<div class="box ok-box"><p>질문에 답하면 별도 안내 없이 끝납니다. 새 터미널에서 <code>claude-office</code>를 입력하면 "명령을 찾을 수 없습니다"가 나옵니다.</p></div>
+<p>프로그램 파일과 PATH에 넣었던 줄은 질문과 관계없이 항상 지워집니다. 마지막에 무엇을 지우고 남겼는지 알려 줍니다.</p>
+<div class="box ok-box">
+  <pre class="out">제거를 마쳤습니다.
+지움: 플러그인, logs, diagnostics
+남김: 없음</pre>
+  <p>두 질문에 모두 <kbd>n</kbd>을 누르면 <code>지움: 없음</code>, <code>남김: 플러그인, logs, diagnostics</code>로 나옵니다. 이때도 프로그램 파일은 지워졌습니다. 새 터미널에서 <code>claude-office</code>를 입력하면 "명령을 찾을 수 없습니다"가 나옵니다.</p>
+</div>
 
 <!-- ───────────────────────────── 8 ───────────────────────────── -->
 <h2 id="s8">8. 부록 A: 회사 관리자에게 전달할 설정</h2>

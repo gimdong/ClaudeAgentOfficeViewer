@@ -152,6 +152,14 @@ describe("사용설명서(docs/manual/index.html)", () => {
       [install, "사용설명서 6장(문제가 생겼을 때)"],
       [ps1, "사용자 PATH에 claude-office 명령 경로를 추가할까요?"],
       [launcher, "로그와 진단 파일도 지울까요?"],
+      // Ruling B17
+      [install, "다음부터는 이렇게 켜세요: "],
+      [launcher, "이 창을 닫으면 대시보드가 꺼집니다."],
+      [launcher, "Claude Code에서 claude-office 플러그인도 지울까요?"],
+      [launcher, "플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user"],
+      [launcher, "제거를 마쳤습니다."],
+      [launcher, "지움: "],
+      [launcher, "남김: "],
     ];
     for (const [src, text] of pairs) {
       expect(src, text).toContain(text);
