@@ -176,6 +176,93 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).not.toContain("지움: 없음");
   });
 
+  it("Node 24 미만 안내는 doctor 표가 아니라 런처·설치 스크립트가 먼저 내는 문구다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    for (const f of ["packaging/claude-office.sh", "packaging/install.sh"]) expect(read(f), f).toContain("Node.js 24 이상이 필요합니다(지금 $(node -v)).");
+    expect(read("packaging/install.sh")).toContain('echo "자세한 기록: $LOGFILE"');
+    expect(read("packaging/install.sh")).toContain('LOGFILE="$PREFIX/logs/install-');
+    const symptom = html.slice(html.indexOf("<h4>⑤"), html.indexOf("</div>", html.indexOf("<h4>⑤")));
+    const prose = symptom.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    expect(prose).toContain("Node.js 24 이상이 필요합니다(지금 v20.11.0).");
+    expect(prose).toContain("자세한 기록: ~/.claude-office/logs/install-");
+    expect(prose).not.toContain("❌ Node.js");
+  });
+
+  it("본문 예시 경로는 <사용자 이름>을 쓴다(그림은 designer 원본 그대로)", () => {
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    expect(prose).not.toContain("fakeuser");
+    expect(prose).toContain("/Users/&lt;사용자 이름&gt;/.claude");
+  });
+
+  it("3장 설치 직후 doctor 상자의 줄이 doctor.ts의 title·detail·fix 문자열과 같다", () => {
+    const doctor = readFileSync(join(__dirname, "../../server/diag/doctor.ts"), "utf8");
+    // doctor.ts의 문자열·템플릿 리터럴을 정규식으로(${…}는 아무 값)
+    const literals = [...doctor.matchAll(/"((?:[^"\\]|\\.)*)"|`([^`]*)`/g)].map((m) => m[1] ?? m[2]);
+    const patterns = literals.map((l) => new RegExp(`^${l.split(/\$\{[^}]*\}/).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`));
+    const known = (t: string) => patterns.some((re) => re.test(t));
+    const install = html.slice(html.indexOf('id="s3"'), html.indexOf('id="s4"')).replace(/<svg[\s\S]*?<\/svg>/g, "");
+    const box = install.slice(install.indexOf('<div class="box ok-box">\n  <pre class="out">✅ Node.js'));
+    const pre = box.slice(box.indexOf("<pre"), box.indexOf("</pre>")).replace(/<[^>]+>/g, "");
+    const lines = pre.split("\n").filter((l) => /^(✅|⚠️|❌) |^ {2}→ /.test(l));
+    expect(lines.length).toBe(12);
+    for (const l of lines) {
+      const fix = /^ {2}→ (.*)$/.exec(l);
+      if (fix) {
+        expect(known(fix[1]), l).toBe(true);
+        continue;
+      }
+      const m = /^(?:✅|⚠️|❌) ([^:]+): (.*)$/.exec(l)!;
+      expect(m, l).not.toBeNull();
+      expect(known(m[1]), `title ${l}`).toBe(true);
+      expect(known(m[2]), `detail ${l}`).toBe(true);
+    }
+  });
+
+  it("탭은 tablist/tab/tabpanel로 연결되고 ←/→로 옮겨 가며, 복사 결과는 숨긴 status 하나로 알린다", async () => {
+    const { JSDOM } = await import("jsdom");
+    const dom = new JSDOM(html, {
+      runScripts: "dangerously",
+      beforeParse(w) {
+        Object.defineProperty(w.navigator, "userAgent", { get: () => "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)" });
+        Object.defineProperty(w.navigator, "clipboard", { value: { writeText: () => Promise.resolve() } });
+      },
+    });
+    const d = dom.window.document;
+    const list = d.querySelectorAll('[role="tablist"]')[1]; // 3장 설치
+    const tabs = [...list.querySelectorAll('[role="tab"]')] as HTMLElement[];
+    expect(tabs.map((t) => t.dataset.os)).toEqual(["mac", "linux", "win"]);
+    for (const t of tabs) {
+      const panel = d.getElementById(t.getAttribute("aria-controls")!)!;
+      expect(panel.getAttribute("role")).toBe("tabpanel");
+      expect(panel.getAttribute("aria-labelledby")).toBe(t.id);
+    }
+    expect(tabs.map((t) => t.tabIndex)).toEqual([0, -1, -1]);
+    tabs[0].focus();
+    tabs[0].dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(d.activeElement).toBe(tabs[1]);
+    expect(tabs.map((t) => t.getAttribute("aria-selected"))).toEqual(["false", "true", "false"]);
+    expect(tabs.map((t) => t.tabIndex)).toEqual([-1, 0, -1]);
+    expect((d.getElementById(tabs[1].getAttribute("aria-controls")!) as HTMLElement).hidden).toBe(false);
+    tabs[1].dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    tabs[0].dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect(d.activeElement).toBe(tabs[2]); // 처음에서 ←는 끝으로
+
+    const status = d.getElementById("copy-status")!;
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent).toBe("");
+    const button = d.querySelector(".copy") as HTMLElement;
+    const seen: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      button.click();
+      await new Promise((r) => setTimeout(r, 0));
+      seen.push(status.textContent!);
+      expect(d.getElementById("copy-status")).toBe(status); // 같은 노드
+    }
+    expect(seen.map((x) => x.replace(/ $/, ""))).toEqual(["복사했습니다", "복사했습니다"]);
+    expect(seen[0].endsWith(" ")).toBe(!seen[1].endsWith(" "));
+    expect(button.textContent).toBe("복사됨");
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);

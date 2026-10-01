@@ -8,7 +8,7 @@
   Claude Agent Office v2.0.0-beta.1 사용설명서(초안). 인터넷 없이 열리는 파일 하나입니다.
   외부 요청 0: 글꼴·그림·스크립트를 모두 이 파일 안에 넣습니다.
   명령 출력은 임시 HOME 테스트 환경에서 실제로 실행한 결과를 옮기고, 경로·이름만 가짜 값으로 바꿨습니다.
-  예시 값은 모두 가짜입니다(사용자 이름 fakeuser).
+  본문 예시 경로의 사용자 이름은 <사용자 이름>으로 적습니다(그림 속 예시는 designer 원본을 그대로 따릅니다).
 -->
 <style>
   :root {
@@ -62,6 +62,8 @@
   kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: .9em; }
   dt { font-weight: 700; margin-top: 8px; }
   dd { margin: 0 0 8px 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .os-panel:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .symptom { border-left: 4px solid var(--accent); padding-left: 12px; margin: 20px 0; }
 </style>
 </head>
@@ -146,7 +148,7 @@
 
 <!-- ───────────────────────────── 3 ───────────────────────────── -->
 <h2 id="s3">3. 설치</h2>
-<p>담당자에게 받은 파일 하나로 설치합니다. 인터넷 연결은 필요 없습니다. 설치는 여러분의 사용자 폴더 안(<code>~/.claude-office</code>, Windows는 <code>C:\Users\fakeuser\.claude-office</code>)에만 파일을 둡니다.</p>
+<p>담당자에게 받은 파일 하나로 설치합니다. 인터넷 연결은 필요 없습니다. 프로그램 파일은 여러분의 사용자 폴더 안(<code>~/.claude-office</code>, Windows는 <code>C:\Users\&lt;사용자 이름&gt;\.claude-office</code>)에만 둡니다. 그 밖에는 여러분이 동의할 때만 셸 설정 파일 한 곳(PATH 추가)과 Claude Code의 플러그인 목록을 바꿉니다.</p>
 <div class="tabs" role="tablist" aria-label="운영체제"></div>
 <div class="os-panel" data-os="mac"><p class="os-name">macOS</p>
   <ol class="steps">
@@ -162,7 +164,7 @@
     <li>질문 두 개에 답합니다(아래 "설치 중 질문").</li>
   </ol>
   <div class="box caution">
-    <strong>"확인되지 않은 개발자" 경고가 나오면</strong><br>
+    <strong>드물게 "확인되지 않은 개발자" 경고가 나오면</strong><br>
     베타 버전은 Apple의 서명을 받지 않아서 이 경고가 나올 수 있습니다. 담당자에게 받은 파일이 맞다면 <strong>시스템 설정 → 개인정보 보호 및 보안</strong> 아래쪽의 <strong>"그래도 열기"</strong>를 누른 뒤 같은 명령을 다시 실행합니다.
   </div>
 </div>
@@ -202,7 +204,7 @@
 <dl>
   <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
   <dd>
-    <p><kbd>y</kbd>를 누르고 <kbd>Enter</kbd>를 누르면 어느 폴더에서나 <code>claude-office</code>라고만 쳐서 켤 수 있습니다. PATH는 "명령을 찾아보는 폴더 목록"입니다. 파일 이름(<code>~/.zshrc</code>)은 쓰는 셸에 따라 <code>~/.bash_profile</code>이나 <code>~/.bashrc</code>로 보일 수 있습니다. Windows에서는 <code>사용자 PATH에 claude-office 명령 경로를 추가할까요? [y/N]</code>로 묻습니다(Windows 화면은 베타에서 확인 전입니다).</p>
+    <p><kbd>y</kbd>를 누르고 <kbd>Enter</kbd>를 누르면 어느 폴더에서나 <code>claude-office</code>라고만 쳐서 켤 수 있습니다. PATH는 "명령을 찾아보는 폴더 목록"입니다. 실제 화면에는 <code>/Users/&lt;사용자 이름&gt;/.zshrc에 …</code>처럼 전체 경로로 나옵니다. 파일 이름(<code>~/.zshrc</code>)은 쓰는 셸에 따라 <code>~/.bash_profile</code>이나 <code>~/.bashrc</code>로 보일 수 있습니다. Windows에서는 <code>사용자 PATH에 claude-office 명령 경로를 추가할까요? [y/N]</code>로 묻습니다(Windows 화면은 베타에서 확인 전입니다).</p>
     <p><kbd>n</kbd>을 누르면 설치가 끝날 때 <code>다음부터는 이렇게 켜세요: ~/.claude-office/bin/claude-office</code>처럼 켜는 명령을 알려 줍니다(4장).</p>
   </dd>
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다. [y/N]</code></dt>
@@ -250,7 +252,7 @@
 </ol>
 <div class="box ok-box">
   <pre class="out">이 창을 닫으면 대시보드가 꺼집니다.
-Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre>
+Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&gt;/.claude)</pre>
   <p>브라우저에 빌딩과 층이 보이고, 위쪽 막대 오른쪽에 <strong>● LIVE</strong>가 보입니다.</p>
 </div>
 <figure class="fig" data-fig="fig-first-screen">
@@ -338,7 +340,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre
 </figure><p><strong>방법 2. 터미널에서</strong>:</p>
 <div class="cmd"><pre><code>claude-office diag</code></pre><button class="copy" type="button">복사</button></div>
 <div class="box ok-box">
-  <pre class="out">진단 파일을 만들었습니다: /Users/fakeuser/.claude-office/diagnostics/claude-office-diag-20261001-093000.json
+  <pre class="out">진단 파일을 만들었습니다: /Users/&lt;사용자 이름&gt;/.claude-office/diagnostics/claude-office-diag-20261001-093000.json
 이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.</pre>
 </div>
 <p>만들어진 파일(<code>claude-office-diag-…json</code>)을 메일이나 메신저로 담당자에게 보내면 됩니다.</p>
@@ -413,15 +415,16 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre
 </div>
 <div class="symptom">
   <h4>⑤ "Node.js 24 이상이 필요합니다"가 나와요</h4>
-  <pre class="out">❌ Node.js: 버전 20 (24 이상 필요)
-  → https://nodejs.org 에서 LTS(24 이상)를 설치한 뒤 다시 실행해 주세요.</pre>
+  <pre class="out">Node.js 24 이상이 필요합니다(지금 v20.11.0).</pre>
+  <p>설치하는 중이었다면 아래 줄이 함께 나옵니다. 이 기록 파일은 진단 파일을 만들 때 함께 들어갑니다.</p>
+  <pre class="out">자세한 기록: ~/.claude-office/logs/install-20261001-093000.log</pre>
   <p><a href="#s2">2장</a>대로 Node.js를 새로 설치한 뒤, 터미널을 닫았다가 다시 열고 켜 주세요.</p>
   <figure class="fig" data-fig="fig-err-node">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 156" role="img" aria-labelledby="fig-err-node-t fig-err-node-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 196" role="img" aria-labelledby="fig-err-node-t fig-err-node-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
 <title id="fig-err-node-t">증상: Node.js 버전이 낮음</title>
-<desc id="fig-err-node-d">claude-office doctor 결과에서 Node.js가 실패로 나오면 Node.js 24 이상을 설치해야 합니다.</desc>
-<rect x="0" y="0" width="640" height="156" fill="#12111f"/><rect x="1" y="1" width="638" height="154" fill="none" stroke="#3b3460" stroke-width="2"/>
-<rect x="16" y="16" width="608" height="124" fill="#0b0a17" stroke="#3b3460" stroke-width="2"/><rect x="17" y="17" width="606" height="24" fill="#241f40"/><rect x="26" y="25" width="8" height="8" fill="#ff5fa2"/><rect x="40" y="25" width="8" height="8" fill="#fff7a8"/><rect x="54" y="25" width="8" height="8" fill="#39ffb6"/><text x="320" y="33" font-size="11" fill="#9d97c7" text-anchor="middle">터미널</text><text x="28" y="67" font-size="12" fill="#39ffb6" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">$ claude-office doctor</text><rect x="20" y="73" width="600" height="20" fill="#ff5a5a" fill-opacity="0.14"/><text x="28" y="87" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">❌ Node.js: 버전 20 (24 이상 필요)</text><rect x="20" y="93" width="600" height="20" fill="#ff5a5a" fill-opacity="0.14"/><text x="28" y="107" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">  → https://nodejs.org 에서 LTS(24 이상)를 설치한 뒤 다시 실행해 주세요.</text><text x="28" y="127" font-size="12" fill="#9d97c7" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">(뒷부분 생략)</text>
+<desc id="fig-err-node-d">Node.js가 24보다 낮으면 claude-office를 켜거나 설치할 때 'Node.js 24 이상이 필요합니다'와 지금 버전이 한 줄로 나오고 멈춥니다. 설치 중이면 자세한 기록 파일의 위치도 함께 나옵니다.</desc>
+<rect x="0" y="0" width="640" height="196" fill="#12111f"/><rect x="1" y="1" width="638" height="194" fill="none" stroke="#3b3460" stroke-width="2"/>
+<rect x="16" y="16" width="608" height="164" fill="#0b0a17" stroke="#3b3460" stroke-width="2"/><rect x="17" y="17" width="606" height="24" fill="#241f40"/><rect x="26" y="25" width="8" height="8" fill="#ff5fa2"/><rect x="40" y="25" width="8" height="8" fill="#fff7a8"/><rect x="54" y="25" width="8" height="8" fill="#39ffb6"/><text x="320" y="33" font-size="11" fill="#9d97c7" text-anchor="middle">터미널</text><text x="28" y="67" font-size="12" fill="#39ffb6" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">$ claude-office</text><rect x="20" y="73" width="600" height="20" fill="#ff5a5a" fill-opacity="0.14"/><text x="28" y="87" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">Node.js 24 이상이 필요합니다(지금 v20.11.0).</text><text x="28" y="107" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve"></text><text x="28" y="127" font-size="12" fill="#39ffb6" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">$ sh install.sh</text><rect x="20" y="133" width="600" height="20" fill="#ff5a5a" fill-opacity="0.14"/><text x="28" y="147" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">Node.js 24 이상이 필요합니다(지금 v20.11.0).</text><text x="28" y="167" font-size="12" fill="#e8e4ff" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, 'D2Coding', monospace" xml:space="preserve">자세한 기록: /Users/fakeuser/.claude-office/logs/install-20261001-093000.log</text>
 </svg>
 </figure></div>
 
@@ -480,43 +483,84 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/fakeuser/.claude)</pre
 <ul>
   <li><strong>Windows와 Linux는 충분히 검증하지 못했습니다.</strong> 베타는 macOS에서 확인했습니다. 다른 운영체제에서 문제가 생기면 진단 파일을 보내 주세요.</li>
   <li><strong>PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음).</strong> 화면에는 "데이터 없음"으로 보입니다.</li>
-  <li><strong>코드 서명이 없습니다.</strong> 그래서 macOS에서는 "확인되지 않은 개발자" 경고가 나올 수 있고, Windows에서는 실행 정책에 막힐 수 있습니다. 대처법은 <a href="#s3">3장</a>과 <a href="#s6">6장</a>에 있습니다.</li>
+  <li><strong>코드 서명이 없습니다.</strong> 그래서 macOS에서는 드물게 "확인되지 않은 개발자" 경고가 나올 수 있고, Windows에서는 실행 정책에 막힐 수 있습니다. 대처법은 <a href="#s3">3장</a>과 <a href="#s6">6장</a>에 있습니다.</li>
   <li><strong>회사 관리자 정책</strong>(<code>allowManagedHooksOnly</code> 등)이 켜져 있으면, 관리자가 <a href="#s8">부록 A</a>대로 설정하기 전까지 말풍선과 손들기가 보이지 않습니다. 빌딩, 층, 토큰 숫자는 그대로 보입니다.</li>
   <li><strong>대시보드는 4317번 포트에서만 말풍선과 손들기가 동작합니다.</strong> 다른 번호로 켜면 빌딩과 숫자만 보입니다.</li>
   <li><strong>로그인할 때 저절로 켜지지 않습니다.</strong> 볼 때마다 <code>claude-office</code>로 켜 주세요.</li>
   <li><strong>로그와 진단 파일은 자동으로 보내지 않습니다.</strong> 여러분이 직접 만든 진단 파일만 담당자에게 전달됩니다. 로그는 7일이 지나면 저절로 지워집니다.</li>
 </ul>
+<div id="copy-status" class="sr-only" role="status"></div>
 </main>
 
 <script>
   // OS 탭: 스크립트가 없어도 모든 운영체제 내용이 차례로 보인다. 스크립트가 있으면 탭으로 나누고 지금 쓰는 운영체제를 먼저 연다.
+  // 탭 묶음(.tabs)마다 바로 뒤에 이어진 .os-panel들이 그 묶음의 패널이다. 한 묶음에서 고르면 모든 묶음이 같은 운영체제로 바뀐다.
   (function () {
     document.documentElement.classList.add("js");
+    var ORDER = ["mac", "linux", "win"];
     var names = { mac: "macOS", linux: "Linux", win: "Windows" };
     var ua = navigator.userAgent;
     var current = /Windows/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux/.test(ua) ? "linux" : "mac";
     function show(os) {
+      current = os;
       document.querySelectorAll(".os-panel").forEach(function (p) { p.hidden = p.dataset.os !== os; });
-      document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.os === os)); });
+      document.querySelectorAll(".tabs [role=tab]").forEach(function (b) {
+        var on = b.dataset.os === os;
+        b.setAttribute("aria-selected", String(on));
+        b.tabIndex = on ? 0 : -1; // roving tabindex: 고른 탭만 Tab으로 들어온다
+      });
     }
-    document.querySelectorAll(".tabs").forEach(function (tabs) {
-      ["mac", "linux", "win"].forEach(function (os) {
+    document.querySelectorAll(".tabs").forEach(function (tabs, g) {
+      var panels = {};
+      for (var el = tabs.nextElementSibling; el && el.classList.contains("os-panel"); el = el.nextElementSibling) panels[el.dataset.os] = el;
+      ORDER.forEach(function (os) {
         var b = document.createElement("button");
         b.type = "button";
+        b.id = "os-tab-" + g + "-" + os;
         b.setAttribute("role", "tab");
         b.dataset.os = os;
         b.textContent = names[os];
+        var panel = panels[os];
+        if (panel) {
+          panel.id = "os-panel-" + g + "-" + os;
+          panel.setAttribute("role", "tabpanel");
+          panel.setAttribute("aria-labelledby", b.id);
+          panel.tabIndex = 0;
+          b.setAttribute("aria-controls", panel.id);
+        }
         b.addEventListener("click", function () { show(os); });
         tabs.appendChild(b);
+      });
+      // ←/→로 옆 탭, Home/End로 처음·끝 탭(고르고 그 탭에 포커스)
+      tabs.addEventListener("keydown", function (e) {
+        var i = ORDER.indexOf(current);
+        var next = e.key === "ArrowRight" ? ORDER[(i + 1) % ORDER.length]
+          : e.key === "ArrowLeft" ? ORDER[(i + ORDER.length - 1) % ORDER.length]
+          : e.key === "Home" ? ORDER[0] : e.key === "End" ? ORDER[ORDER.length - 1] : null;
+        if (!next) return;
+        e.preventDefault();
+        show(next);
+        tabs.querySelector("[data-os=" + next + "]").focus();
       });
     });
     show(current);
 
-    // 복사 버튼
+    // 복사 버튼. 결과는 버튼 글자와 함께, 처음부터 있는 숨긴 status 노드 하나에 글자만 바꿔 알린다.
+    // 같은 문장을 다시 알릴 때는 끝에 NBSP를 번갈아 붙여 글자가 바뀌게 한다(대시보드와 같은 방법).
+    var status = document.getElementById("copy-status");
+    var n = 0;
+    function announce(msg) {
+      n++;
+      status.textContent = n % 2 === 0 ? msg : msg + "\u00A0";
+    }
     document.querySelectorAll(".copy").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var code = btn.parentElement.querySelector("code").innerText;
-        var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "복사"; }, 1500); };
+        var code = btn.parentElement.querySelector("code").textContent;
+        var done = function (msg) {
+          btn.textContent = msg;
+          announce(msg === "복사됨" ? "복사했습니다" : "복사하지 못했습니다. 명령을 직접 선택해 복사해 주세요");
+          setTimeout(function () { btn.textContent = "복사"; }, 1500);
+        };
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(code).then(function () { done("복사됨"); }, function () { done("직접 선택"); });
         } else {
