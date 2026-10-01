@@ -184,7 +184,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const symptom = html.slice(html.indexOf("<h4>⑤"), html.indexOf("</div>", html.indexOf("<h4>⑤")));
     const prose = symptom.replace(/<svg[\s\S]*?<\/svg>/g, "");
     expect(prose).toContain("Node.js 24 이상이 필요합니다(지금 v20.11.0).");
-    expect(prose).toContain("자세한 기록: ~/.claude-office/logs/install-");
+    expect(prose).toContain("자세한 기록: /Users/&lt;사용자 이름&gt;/.claude-office/logs/install-"); // install.sh는 절대 경로로 찍는다
     expect(prose).not.toContain("❌ Node.js");
   });
 
@@ -261,6 +261,39 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(seen.map((x) => x.replace(/ $/, ""))).toEqual(["복사했습니다", "복사했습니다"]);
     expect(seen[0].endsWith(" ")).toBe(!seen[1].endsWith(" "));
     expect(button.textContent).toBe("복사됨");
+  });
+
+  it("6장 ③④⑤의 출력 상자가 실제 문구 조각과 같다(B20)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const doctor = read("server/diag/doctor.ts");
+    const index = read("server/index.ts");
+    const launcher = read("packaging/claude-office.sh");
+    const box = (h: string) => {
+      const at = html.indexOf(`<h4>${h}`);
+      const sec = html.slice(at, html.indexOf('<div class="symptom">', at + 1) > 0 ? html.indexOf('<div class="symptom">', at + 1) : html.indexOf("</h2>", at)).replace(/<svg[\s\S]*?<\/svg>/g, "");
+      return [...sec.matchAll(/<pre class="out">([\s\S]*?)<\/pre>/g)].map((m) => m[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">")).join("\n");
+    };
+    // ③ 관리자 설정: 코드는 "있음: ${problems.join(", ")}" + "관리자 hook만 허용"
+    expect(doctor).toContain('`있음: ${problems.join(", ")}`');
+    expect(doctor).toContain('problems.push("관리자 hook만 허용")');
+    expect(doctor).toContain('item("managed", "fail", title, `있음: ${problems.join(", ")}`, "사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요.")');
+    expect(box("③")).toBe("❌ 회사 관리자 설정: 있음: 관리자 hook만 허용\n  → 사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요.");
+    // ④ 포트: 템플릿에 4317을 넣은 결과, 서버의 포트 충돌 문구
+    const other = /item\("port", "fail", "포트", `([^`]*)`/.exec(doctor)![1].replace("${d.port}", "4317");
+    expect(box("④")).toContain(`❌ 포트: ${other}`);
+    const inUse = /console\.error\(`(포트 \$\{opts\.port\}번이 이미 사용 중입니다\.[^`]*)`\)/.exec(index)![1].replace("${opts.port}", "4317");
+    expect(box("④")).toContain(inUse);
+    // ⑤ Node: 런처 문구에 v20.11.0을 넣은 결과
+    const node = /Node\.js 24 이상이 필요합니다\(지금 \$\(node -v\)\)\./.exec(launcher)![0].replace("$(node -v)", "v20.11.0");
+    expect(box("⑤").split("\n")[0]).toBe(node);
+    expect(box("⑤")).toContain("자세한 기록: /Users/<사용자 이름>/.claude-office/logs/install-");
+  });
+
+  it("부록 A에 베타 미검증 안내와 OS별 플러그인 폴더가 있다(B20)", () => {
+    const a = html.slice(html.indexOf('id="s8"'), html.indexOf('id="s9"'));
+    expect(a).toContain("이 설정은 베타에서 검증하지 못했습니다. 관리자는 IT 시험 PC에서 먼저 확인해 주세요.");
+    expect(a).toContain("<code>~/.claude-office/plugin</code>");
+    expect(a).toContain("<code>%USERPROFILE%\\.claude-office\\plugin</code>");
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {

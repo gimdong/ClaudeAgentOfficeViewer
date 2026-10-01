@@ -417,7 +417,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <h4>⑤ "Node.js 24 이상이 필요합니다"가 나와요</h4>
   <pre class="out">Node.js 24 이상이 필요합니다(지금 v20.11.0).</pre>
   <p>설치하는 중이었다면 아래 줄이 함께 나옵니다. 이 기록 파일은 진단 파일을 만들 때 함께 들어갑니다.</p>
-  <pre class="out">자세한 기록: ~/.claude-office/logs/install-20261001-093000.log</pre>
+  <pre class="out">자세한 기록: /Users/&lt;사용자 이름&gt;/.claude-office/logs/install-20261001-093000.log</pre>
   <p><a href="#s2">2장</a>대로 Node.js를 새로 설치한 뒤, 터미널을 닫았다가 다시 열고 켜 주세요.</p>
   <figure class="fig" data-fig="fig-err-node">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 196" role="img" aria-labelledby="fig-err-node-t fig-err-node-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
@@ -475,7 +475,8 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
     <li>Linux: <code>/etc/claude-code/managed-settings.json</code></li>
     <li>Windows: <code>C:\Program Files\ClaudeCode\managed-settings.json</code></li>
   </ul>
-  <p>MDM 등 다른 방식으로 정책을 배포한다면 같은 키를 그 방식으로 넣어 주세요. 플러그인 마켓플레이스는 직원 PC의 설치 폴더(<code>~/.claude-office/plugin</code>)에 있습니다.</p>
+  <p>MDM 등 다른 방식으로 정책을 배포한다면 같은 키를 그 방식으로 넣어 주세요. 플러그인 마켓플레이스는 각 직원 PC의 설치 폴더 <code>~/.claude-office/plugin</code>(Windows는 <code>%USERPROFILE%\.claude-office\plugin</code>)에 있습니다.</p>
+  <p><strong>이 설정은 베타에서 검증하지 못했습니다. 관리자는 IT 시험 PC에서 먼저 확인해 주세요.</strong></p>
 </div>
 
 <!-- ───────────────────────────── 9 ───────────────────────────── -->
