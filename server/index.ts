@@ -6,6 +6,8 @@ import { parseArgs } from "node:util";
 import { createApp } from "./app";
 import { loadOrCreateToken, readToken } from "./auth";
 import { loadConfig } from "./config";
+import { BudgetGate } from "./budget/gate";
+import { BudgetStore } from "./budget/store";
 import { DecisionQueue } from "./decisions/queue";
 import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
@@ -195,9 +197,14 @@ async function main(): Promise<void> {
   const config = await loadConfig(opts.configPath);
   const events = new EventStore();
   // 결정이 생기거나 끝나면 화면을 바로 갱신한다. hub는 아래에서 만들고, onChange는 hook이 온 뒤에야 불린다
-  const decisions = new DecisionQueue({ onChange: () => hub.poke() });
+  // 예산(스펙 5장): 상태 파일은 시작할 때 한 번 읽고, 관문은 메모리 값만 본다
+  const budgetStore = new BudgetStore(paths.stateFile);
+  budgetStore.load();
+  // 큐의 "계속" → 관문이 nextGateAt을 올리고, 관문은 같은 세션의 남은 예산 결정을 permission으로 바꾼다(Ruling B35)
+  const gate = new BudgetGate(budgetStore, { demote: (id) => decisions.demoteBudget(id) });
+  const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events, decisions }), {
+  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events, decisions, budget: { gate, store: budgetStore } }), {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
   });
@@ -207,6 +214,14 @@ async function main(): Promise<void> {
   setInterval(() => stats.summarize(), 60_000).unref();
   const onHookEvent = (input: Record<string, unknown>) => {
     if (events.add(input, Date.now())) hub.poke();
+    gate.onEvent(input);
+  };
+  const budget = {
+    set: (sessionId: string | undefined, tokens: number | null) => {
+      if (sessionId) budgetStore.setBudget(sessionId, tokens, gate.usage(sessionId));
+      else budgetStore.setDefault(tokens);
+      hub.poke(); // 막대·관문 판정(view)이 새 값을 곧바로 쓰게 다시 만든다
+    },
   };
   const home = homedir();
   // 서버 안의 doctor는 자기 자신이 이 포트를 쓴다. 기본 probe는 /api/diagnostics를 부르는데, 그 API가 다시
@@ -225,7 +240,7 @@ async function main(): Promise<void> {
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token }, decisions }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token }, decisions, gate, budget }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

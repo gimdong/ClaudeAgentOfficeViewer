@@ -1,11 +1,16 @@
 import { request, type ClientRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
-import { permissionResponse, preToolAsk } from "../../server/decisions/protocol";
+import { BudgetGate } from "../../server/budget/gate";
+import { BudgetStore } from "../../server/budget/store";
+import { BUDGET_STOP, budgetReason, permissionResponse, preToolAsk } from "../../server/decisions/protocol";
 import { DecisionQueue } from "../../server/decisions/queue";
 import { Logger, setLogger } from "../../server/log";
-import { makeSnapshot } from "../web/fixtures";
+import { makeSession, makeSnapshot } from "../web/fixtures";
 
 const TOKEN = "a".repeat(64);
 type Gate = { preToolUse(input: Record<string, unknown>): object | null; claim(input: Record<string, unknown>): { budgetTokens: number; usedTokens: number } | null };
@@ -15,13 +20,23 @@ let port: number;
 let queue: DecisionQueue;
 let gate: Gate;
 let decisions: Pick<DecisionQueue, "hold" | "answer">;
+let tmp: string;
+let store: BudgetStore;
+let realGate: BudgetGate;
+let budgetSets: Array<[string | undefined, number | null]>;
 
 beforeEach(async () => {
   setLogger(new Logger({ dir: "" }));
-  queue = new DecisionQueue();
+  tmp = mkdtempSync(join(tmpdir(), "co-dapi-"));
+  store = new BudgetStore(join(tmp, "state.json"));
+  store.load();
+  // 실제 배선과 같다: 큐의 onResolve → gate.resolved, gate의 demote → 큐
+  realGate = new BudgetGate(store, { demote: (id) => queue.demoteBudget(id) });
+  queue = new DecisionQueue({ onResolve: (v) => realGate.resolved(v) });
   gate = { preToolUse: () => null, claim: () => null };
   decisions = queue;
-  const snap = makeSnapshot();
+  budgetSets = [];
+  const snap = makeSnapshot({ sessions: [makeSession({ id: "s1" })] });
   server = createApp(
     { current: () => snap, subscribe: () => () => {} },
     {
@@ -29,6 +44,13 @@ beforeEach(async () => {
       // 테스트마다 바꿀 수 있게 위임한다
       decisions: { hold: (...a) => decisions.hold(...a), answer: (...a) => decisions.answer(...a) },
       gate: { preToolUse: (i) => gate.preToolUse(i), claim: (i) => gate.claim(i) },
+      budget: {
+        set: (id, tokens) => {
+          budgetSets.push([id, tokens]);
+          if (id) store.setBudget(id, tokens, realGate.usage(id));
+          else store.setDefault(tokens);
+        },
+      },
     },
   ).listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -38,6 +60,7 @@ afterEach(async () => {
   queue.stop();
   server.closeAllConnections();
   await new Promise((r) => server.close(r));
+  rmSync(tmp, { recursive: true, force: true });
 });
 
 type Res = { status: number; body: string };
@@ -157,5 +180,81 @@ describe("POST /api/decisions/:id", () => {
     const missing = await answer("no-such-id", { action: "allow" });
     expect(missing.status).toBe(404);
     expect(queue.list()[0].state).toBe("pending"); // 위 시도들은 아무것도 바꾸지 않았다
+  });
+
+  it("임의 키·3000개 배열·__proto__ 본문은 400", async () => {
+    hook(perm()).done.catch(() => {});
+    const id = await pendingId();
+    for (const bad of [
+      '{"action":"allow","extra":1}',
+      // 16KB 안에 들어가는 3000개 배열(넘으면 413은 아래 다른 테스트)
+      JSON.stringify({ action: "answer", answers: Array(3000).fill(0) }),
+      JSON.stringify({ action: "answer", answers: [{ labels: Array(3000).fill(0) }] }),
+      '{"__proto__":{"polluted":true},"action":"allow"}',
+    ]) expect((await answer(id, bad)).status, bad.slice(0, 40)).toBe(400);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(queue.list()[0].state).toBe("pending");
+  });
+});
+
+describe("예산(Task 6)", () => {
+  const put = (body: unknown, headers: Record<string, string> = {}) =>
+    send("/api/budget", {
+      method: "PUT",
+      headers: { Cookie: `co=${TOKEN}`, Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    }).done;
+
+  it("PUT /api/budget — 세션 예산과 기본값, 범위 밖 400, 모르는 세션 404, 쿠키 없음 401", async () => {
+    expect((await put({ sessionId: "s1", budgetTokens: 500_000 })).status).toBe(204);
+    expect((await put({ budgetTokens: 200_000 })).status).toBe(204);
+    expect((await put({ sessionId: "s1", budgetTokens: null })).status).toBe(204);
+    expect(budgetSets).toEqual([["s1", 500_000], [undefined, 200_000], ["s1", null]]);
+    for (const bad of [{ sessionId: "s1", budgetTokens: 999 }, { budgetTokens: 1_000_000_001 }, { budgetTokens: 1.5 }, { budgetTokens: "1000" }, {}, { sessionId: 5, budgetTokens: 1000 }, { budgetTokens: 1000, extra: 1 }]) {
+      expect((await put(bad)).status, JSON.stringify(bad)).toBe(400);
+    }
+    expect((await put({ sessionId: "nope", budgetTokens: 1000 })).status).toBe(404);
+    expect((await put({ budgetTokens: 1000 }, { Cookie: "" })).status).toBe(401);
+    expect((await put({ budgetTokens: 1000 }, { Origin: "http://evil.example" })).status).toBe(403);
+    expect(budgetSets).toHaveLength(3);
+  });
+
+  it("예산에 닿은 세션의 PreToolUse는 ask, 이어 온 PermissionRequest는 budget 결정, 계속을 누르면 allow JSON과 nextGateAt 증가, 중단을 누르면 deny와 BUDGET_STOP", async () => {
+    gate = realGate;
+    store.setBudget("s1", 1000, 0);
+    realGate.setUsage("s1", 1200);
+    const input = { session_id: "s1", tool_name: "Bash", tool_input: { command: "echo fake" }, prompt_id: "p1" };
+
+    const pre1 = await hook({ hook_event_name: "PreToolUse", tool_use_id: "tu-1", ...input }).done;
+    expect(JSON.parse(pre1.body)).toEqual(preToolAsk(budgetReason(1000)));
+    const h1 = hook({ hook_event_name: "PermissionRequest", ...input });
+    const id1 = await pendingId();
+    expect(queue.list()[0]).toMatchObject({ kind: "budget", budget: { budgetTokens: 1000, usedTokens: 1200 } });
+    expect((await answer(id1, { action: "continue" })).status).toBe(200);
+    expect(JSON.parse((await h1.done).body)).toEqual(permissionResponse("allow"));
+    expect(store.get("s1")!.nextGateAt).toBe(2000);
+
+    realGate.setUsage("s1", 2500);
+    const input2 = { ...input, tool_input: { command: "echo two" } };
+    expect(JSON.parse((await hook({ hook_event_name: "PreToolUse", tool_use_id: "tu-2", ...input2 }).done).body)).toEqual(preToolAsk(budgetReason(1000)));
+    const h2 = hook({ hook_event_name: "PermissionRequest", ...input2 });
+    const id2 = await until(() => queue.list().find((v) => v.state === "pending" && v.id !== id1)?.id);
+    expect((await answer(id2, { action: "stop" })).status).toBe(200);
+    expect(JSON.parse((await h2.done).body)).toEqual(permissionResponse("deny", { message: BUDGET_STOP }));
+    expect(store.get("s1")!.nextGateAt).toBe(2000);
+  });
+
+  it("실제 BudgetGate + BudgetStore로 PreToolUse 응답이 1초 안에 온다(측정)", async () => {
+    gate = realGate;
+    store.setBudget("s1", 1000, 0);
+    realGate.setUsage("s1", 5000);
+    let max = 0;
+    for (let i = 0; i < 20; i++) {
+      const t = performance.now();
+      const r = await hook({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Bash", tool_use_id: `tu-${i}`, tool_input: { command: `c${i}` } }).done;
+      max = Math.max(max, performance.now() - t);
+      expect(JSON.parse(r.body)).toEqual(preToolAsk(budgetReason(1000)));
+    }
+    expect(max).toBeLessThan(1000);
   });
 });

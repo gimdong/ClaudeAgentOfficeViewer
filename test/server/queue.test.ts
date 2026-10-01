@@ -349,6 +349,28 @@ describe("DecisionQueue", () => {
     });
   });
 
+  it("onChange가 던져도 hold는 항목을 돌려주고 상태가 유지된다", () => {
+    q = new DecisionQueue({ onChange: () => { throw new Error("boom"); } });
+    const res = fakeRes();
+    const v = q.hold(req("Bash", { command: "a" }), res);
+    expect(v).not.toBeNull();
+    expect(q.list()).toHaveLength(1);
+    expect(q.answer(v!.id, { action: "allow" })).toEqual({ ok: true, state: "answered-dashboard" });
+    expect(res.calls).toEqual([{ code: 200, body: permissionResponse("allow") }]);
+  });
+
+  it("onResolve가 던져도 응답은 나간다", () => {
+    q = new DecisionQueue({ onResolve: () => { throw new Error("boom"); } });
+    const res = fakeRes();
+    const v = q.hold(req("Bash", { command: "a" }), res, { kind: "budget", budget: { budgetTokens: 1, usedTokens: 1 } })!;
+    expect(q.answer(v.id, { action: "continue" })).toEqual({ ok: true, state: "answered-dashboard" });
+    expect(res.calls).toEqual([{ code: 200, body: permissionResponse("allow") }]);
+    const r2 = fakeRes();
+    q.hold(req("Bash", { command: "b" }), r2);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(r2.calls).toEqual([{ code: 200 }]);
+  });
+
   it("stop은 타이머를 모두 지운다", () => {
     q = new DecisionQueue();
     q.hold(req("Bash", { command: "a" }), fakeRes());

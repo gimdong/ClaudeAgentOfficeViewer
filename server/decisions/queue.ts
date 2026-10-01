@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DecisionAnswer, DecisionDetail, DecisionKind, DecisionState, DecisionView, QuestionView } from "../../src/shared/types";
 import { MAX_FIELD, agentOf, redact, summarize, toGraphemes } from "../events/summarize";
-import { getLogger } from "../log";
+import { errInfo, getLogger } from "../log";
 import { BUDGET_STOP, DENY_DEFAULT, HOLD_MS, PLAN_MAX, REASON_MAX, buildAnswers, permissionResponse } from "./protocol";
 
 /** 붙잡는 결정의 상한. 가짜 hook이 폭주해도 메모리와 화면이 버티게 한다(Review Focus 1) */
@@ -138,7 +138,7 @@ export class DecisionQueue {
       if (!res.writableEnded) this.resolve(e, "closed-terminal");
     });
     this.entries.set(view.id, e);
-    this.opts.onChange?.();
+    this.notify("onChange");
     return { ...view };
   }
 
@@ -168,7 +168,7 @@ export class DecisionQueue {
       delete e.view.budget;
       changed = true;
     }
-    if (changed) this.opts.onChange?.();
+    if (changed) this.notify("onChange");
   }
 
   /** pending(오래된 것부터) + 최근 30초 안에 끝난 것 */
@@ -218,7 +218,17 @@ export class DecisionQueue {
     this.byState[state]++;
     // 도구 입력·이유·답·세션 id는 남기지 않는다(스펙 8장). 세션은 큐 안의 순번
     getLogger().info("decisions", "resolved", { kind: e.view.kind, state, ms: t - e.startedAt, session: this.sessionNo.get(e.view.sessionId) });
-    this.opts.onChange?.();
-    this.opts.onResolve?.({ ...e.view });
+    this.notify("onChange");
+    this.notify("onResolve", { ...e.view });
+  }
+
+  /** 콜백 오류가 붙잡은 응답 처리를 막지 않게 한다. 오류 코드만 남긴다 */
+  private notify(name: "onChange" | "onResolve", v?: DecisionView): void {
+    try {
+      if (name === "onChange") this.opts.onChange?.();
+      else this.opts.onResolve?.(v!);
+    } catch (e) {
+      getLogger().error("decisions", `${name} failed`, { error: errInfo(e) });
+    }
   }
 }

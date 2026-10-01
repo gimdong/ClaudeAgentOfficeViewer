@@ -2,9 +2,11 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
-import type { DecisionAnswer, DiagnosticsSummary } from "../src/shared/types";
+import type { DiagnosticsSummary } from "../src/shared/types";
 import type { HookStats } from "./events/stats";
 import { COOKIE, bearerOf, cookieOf, tokenMatches } from "./auth";
+import { BUDGET_MAX, BUDGET_MIN } from "./budget/store";
+import { parseAnswer } from "./decisions/protocol";
 import type { DecisionQueue } from "./decisions/queue";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
@@ -75,6 +77,8 @@ export function createApp(
     /** 결정 큐(스펙 3.2). 없으면 PermissionRequest도 즉시 빈 200(Phase 1 동작) */
     decisions?: Pick<DecisionQueue, "hold" | "answer">;
     gate?: BudgetGateHooks;
+    /** PUT /api/budget(스펙 5.4). sessionId가 없으면 새 층 기본값. 값 검사는 라우트가 한다 */
+    budget?: { set(sessionId: string | undefined, budgetTokens: number | null): void };
   } = {},
 ): Express {
   const app = express();
@@ -222,7 +226,6 @@ export function createApp(
 
   if (opts.decisions) {
     const queue = opts.decisions;
-    const ACTIONS = new Set(["allow", "deny", "answer", "continue", "stop"]);
     // 쓰기 인증(쿠키 + 같은 출처, B32)은 위 /api 미들웨어가 한다. auth 없이 만든 앱은 예전 Origin 규칙
     app.post(
       "/api/decisions/:id",
@@ -233,17 +236,45 @@ export function createApp(
       },
       express.json({ limit: "16kb", type: () => true }),
       (req, res) => {
-        const body = req.body as { action?: unknown } | null;
-        if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.action !== "string" || !ACTIONS.has(body.action)) {
-          return void res.status(400).json({});
-        }
-        // 종류·형식 판단은 큐가 한다. 이유·답 내용은 로그에 남기지 않는다
-        const r = queue.answer(req.params.id as string, body as DecisionAnswer);
+        // 모르는 키·큰 배열·틀린 타입은 400. 종류에 맞는지는 큐가 판단한다. 이유·답 내용은 로그에 남기지 않는다
+        const a = parseAnswer(req.body);
+        if (!a) return void res.status(400).json({});
+        const r = queue.answer(req.params.id as string, a);
         if (r.ok) res.status(200).json({ state: r.state });
         else res.status(r.status).json(r.state ? { state: r.state } : {});
       },
     );
     app.use("/api/decisions", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(err.status === 413 ? 413 : 400).json({});
+    });
+  }
+
+  if (opts.budget) {
+    const budget = opts.budget;
+    app.put(
+      "/api/budget",
+      (req, res, next) => {
+        if (!isSameOrigin(req.headers.origin, req.headers.host)) return void res.status(403).end();
+        if (!req.is("application/json")) return void res.status(415).end();
+        next();
+      },
+      express.json({ limit: "4kb", type: () => true }),
+      (req, res) => {
+        const b = req.body as { sessionId?: unknown; budgetTokens?: unknown } | null;
+        const t = b?.budgetTokens;
+        const valid =
+          !!b && typeof b === "object" && !Array.isArray(b) &&
+          Object.keys(b).every((k) => k === "sessionId" || k === "budgetTokens") &&
+          (b.sessionId === undefined || typeof b.sessionId === "string") &&
+          (t === null || (typeof t === "number" && Number.isInteger(t) && t >= BUDGET_MIN && t <= BUDGET_MAX));
+        if (!valid) return void res.status(400).json({});
+        const sessionId = b.sessionId as string | undefined;
+        if (sessionId !== undefined && !hub.current().sessions.some((s) => s.id === sessionId)) return void res.status(404).json({});
+        budget.set(sessionId, t as number | null);
+        res.status(204).end();
+      },
+    );
+    app.use("/api/budget", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(err.status === 413 ? 413 : 400).json({});
     });
   }

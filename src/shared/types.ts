@@ -109,6 +109,17 @@ export interface SessionView {
   endedAt?: string;
   context: ContextInfo | null;
   members: Member[];
+  /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
+  budget?: BudgetView;
+}
+
+/** 층 예산. usedTokens는 세션 구성원 tokens.total의 합(cacheRead 제외) */
+export interface BudgetView {
+  budgetTokens: number;
+  usedTokens: number;
+  nextGateAt: number;
+  /** usedTokens >= nextGateAt */
+  reached: boolean;
 }
 
 export interface Limits {
@@ -141,6 +152,8 @@ export interface Snapshot {
   decisionCount: number;
   /** 결정 큐: pending(오래된 것부터) + 최근 30초 안에 끝난 것 */
   decisions: DecisionView[];
+  /** 새 층에 줄 예산 기본값. 없으면 기본값 없음 */
+  defaultBudgetTokens?: number;
 }
 
 // ───────── 진단(베타): 서버와 화면이 같이 쓴다 ─────────

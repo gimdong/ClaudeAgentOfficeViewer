@@ -3,6 +3,8 @@ import { basename, join } from "node:path";
 import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot } from "../src/shared/types";
 import { emptySum } from "../src/shared/tokens";
 import type { OfficeConfig } from "./config";
+import type { BudgetGate } from "./budget/gate";
+import type { BudgetStore } from "./budget/store";
 import type { DecisionQueue } from "./decisions/queue";
 import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
@@ -22,6 +24,8 @@ export interface BuilderOptions {
   events?: Pick<EventStore, "agents" | "prune">;
   /** 결정 큐(Phase 2). 연결되면 손들기는 큐의 pending만 본다(Ruling B28·B40) — derive의 decision은 쓰지 않는다 */
   decisions?: Pick<DecisionQueue, "list">;
+  /** 층 예산(Phase 2 스펙 5장). 빌드마다 사용량을 관문에 넣고 처음 본 세션을 저장소에 알린다 */
+  budget?: { gate: Pick<BudgetGate, "setUsage" | "usage" | "view">; store: Pick<BudgetStore, "touch" | "defaultTokens"> };
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -120,11 +124,21 @@ export class SnapshotBuilder {
         this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions),
       ),
     );
+    const budget = this.opts.budget;
+    if (budget) {
+      for (const v of views) budget.gate.setUsage(v.id, v.members.reduce((n, m) => n + m.tokens.total, 0));
+      budget.store.touch(views.filter((v) => v.alive).map((v) => v.id), (id) => budget.gate.usage(id));
+      for (const v of views) {
+        const b = budget.gate.view(v.id);
+        if (b) v.budget = b;
+      }
+    }
+    const defaultBudgetTokens = budget?.store.defaultTokens();
     const decisionCount = decisions
       ? decisions.filter((d) => d.state === "pending").length
       : views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
 
-    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: decisions ?? [] };
+    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: decisions ?? [], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}) };
   }
 
   private async sessionView(

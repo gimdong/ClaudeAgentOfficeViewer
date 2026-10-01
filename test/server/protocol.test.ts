@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetReason, buildAnswers, permissionResponse, preToolAsk, preToolDeny } from "../../server/decisions/protocol";
+import { budgetReason, buildAnswers, parseAnswer, permissionResponse, preToolAsk } from "../../server/decisions/protocol";
 
 describe("hook 응답 형식(스펙 2장, 계획 Global Constraints)", () => {
   it("권한 응답 JSON이 글자 그대로다", () => {
@@ -11,7 +11,6 @@ describe("hook 응답 형식(스펙 2장, 계획 Global Constraints)", () => {
       hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow", updatedInput: { a: 1 } } },
     });
     expect(JSON.stringify(preToolAsk("R"))).toBe('{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"R"}}');
-    expect(JSON.stringify(preToolDeny("R"))).toBe('{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"R"}}');
   });
 
   it("budgetReason은 천 단위 쉼표와 스펙 문구", () => {
@@ -35,6 +34,12 @@ describe("buildAnswers", () => {
     expect(Object.keys(out!)).toEqual([raw]);
   });
 
+  it("질문 원문이 __proto__여도 answers에 들어간다", () => {
+    const out = buildAnswers({ questions: [Q("__proto__", ["a"]), Q("constructor", ["b"])] }, [{ labels: [0] }, { other: "자유" }]);
+    expect(Object.keys(out!)).toEqual(["__proto__", "constructor"]);
+    expect(JSON.parse(JSON.stringify(out))).toEqual(JSON.parse('{"__proto__":"a","constructor":"자유"}'));
+  });
+
   it("buildAnswers: 어긋나면 null", () => {
     expect(buildAnswers(input, [{ labels: [0] }])).toBeNull(); // 개수
     expect(buildAnswers(input, [{ labels: [2] }, { labels: [0] }])).toBeNull(); // 범위 밖
@@ -50,5 +55,28 @@ describe("buildAnswers", () => {
     expect(buildAnswers(null, [])).toBeNull();
     expect(buildAnswers(input, "x" as never)).toBeNull();
     expect(buildAnswers(input, [{ labels: [0.5] }, { labels: [0] }] as never)).toBeNull();
+  });
+});
+
+describe("parseAnswer(답 본문 모양)", () => {
+  it("다섯 가지 모양만 받는다", () => {
+    expect(parseAnswer({ action: "allow" })).toEqual({ action: "allow" });
+    expect(parseAnswer({ action: "deny" })).toEqual({ action: "deny" });
+    expect(parseAnswer({ action: "deny", reason: "r" })).toEqual({ action: "deny", reason: "r" });
+    expect(parseAnswer({ action: "continue" })).toEqual({ action: "continue" });
+    expect(parseAnswer({ action: "stop" })).toEqual({ action: "stop" });
+    expect(parseAnswer({ action: "answer", answers: [{ labels: [0, 1] }, { other: "x" }] })).toEqual({ action: "answer", answers: [{ labels: [0, 1] }, { other: "x" }] });
+  });
+
+  it("임의 키·큰 배열·__proto__·틀린 타입은 null", () => {
+    for (const bad of [
+      null, [], "x", 1, {}, { action: "nope" }, { action: 1 },
+      { action: "allow", extra: 1 }, { action: "deny", reason: 1 }, { action: "stop", reason: "r" },
+      { action: "answer" }, { action: "answer", answers: "x" }, { action: "answer", answers: Array(3000).fill({ labels: [0] }) },
+      { action: "answer", answers: [{ labels: [0], other: "x" }] }, { action: "answer", answers: [{ labels: ["0"] }] },
+      { action: "answer", answers: [{ labels: Array(100).fill(0) }] }, { action: "answer", answers: [{ other: 1 }] }, { action: "answer", answers: [null] },
+      JSON.parse('{"__proto__":{"x":1},"action":"allow"}'),
+      JSON.parse('{"action":"answer","answers":[{"__proto__":{},"labels":[0]}]}'),
+    ]) expect(parseAnswer(bad), JSON.stringify(bad)).toBeNull();
   });
 });
