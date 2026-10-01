@@ -289,6 +289,15 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(box("⑤")).toContain("자세한 기록: /Users/<사용자 이름>/.claude-office/logs/install-");
   });
 
+  it("로그 정리 안내가 실제 정리 대상과 같다(실행 로그만 7일, 설치 기록은 남음)", () => {
+    const log = readFileSync(join(__dirname, "../../server/log.ts"), "utf8");
+    // 로거의 정리는 office-YYYY-MM-DD.log만 지운다(install-*.log는 대상이 아님)
+    expect(log).toContain("const FILE = /^office-(\\d{4}-\\d{2}-\\d{2})\\.log$/;");
+    expect(log).toContain("retainDays ?? 7");
+    expect(html).toContain("실행 로그는 7일이 지나면 저절로 지워집니다(설치 기록은 남습니다).");
+    expect(html).not.toContain("로그는 7일이 지나면 저절로 지워집니다.</li>");
+  });
+
   it("부록 A에 베타 미검증 안내와 OS별 플러그인 폴더가 있다(B20)", () => {
     const a = html.slice(html.indexOf('id="s8"'), html.indexOf('id="s9"'));
     expect(a).toContain("이 설정은 베타에서 검증하지 못했습니다. 관리자는 IT 시험 PC에서 먼저 확인해 주세요.");
