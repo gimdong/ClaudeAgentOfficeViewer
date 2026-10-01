@@ -81,9 +81,16 @@ describe("SnapshotHub", () => {
       let n = 0;
       const write = () => h.write("sessions/2.json", { pid: process.pid, sessionId: "w2", updatedAt: Date.now() + n++ });
       await write();
-      const again = setInterval(() => void write(), 500);
-      const s = await Promise.race([seen, new Promise<null>((r) => setTimeout(() => r(null), 5000))]);
+      // 진행 중인 마지막 쓰기를 기억해 두고, 끝난 뒤에야 임시 폴더를 지운다(겹치면 폴더가 다시 생기거나 처리 안 된 rejection)
+      let last: Promise<void> = Promise.resolve();
+      const again = setInterval(() => {
+        last = write().catch(() => {});
+      }, 500);
+      let timer: NodeJS.Timeout | undefined;
+      const s = await Promise.race([seen, new Promise<null>((r) => (timer = setTimeout(() => r(null), 5000)))]);
       clearInterval(again);
+      clearTimeout(timer);
+      await last;
       expect(s, "fs.watch 알림이 5초 안에 오지 않았다").not.toBeNull();
       expect(s!.sessions.map((x) => x.id).sort()).toEqual(["w1", "w2"]);
       expect(Date.now() - t0).toBeLessThan(5000);
