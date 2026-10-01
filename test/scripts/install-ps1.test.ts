@@ -73,7 +73,8 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
 
   it("Remove-Item의 대상이 모두 $Prefix 아래다", () => {
     const text = readFileSync(LAUNCHER_PS1, "utf8");
-    const lines = text.split("\n").filter((l) => l.includes("Remove-Item"));
+    // 주석 줄(한글 설명에 "Remove-Item"이라는 글자가 그대로 들어갈 수 있다)은 빼고 실제 코드 줄만 본다.
+    const lines = text.split("\n").filter((l) => !l.trim().startsWith("#") && l.includes("Remove-Item"));
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
       // "(Join-Path $Prefix ...)" 또는 변수 자체가 $Prefix(uninstall 끝의 prefix 폴더 삭제)여야 한다.
@@ -97,6 +98,51 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
   it("statusline을 다루지 않는다(B12, 베타 미지원)", () => {
     for (const f of [INSTALL_PS1, LAUNCHER_PS1, LAUNCHER_CMD]) {
       expect(readFileSync(f, "utf8").toLowerCase(), f).not.toContain("statusline");
+    }
+  });
+
+  // #59(Ruling B13): T7의 uninstall 안전장치를 install.ps1/claude-office.ps1에도 처음부터 넣는다.
+  it("claude-office.ps1은 $PSCommandPath의 심볼릭 링크·정션을 실제 경로로 풀고 나서 $Prefix를 정한다", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    expect(text).toContain("Resolve-RealPath");
+    expect(text).toContain(".Target");
+    const resolveIdx = text.indexOf("function Resolve-RealPath");
+    const prefixIdx = text.indexOf("$Prefix = Split-Path");
+    expect(resolveIdx).toBeGreaterThan(-1);
+    expect(prefixIdx).toBeGreaterThan(resolveIdx); // $Prefix 계산이 풀기 함수 정의보다 뒤에 와야 쓸 수 있다
+  });
+
+  it("claude-office.ps1은 지우기(Remove-Item) 전에 app\\server.mjs·VERSION이 있는지 확인한다", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    const checkIdx = text.indexOf('Test-Path (Join-Path $Prefix "app\\server.mjs")');
+    // 주석 줄은 빼고 실제 코드에서 처음 나오는 Remove-Item 위치를 본다(한글 설명에 "Remove-Item"
+    // 글자가 그대로 들어갈 수 있어 text.indexOf만 쓰면 주석에 걸릴 수 있다).
+    const codeLines = text.split("\n");
+    let firstRemoveOffset = -1;
+    let offset = 0;
+    for (const line of codeLines) {
+      if (!line.trim().startsWith("#") && line.includes("Remove-Item") && firstRemoveOffset === -1) firstRemoveOffset = offset;
+      offset += line.length + 1;
+    }
+    expect(checkIdx).toBeGreaterThan(-1);
+    expect(text).toContain('Test-Path (Join-Path $Prefix "VERSION")');
+    expect(firstRemoveOffset).toBeGreaterThan(checkIdx); // 확인이 모든 Remove-Item보다 앞서야 한다
+  });
+
+  it("빈 값·드라이브 루트(C:\\)·%USERPROFILE% 자체를 -Prefix와 삭제 대상에서 거부한다", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      expect(text, f).toMatch(/\^\[A-Za-z\]:\\\\\?\$/); // 드라이브 루트 패턴(C:\ 또는 C:)
+      expect(text, f).toContain("USERPROFILE");
+      expect(text, f).toMatch(/IsNullOrWhiteSpace|IsNullOrEmpty/);
+    }
+  });
+
+  it("PATH 비교는 대소문자와 끝의 \"\\\" 차이를 같은 항목으로 본다", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      expect(text, f).toContain("ToLowerInvariant");
+      expect(text, f).toContain("TrimEnd('\\')");
     }
   });
 

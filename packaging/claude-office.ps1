@@ -8,7 +8,42 @@ param(
 )
 if ($null -eq $RestArgs) { $RestArgs = @() }
 $ErrorActionPreference = "Stop"
-$Prefix = Split-Path -Parent $PSScriptRoot
+
+# $PSCommandPath가 심볼릭 링크·정션일 수 있다(T7의 claude-office.sh와 같은 문제 — Ruling B13).
+# Get-Item의 Target 속성으로 끝까지 따라간다(여러 단계일 수 있어 재귀). 링크가 아니면
+# [IO.Path]::GetFullPath로 그냥 정규화만 한다.
+function Resolve-RealPath([string]$Path) {
+  $item = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
+  if ($item -and $item.Target) {
+    $target = $item.Target
+    if ($target -is [array]) { $target = $target[0] }
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+      $target = Join-Path (Split-Path -Parent $item.FullName) $target
+    }
+    return Resolve-RealPath $target
+  }
+  return [System.IO.Path]::GetFullPath($Path)
+}
+$ScriptPath = Resolve-RealPath $PSCommandPath
+$Prefix = Split-Path -Parent (Split-Path -Parent $ScriptPath)
+
+# 비었거나 드라이브 루트(C:\ 등)이거나 %USERPROFILE% 자체면(위 링크 버그나 손상된 설치) 아래
+# Remove-Item들이 엉뚱한 곳을 지울 수 있다 — uninstall뿐 아니라 모든 하위 명령 실행 전에
+# 검증한다(Ruling B13). 설치가 실제로 돼 있는지는 app\server.mjs·VERSION 존재로 판단하고,
+# 지우기 전에 반드시 다시 확인한다.
+if ([string]::IsNullOrWhiteSpace($Prefix) -or ($Prefix -match '^[A-Za-z]:\\?$')) {
+  Write-Error "설치 폴더 경로가 올바르지 않습니다(`"$Prefix`"). 다시 설치해 주세요."
+  exit 1
+}
+if ($Prefix.TrimEnd('\') -ieq $env:USERPROFILE.TrimEnd('\')) {
+  Write-Error "설치 폴더 경로가 올바르지 않습니다(사용자 폴더 자체). 다시 설치해 주세요."
+  exit 1
+}
+if (-not (Test-Path (Join-Path $Prefix "app\server.mjs")) -or -not (Test-Path (Join-Path $Prefix "VERSION"))) {
+  Write-Error "설치 폴더를 찾지 못했습니다(`"$Prefix`") — 다시 설치해 주세요."
+  exit 1
+}
+
 # 모든 하위 명령에서 항상 설정한다 — 그래야 서버 로거가 <prefix>\logs로 쓴다(Ruling B10).
 $env:CLAUDE_OFFICE_PREFIX = $Prefix
 
@@ -51,10 +86,14 @@ switch ($cmd) {
     }
 
     # 사용자 PATH에서 claude-office의 bin 경로 항목만 지운다(설치 때 "User" 범위에만 추가했다).
+    # 기존 값을 통째로 덮어쓰지 않고 우리 항목만 걸러낸다. 대소문자와 끝의 "\" 차이는 같은
+    # 항목으로 본다(Windows 경로는 대소문자를 구분하지 않고, 끝에 "\"가 붙고 안 붙고는 사람마다
+    # 다를 수 있다 — Ruling B13).
     $binDir = Join-Path $Prefix "bin"
+    $normalize = { param($p) $p.TrimEnd('\').ToLowerInvariant() }
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($userPath) {
-      $parts = ($userPath -split ";") | Where-Object { $_ -ne "" -and $_ -ne $binDir }
+      $parts = ($userPath -split ";") | Where-Object { $_ -ne "" -and (& $normalize $_) -ne (& $normalize $binDir) }
       [Environment]::SetEnvironmentVariable("Path", ($parts -join ";"), "User")
     }
 

@@ -10,6 +10,18 @@ param(
 $ErrorActionPreference = "Stop"
 $Here = $PSScriptRoot
 
+# 빈 값·드라이브 루트(C:\ 등)·%USERPROFILE% 자체는 거부한다 — uninstall이 이 안을 통째로
+# 지우므로(Ruling B13, T7의 install.sh --prefix 검증과 같음).
+if ([string]::IsNullOrWhiteSpace($Prefix) -or ($Prefix -match '^[A-Za-z]:\\?$')) {
+  Write-Host "설치 폴더 경로가 올바르지 않습니다(`"$Prefix`")."
+  exit 2
+}
+if ($Prefix.TrimEnd('\') -ieq $env:USERPROFILE.TrimEnd('\')) {
+  Write-Host "설치 폴더로 사용자 폴더 자체는 쓸 수 없습니다. 예: -Prefix `"$env:USERPROFILE\.claude-office`""
+  exit 2
+}
+$Prefix = [System.IO.Path]::GetFullPath($Prefix)
+
 function Confirm-Step([string]$Message) {
   if ($Yes) { return $true }
   $a = Read-Host "$Message [y/N]"
@@ -66,8 +78,10 @@ Write-InstallLog "copy" "ok" "앱 파일 복사 완료 `"$Prefix\app`""
 # 주므로 건드리지 않는다. 이미 있으면 추가하지 않는다)
 if (-not $NoPath) {
   $binDir = Join-Path $Prefix "bin"
+  # 대소문자와 끝의 "\" 차이는 같은 항목으로 본다(Ruling B13).
+  $normalize = { param($p) $p.TrimEnd('\').ToLowerInvariant() }
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  $already = $userPath -and (($userPath -split ";") -contains $binDir)
+  $already = $userPath -and (($userPath -split ";") | Where-Object { (& $normalize $_) -eq (& $normalize $binDir) })
   if ($already) {
     Write-InstallLog "path" "skip" "이미 등록됨 `"$binDir`""
   } elseif (Confirm-Step "사용자 PATH에 claude-office 명령 경로를 추가할까요?") {
