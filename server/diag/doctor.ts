@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HookStatsView } from "../events/stats";
@@ -39,6 +39,18 @@ const INSTALL_FIX = "설치 스크립트를 다시 실행해 플러그인 설치
 // 관리자 정책은 파일 말고 다른 방식(MDM 등)으로도 배포될 수 있어, 파일이 없다고 문제 없다고 단정하지 않는다
 const MANAGED_MISSING = "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)";
 const APPENDIX_A = " 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.";
+
+/** 플러그인 hooks.json의 PermissionRequest timeout(초). 대시보드에서 답할 시간(스펙 3.1) */
+const PERMISSION_TIMEOUT_S = 600;
+
+/** 플러그인 파일(비밀 아님)을 JSON으로 읽는다. 읽을 수 없으면 null */
+async function readJson(path: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
 
 const item = (id: string, status: Status, title: string, detail: string, fix = ""): DoctorItem => ({ id, status, title, detail, fix });
 
@@ -109,7 +121,7 @@ type Check = (d: Required<DoctorDeps>) => Promise<DoctorItem>;
 /** 점검이 던질 때 쓸 id·제목(checks와 같은 순서) */
 const META: Array<[string, string]> = [
   ["node", "Node.js"], ["app", "프로그램 파일"], ["port", "포트"], ["claude_home", "Claude 데이터 폴더"], ["claude_cli", "Claude Code"],
-  ["plugin", "플러그인"], ["managed", "회사 관리자 설정"], ["proxy", "프록시"], ["hooks", "실시간 이벤트"], ["statusline", "요금제 한도(선택)"],
+  ["plugin", "플러그인"], ["token", "대시보드 열쇠"], ["hook_timeout", "결정 대기 시간"], ["managed", "회사 관리자 설정"], ["proxy", "프록시"], ["hooks", "실시간 이벤트"], ["statusline", "요금제 한도(선택)"],
 ];
 
 const checks: Check[] = [
@@ -156,6 +168,43 @@ const checks: Check[] = [
     return pluginEnabled(s?.enabledPlugins)
       ? item("plugin", "ok", "플러그인", "켜져 있음")
       : item("plugin", "warn", "플러그인", "꺼져 있음 또는 설치 안 됨", INSTALL_FIX);
+  },
+  // 대시보드 열쇠(토큰) 파일: 있는지와 권한만 본다. 내용은 읽지 않는다(값이 결과·진단 파일로 새지 않게)
+  async (d) => {
+    const title = "대시보드 열쇠";
+    let mode: number;
+    try {
+      mode = statSync(d.paths.tokenFile).mode;
+    } catch {
+      return item("token", "warn", title, "없음", "claude-office를 다시 켜면 만들어집니다");
+    }
+    // 다른 사용자가 읽을 수 있으면 경고한다. Windows는 권한 비트가 뜻이 없어 보지 않는다
+    if (d.platform !== "win32" && (mode & 0o077) !== 0)
+      return item("token", "warn", title, "있음(권한 확인 필요)", "claude-office를 다시 켜면 권한이 바로잡힙니다(본인만 읽을 수 있게).");
+    return item("token", "ok", title, "있음");
+  },
+  // 플러그인의 PermissionRequest hook이 600초 기다리는지. 캐시에서 가장 최근 버전 폴더의 hooks.json을 본다
+  async (d) => {
+    const title = "결정 대기 시간";
+    const root = join(d.claudeHome, "plugins", "cache", "claude-office", "claude-office");
+    let newest: string | null = null;
+    let newestAt = -Infinity;
+    try {
+      for (const v of await readdir(root)) {
+        const at = (await stat(join(root, v))).mtimeMs;
+        if (existsSync(join(root, v, "hooks", "hooks.json")) && at > newestAt) {
+          newest = v;
+          newestAt = at;
+        }
+      }
+    } catch {
+      /* 캐시 폴더 없음 */
+    }
+    if (!newest) return item("hook_timeout", "warn", title, "플러그인 캐시 없음", INSTALL_FIX);
+    const parsed = (await readJson(join(root, newest, "hooks", "hooks.json"))) as { hooks?: { PermissionRequest?: Array<{ hooks?: Array<{ timeout?: unknown }> }> } } | null;
+    const t = parsed?.hooks?.PermissionRequest?.[0]?.hooks?.[0]?.timeout;
+    if (t === PERMISSION_TIMEOUT_S) return item("hook_timeout", "ok", title, `${PERMISSION_TIMEOUT_S}초`);
+    return item("hook_timeout", "warn", title, `${typeof t === "number" ? t : "알 수 없음"}초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, INSTALL_FIX);
   },
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);

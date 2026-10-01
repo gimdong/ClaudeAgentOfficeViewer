@@ -98,6 +98,16 @@ export function analyze(b: DiagBundle): string {
   const events = Object.entries(h.byEvent).sort((a, b) => b[1] - a[1]);
   if (events.length) out.push("| 이벤트 | 건수 |", "|---|---|", ...events.map(([k, n]) => `| ${cell(k)} | ${n} |`), "");
 
+  // Phase 2 결정 통계. 이전 버전 진단 파일에는 이 필드가 없다
+  const dec = (b as Partial<DiagBundle>).decisions;
+  out.push("## 결정", "");
+  if (!dec) out.push("결정 통계 없음(이전 버전 진단 파일)", "");
+  else {
+    const total = Object.values(dec.byKind).reduce((a, n) => a + n, 0);
+    const rows = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `| ${cell(k)} | ${n} |`);
+    out.push(`- 합계 ${total}건`, "", "| 종류 | 건수 |", "|---|---|", ...rows(dec.byKind), "", "| 결과 | 건수 |", "|---|---|", ...rows(dec.byState), "");
+  }
+
   // 초안: 사람이 다듬어 director에게 보낸다. 형식은 팀 규칙 [QA 인폼] 증상 / 재현 조건 / 근거 / 추정 원인 / 제안
   const firstFail = b.doctor.find((i) => i.status === "fail");
   const top = groups[0];

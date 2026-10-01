@@ -161,6 +161,30 @@ describe("analyze", () => {
   });
 });
 
+describe("결정 절(Phase 2)", () => {
+  it("종류별·결과별 건수를 보여 준다", async () => {
+    const b = await bundle();
+    const md = analyze({
+      ...b,
+      decisions: { byKind: { permission: 3, question: 1, plan: 0, budget: 2, team: 0 }, byState: { pending: 1, "answered-dashboard": 3, "closed-terminal": 1, expired: 1 } },
+    });
+    const s = section(md, "결정");
+    expect(s).toContain("| permission | 3 |");
+    expect(s).toContain("| budget | 2 |");
+    expect(s).toContain("| answered-dashboard | 3 |");
+    expect(s).toContain("| expired | 1 |");
+    expect(s).toContain("합계 6건");
+  });
+
+  it("decisions 필드가 없는 옛 진단 파일도 읽는다", async () => {
+    const b = await bundle();
+    const { decisions: _drop, ...old } = b as DiagBundle & { decisions?: unknown };
+    const md = analyze(old as DiagBundle);
+    expect(section(md, "결정")).toContain("결정 통계 없음(이전 버전 진단 파일)");
+    expect(md).toContain("## [QA 인폼] 초안");
+  });
+});
+
 describe("CLI", () => {
   const run = (args: string[]) => spawnSync(join("node_modules", ".bin", "tsx"), ["scripts/qa-analyze.ts", ...args], { encoding: "utf8" });
 

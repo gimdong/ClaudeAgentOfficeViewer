@@ -7,6 +7,8 @@ import type { DoctorItem } from "../../server/diag/doctor";
 import { HookStats } from "../../server/events/stats";
 import type { Snapshot } from "../../src/shared/types";
 import { emptySnapshot } from "../../server/snapshot";
+import { DecisionQueue } from "../../server/decisions/queue";
+import { Logger, setLogger } from "../../server/log";
 
 const NOW = Date.UTC(2026, 9, 1, 3);
 const HOME = "/Users/fakeuser";
@@ -153,6 +155,42 @@ describe("buildBundle", () => {
   it("로그 폴더가 없으면 로그 없이 만든다", async () => {
     const b = await base({ logDir: join(logDir, "nope") });
     expect(b.logs).toEqual([]);
+  });
+});
+
+describe("결정 통계(Phase 2)", () => {
+  /** express Response 중 큐가 쓰는 부분만 흉내 낸다(queue.test와 같은 모양) */
+  const fakeRes = () => ({ writableEnded: false, on() {}, status: () => ({ json() {}, end() {} }) });
+  const req = (tool: string, toolInput: Record<string, unknown>) => ({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: tool, tool_input: toolInput });
+
+  it("decisions 통계가 들어가고, 토큰 값·거부 이유·답 내용·도구 입력이 없다", async () => {
+    const FAKE_TOKEN = "e".repeat(64);
+    writeFileSync(join(logDir, "token"), FAKE_TOKEN); // 같은 폴더에 있어도 진단 파일은 읽지 않는다
+    setLogger(new Logger({ dir: logDir, now: () => NOW, home: HOME })); // 큐가 남기는 결정 로그도 진단 파일에 들어간다
+    const q = new DecisionQueue({ now: () => NOW });
+    try {
+      const a = q.hold(req("Bash", { command: "echo FAKE-COMMAND-xyz" }), fakeRes())!;
+      q.answer(a.id, { action: "deny", reason: "FAKE-REASON-xyz" });
+      const b = q.hold(req("AskUserQuestion", { questions: [{ question: "FAKE-QUESTION?", multiSelect: false, options: [{ label: "FAKE-LABEL" }] }] }), fakeRes())!;
+      q.answer(b.id, { action: "answer", answers: [{ other: "FAKE-ANSWER-xyz" }] });
+      q.hold(req("Write", { file_path: "/tmp/FAKE-PATH" }), fakeRes()); // 아직 대기 중
+      const bundle = await base({ decisions: q.stats() });
+      expect(bundle.decisions.byKind).toMatchObject({ permission: 2, question: 1 });
+      expect(bundle.decisions.byState).toMatchObject({ pending: 1, "answered-dashboard": 2 });
+      const text = JSON.stringify(bundle);
+      for (const bad of [FAKE_TOKEN, "FAKE-REASON", "FAKE-ANSWER", "FAKE-COMMAND", "FAKE-QUESTION", "FAKE-LABEL", "FAKE-PATH"]) expect(text, bad).not.toContain(bad);
+    } finally {
+      q.stop();
+      setLogger(new Logger({ dir: "" }));
+    }
+  });
+
+  it("decisions를 주지 않으면 0으로 채운다", async () => {
+    const b = await base();
+    expect(b.decisions).toEqual({
+      byKind: { permission: 0, question: 0, plan: 0, budget: 0, team: 0 },
+      byState: { pending: 0, "answered-dashboard": 0, "closed-terminal": 0, expired: 0 },
+    });
   });
 });
 

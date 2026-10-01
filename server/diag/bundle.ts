@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { arch, homedir, platform } from "node:os";
 import { join } from "node:path";
 import type { Snapshot } from "../../src/shared/types";
+import type { DecisionStats } from "../decisions/queue";
 import type { HookStatsView } from "../events/stats";
 import { scrub } from "../log";
 import type { DoctorItem } from "./doctor";
@@ -15,6 +16,8 @@ export interface DiagBundle {
   doctor: DoctorItem[];
   hooks: HookStatsView;
   snapshot: { sessions: number; members: number; teams: number; decisions: number; error: boolean };
+  /** 결정 종류별·결과별 건수만(Phase 2). 도구 입력·거부 이유·답 내용은 없다 */
+  decisions: DecisionStats;
   logs: Array<{ file: string; lines: string[] }>; // 최근 7일, 새 파일이 앞
   truncated: boolean;
 }
@@ -29,7 +32,14 @@ export interface BundleInput {
   appVersion: string;
   claudeVersion?: string | null;
   maxBytes?: number;
+  /** 서버의 DecisionQueue.stats(). 없으면(CLI가 서버 없이 만들 때 등) 0으로 채운다 */
+  decisions?: DecisionStats;
 }
+
+const EMPTY_DECISIONS = (): DecisionStats => ({
+  byKind: { permission: 0, question: 0, plan: 0, budget: 0, team: 0 },
+  byState: { pending: 0, "answered-dashboard": 0, "closed-terminal": 0, expired: 0 },
+});
 
 const DAY = 86_400_000;
 const OFFICE_LOG = /^office-(\d{4})-(\d{2})-(\d{2})\.log$/; // 날짜는 UTC(로그 줄의 t와 같다)
@@ -168,6 +178,7 @@ export async function buildBundle(d: BundleInput): Promise<DiagBundle> {
       decisions: s.decisionCount ?? 0,
       error: !!s.error,
     },
+    decisions: d.decisions ?? EMPTY_DECISIONS(),
     logs: await readLogs(d.logDir, now),
     truncated: false,
   };

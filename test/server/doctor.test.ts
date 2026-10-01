@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, utimes, writeFile } from "node:fs/promises";
+import { chmodSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { defaultProbePort, formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
 import type { HookStatsView } from "../../server/events/stats";
@@ -20,6 +21,7 @@ vi.mock("node:fs", async (orig) => {
 
 const NOW = Date.UTC(2026, 9, 1, 3);
 const FAKE_SECRET = "FAKE-sk-ant-xxx";
+const FAKE_TOKEN = "f".repeat(64);
 let h: FakeHome;
 let paths: OfficePaths;
 beforeEach(async () => {
@@ -65,12 +67,12 @@ async function item(id: string, o: Partial<DoctorDeps> = {}): Promise<DoctorItem
 
 describe("runDoctor", () => {
   it("항목 id 순서가 고정이다", async () => {
-    expect((await runDoctor(deps())).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "managed", "proxy", "hooks", "statusline"]);
+    expect((await runDoctor(deps())).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_timeout", "managed", "proxy", "hooks", "statusline"]);
   });
 
   it("점검 하나가 던지면 그 항목만 warn(확인 중 오류)이고 나머지는 낸다", async () => {
     const items = await runDoctor(deps({ probePort: async () => { throw new Error("boom"); }, which: () => { throw new Error("boom"); } }));
-    expect(items).toHaveLength(10);
+    expect(items).toHaveLength(12);
     expect(items.find((i) => i.id === "port")).toMatchObject({ status: "warn", title: "포트", detail: "확인 중 오류" });
     expect(items.find((i) => i.id === "claude_cli")).toMatchObject({ status: "warn", detail: "확인 중 오류" });
     expect(items.find((i) => i.id === "node")!.status).toBe("ok");
@@ -137,6 +139,51 @@ describe("runDoctor", () => {
     const missing = await item("plugin");
     expect(missing.status).toBe("warn");
     expect(missing.fix).toContain("claude plugin install claude-office@claude-office");
+  });
+
+  it("token: 있으면 ok '있음', 없으면 warn과 다시 켜기 안내, 권한이 넓으면 warn(값은 내보내지 않음)", async () => {
+    const missing = await item("token");
+    expect(missing).toMatchObject({ status: "warn", detail: "없음", fix: "claude-office를 다시 켜면 만들어집니다" });
+    await h.write("prefix/token", FAKE_TOKEN);
+    chmodSync(h.path("prefix/token"), 0o600);
+    const ok = await item("token");
+    expect(ok).toMatchObject({ status: "ok", detail: "있음" });
+    chmodSync(h.path("prefix/token"), 0o644);
+    const loose = await item("token", { platform: "darwin" });
+    expect(loose).toMatchObject({ status: "warn", detail: "있음(권한 확인 필요)" });
+    expect(loose.fix).toContain("claude-office를 다시 켜면");
+    // Windows는 권한 비트를 보지 않는다
+    expect((await item("token", { platform: "win32" })).status).toBe("ok");
+    const all = await runDoctor(deps());
+    expect(JSON.stringify(all)).not.toContain(FAKE_TOKEN);
+  });
+
+  it("토큰 파일을 열지 않는다(존재와 권한만 본다)", async () => {
+    await h.write("prefix/token", FAKE_TOKEN);
+    opened.length = 0;
+    await runDoctor(deps());
+    expect(opened.filter((p) => p === paths.tokenFile || p.endsWith("/token"))).toEqual([]);
+  });
+
+  it("hook_timeout: 가장 최근 버전 폴더의 PermissionRequest timeout이 600이면 ok, 아니면 warn, 캐시가 없으면 warn", async () => {
+    const cache = (v: string) => `.claude/plugins/cache/claude-office/claude-office/${v}/hooks/hooks.json`;
+    const hooks = (t: number) => ({ hooks: { PreToolUse: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: 5 }] }], PermissionRequest: [{ matcher: "*", hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: t }] }] } });
+    const none = await item("hook_timeout");
+    expect(none).toMatchObject({ status: "warn", detail: "플러그인 캐시 없음" });
+    expect(none.fix).toContain("claude plugin install claude-office@claude-office");
+    await h.write(cache("2.0.0-beta.2"), hooks(5));
+    const old = await item("hook_timeout");
+    expect(old).toMatchObject({ status: "warn", detail: "5초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요" });
+    expect(old.fix).toContain("claude plugin");
+    // 새 버전 폴더(더 최근 mtime)가 생기면 그것을 본다
+    await h.write(cache("2.1.0-dev"), hooks(600));
+    const past = new Date(NOW - 3_600_000);
+    utimesSync(h.path(".claude/plugins/cache/claude-office/claude-office/2.0.0-beta.2"), past, past);
+    expect(await item("hook_timeout")).toMatchObject({ status: "ok", detail: "600초" });
+    // 반대로 옛 폴더가 더 최근이면 옛 폴더를 본다
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(h.path(".claude/plugins/cache/claude-office/claude-office/2.0.0-beta.2"), later, later);
+    expect((await item("hook_timeout")).detail).toContain("5초");
   });
 
   it("managed: 파일 없음 ok, 훅 차단 fail, 허용 목록 확인", async () => {
