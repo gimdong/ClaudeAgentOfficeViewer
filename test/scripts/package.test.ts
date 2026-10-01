@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, inject, it } from "vitest";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -90,16 +90,19 @@ const ZIP = join(ROOT, "release", `claude-office-${VERSION}.zip`);
 let buildError: Error | undefined;
 
 beforeAll(() => {
-  // globalSetup이 CLAUDE_OFFICE_SKIP_PACKAGE_BUILD=1로 건너뛰었거나 실패를 삼켰을 리는 없지만
-  // (실패하면 globalSetup 자체가 던져서 전체 실행이 멎는다), 혹시 산출물이 없으면 각 테스트에서
-  // "왜 실패했는지" 바로 알 수 있게 명확한 메시지를 남긴다.
-  if (!existsSync(TAR)) {
-    buildError = new Error(`${TAR} 없음 — package:beta 산출물이 없습니다(globalSetup 확인 필요)`);
+  // #87(리뷰어 지적): release/에 결과물이 "있기만" 한 걸로는 안 된다 — 파일 경로 없이 -t만으로
+  // 걸러서 globalSetup이 빌드를 건너뛴 경우, release/에 예전 버전 결과물이 남아 있으면 그걸로
+  // 조용히 통과해 버린다. globalSetup이 실제로 빌드를 끝냈을 때만 provide한 타임스탬프가
+  // 있는지로 "이번 실행에서" 빌드됐는지를 확인한다.
+  if (inject("packageBuiltAt") == null) {
+    buildError = new Error(
+      "이번 실행에서 package:beta가 빌드되지 않았습니다 — CLAUDE_OFFICE_FORCE_PACKAGE_BUILD=1로 다시 실행해 주세요.",
+    );
   }
 });
 
 function requireBuildOk() {
-  if (buildError) throw new Error(`package:beta 산출물 없음: ${buildError.message}`);
+  if (buildError) throw new Error(buildError.message);
 }
 
 describe("npm run package:beta", () => {
