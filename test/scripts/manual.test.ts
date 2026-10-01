@@ -134,6 +134,29 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).not.toContain("TODO(T10)");
   });
 
+  it("설치·런처 문구가 스크립트와 같고 TODO가 남지 않았다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const install = read("packaging/install.sh");
+    const launcher = read("packaging/claude-office.sh");
+    const ps1 = read("packaging/install.ps1");
+    const pairs: Array<[string, string]> = [
+      [install, "에 claude-office 명령 경로를 추가할까요?"],
+      [install, "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다."],
+      [install, "설치 완료. 새 터미널에서 claude-office 를 실행하세요."],
+      [install, "이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요."],
+      [install, "사용설명서 6장(문제가 생겼을 때)"],
+      [ps1, "사용자 PATH에 claude-office 명령 경로를 추가할까요?"],
+      [launcher, "로그와 진단 파일도 지울까요?"],
+    ];
+    for (const [src, text] of pairs) {
+      expect(src, text).toContain(text);
+      if (text !== "사용설명서 6장(문제가 생겼을 때)") expect(html, text).toContain(text);
+    }
+    // install.sh가 가리키는 6장이 "문제가 생겼을 때"다
+    expect(html).toContain('<h2 id="s6">6. 문제가 생겼을 때</h2>');
+    expect(html).not.toMatch(/TODO\(/);
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);
