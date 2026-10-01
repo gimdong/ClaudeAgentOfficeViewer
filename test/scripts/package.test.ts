@@ -205,6 +205,23 @@ describe("npm run package:beta", () => {
     }
   });
 
+  // Task 8 fix round 1(#76) Critical: Windows PowerShell 5.1은 BOM 없는 .ps1을 시스템 코드페이지로
+  // 읽어 한글이 깨질 수 있다 — CRLF 변환(toCRLF)이 BOM을 보존하는지 패키지 결과물로 직접 확인한다.
+  it.skipIf(!existsSync(join(ROOT, "packaging/install.ps1")))("zip 안의 .ps1 두 개는 UTF-8 BOM을 유지한다", () => {
+    requireBuildOk();
+    const unzipped = mkdtempSync(join(tmpdir(), "claude-office-pkgtest-unzip-bom-"));
+    try {
+      execFileSync("unzip", ["-o", "-q", ZIP, "-d", unzipped]);
+      const base = join(unzipped, `claude-office-${VERSION}`);
+      for (const rel of ["install.ps1", "claude-office.ps1"]) {
+        const buf = readFileSync(join(base, rel));
+        expect([...buf.subarray(0, 3)], rel).toEqual([0xef, 0xbb, 0xbf]);
+      }
+    } finally {
+      rmSync(unzipped, { recursive: true, force: true });
+    }
+  });
+
   it("tar.gz 안에 .map·.test.·.env 파일이 없다", () => {
     requireBuildOk();
     const out = execFileSync("tar", ["-tzf", TAR]).toString();
