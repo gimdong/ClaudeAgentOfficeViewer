@@ -5,13 +5,31 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 PREFIX="$HOME/.claude-office"; YES=0; NOPATH=0; NOOPEN=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --prefix) PREFIX=$2; shift 2 ;;
+    --prefix)
+      if [ $# -lt 2 ]; then echo "--prefix에는 설치 폴더 경로가 필요합니다. 예: --prefix /opt/claude-office" >&2; exit 2; fi
+      PREFIX=$2; shift 2 ;;
     --yes) YES=1; shift ;;
     --no-path) NOPATH=1; shift ;;
     --no-open) NOOPEN=1; shift ;;
     *) echo "알 수 없는 옵션: $1" >&2; exit 2 ;;
   esac
 done
+
+# 빈 값·"/"는 절대/상대 변환 전에 먼저 걸러낸다 — 변환하면 빈 문자열이 "$(pwd)/"가 되어 거부를
+# 피해갈 수 있다. 홈 폴더 자체도 거부한다(uninstall이 이 안을 통째로 지우므로 — 리뷰어 Critical).
+case "$PREFIX" in
+  "") echo "설치 폴더로 빈 값은 쓸 수 없습니다." >&2; exit 2 ;;
+  "/") echo "설치 폴더로 \"/\"는 쓸 수 없습니다." >&2; exit 2 ;;
+esac
+case "$PREFIX" in
+  /*) : ;;
+  *) PREFIX="$(pwd)/$PREFIX" ;; # 상대 경로는 지금 디렉터리 기준 절대 경로로(cwd가 나중에 바뀌면 꼬인다)
+esac
+if [ "$PREFIX" = "$HOME" ]; then
+  echo "설치 폴더로 홈 폴더 자체는 쓸 수 없습니다. 예: --prefix \"\$HOME/.claude-office\"" >&2
+  exit 2
+fi
+
 ask() { [ "$YES" = 1 ] && return 0; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
 
 # 설치 로그(SPEC 4장): 단계마다 한 줄 "<ISO 오프셋 시각> <단계> ok|fail|skip <쉬운 말 메시지>". 비밀값·
@@ -52,7 +70,17 @@ log copy ok "앱 파일 복사 완료 \"$PREFIX/app\""
 
 # 3. PATH
 if [ "$NOPATH" = 0 ]; then
-  case "${SHELL:-}" in */zsh) RC="$HOME/.zshrc" ;; *) RC="$HOME/.bashrc"; [ -f "$RC" ] || RC="$HOME/.profile" ;; esac
+  # macOS(Darwin)에서는 Terminal.app이 로그인 셸을 띄우고, 로그인 bash는 .bashrc가 아니라
+  # .bash_profile을 읽는다 — .bashrc에 추가하면 새 터미널에서 적용이 안 된 것처럼 보인다.
+  case "${SHELL:-}" in
+    */zsh) RC="$HOME/.zshrc" ;;
+    */bash)
+      if [ "$(uname)" = "Darwin" ]; then RC="$HOME/.bash_profile"
+      else RC="$HOME/.bashrc"; [ -f "$RC" ] || RC="$HOME/.profile"
+      fi
+      ;;
+    *) RC="$HOME/.bashrc"; [ -f "$RC" ] || RC="$HOME/.profile" ;;
+  esac
   if grep -q '^# claude-office PATH$' "$RC" 2>/dev/null; then
     log path skip "이미 등록됨 \"$RC\""
   elif ask "${RC}에 claude-office 명령 경로를 추가할까요?"; then

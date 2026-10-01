@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -13,7 +13,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const VERSION = pkg.version as string;
-const NODE_DIR = dirname(process.execPath);
+// PATH에 node의 실제 bin 폴더 전체를 넣으면, node와 claude가 같은 폴더에 깔린 PC(예: npm -g로
+// claude CLI를 설치한 경우)에서는 "claude 없음" 시나리오가 진짜 claude를 찾아 실행해 버릴 수 있다
+// (리뷰어 지적 — Minor, 안전). node 심볼릭 링크 하나만 있는 전용 폴더를 만들어 그 폴더만 PATH에
+// 넣는다 — 다른 실행 파일이 전혀 없으니 가짜 claude를 뒀을 때만 claude가 "있다".
+const NODE_ONLY_DIR = mkdtempSync(join(tmpdir(), "claude-office-installtest-node-only-"));
+symlinkSync(process.execPath, join(NODE_ONLY_DIR, "node"));
 
 let buildError: Error | undefined;
 let releaseAppDir: string; // .tar.gz를 풀어 만든 실제 배포물 폴더(app/plugin/install.sh/claude-office.sh가 이 안에 있음) — T6 규칙대로 release/app을 직접 쓰지 않는다.
@@ -73,7 +78,7 @@ function env(rig: Rig, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   // bash 3.2)가 이 로케일에서 "$VAR가나다" 같은 표현을 변수 이름 경계를 잘못 잡아 파싱하는 문제가
   // 실제로 있었다(install.sh의 "$RC에" → "${RC}에"로 고친 회귀). 이 로케일로 고정해야 그 버그가
   // 재발하면 테스트가 다시 잡아낸다.
-  return { HOME: rig.home, PATH: `${rig.stubBin}:${NODE_DIR}:/usr/bin:/bin`, STUB_LOG: rig.stubLog, SHELL: "/bin/zsh", LANG: "ko_KR.UTF-8", ...extra };
+  return { HOME: rig.home, PATH: `${rig.stubBin}:${NODE_ONLY_DIR}:/usr/bin:/bin`, STUB_LOG: rig.stubLog, SHELL: "/bin/zsh", LANG: "ko_KR.UTF-8", ...extra };
 }
 
 function runInstall(args: string[], e: NodeJS.ProcessEnv) {
@@ -331,4 +336,181 @@ describe("packaging/install.sh, claude-office.sh", () => {
       rig.cleanup();
     }
   });
+
+  // T7 fix round 1(배정 #58) — 리뷰어가 job tmp에서 실측 재현한 Critical: 런처가 $0의 심볼릭
+  // 링크를 안 풀어 PREFIX가 엉뚱한 곳(예: /usr/local)이 되고, uninstall이 그 엉뚱한 곳을 지웠다.
+  it("심볼릭 링크로 실행해도 uninstall이 실제 prefix만 지우고, 링크가 있던 폴더의 다른 파일은 남긴다(Critical)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+
+      const elsewhere = join(dirname(rig.home), "elsewhere");
+      mkdirSync(elsewhere, { recursive: true });
+      writeFileSync(join(elsewhere, "important.txt"), "DO NOT DELETE ME");
+      symlinkSync(join(prefix, "bin/claude-office"), join(elsewhere, "claude-office"));
+
+      const r = spawnSync(join(elsewhere, "claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+
+      expect(existsSync(prefix)).toBe(false); // 진짜 설치 폴더는 지워짐
+      expect(readFileSync(join(elsewhere, "important.txt"), "utf8")).toBe("DO NOT DELETE ME"); // 링크가 있던 폴더는 안 건드림
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("app/server.mjs·VERSION이 없는 폴더에서 uninstall하면 exit 1이고 아무것도 지우지 않는다(Critical)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const bogus = join(rig.home, "bogus-prefix");
+      mkdirSync(join(bogus, "bin"), { recursive: true });
+      const launcher = join(bogus, "bin/claude-office");
+      writeFileSync(launcher, readFileSync(join(releaseAppDir, "claude-office.sh"), "utf8"));
+      chmodSync(launcher, 0o755);
+      writeFileSync(join(bogus, "marker.txt"), "still here");
+
+      const r = spawnSync(launcher, ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("설치 폴더를 찾지 못했습니다");
+      expect(existsSync(join(bogus, "marker.txt"))).toBe(true);
+      expect(existsSync(bogus)).toBe(true); // bogus 폴더 자체도 안 지워짐
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('--prefix "/"는 거부된다(Critical)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const r = runInstall(["--prefix", "/", "--yes", "--no-open"], env(rig));
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain('"/"');
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('--prefix ""(빈 값)과 --prefix "$HOME" 자체도 거부된다', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      expect(runInstall(["--prefix", "", "--yes", "--no-open"], env(rig)).status).not.toBe(0);
+      expect(runInstall(["--prefix", rig.home, "--yes", "--no-open"], env(rig)).status).not.toBe(0);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("--prefix에 값을 안 주면 쉬운 안내와 함께 끝난다(Minor 7)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const r = runInstall(["--yes", "--no-open", "--prefix"], env(rig));
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("--prefix");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("uninstall이 rc를 심볼릭 링크·권한(600) 그대로 두고 내용만 고친다(Important)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const realRc = join(dirname(rig.home), "real-zshrc");
+      writeFileSync(realRc, "# mine\n");
+      chmodSync(realRc, 0o600);
+      symlinkSync(realRc, join(rig.home, ".zshrc"));
+
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+
+      expect(lstatSync(join(rig.home, ".zshrc")).isSymbolicLink()).toBe(true);
+      expect(statSync(realRc).mode & 0o777).toBe(0o600);
+      expect(readFileSync(realRc, "utf8")).toBe("# mine\n");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("설치·제거를 반복해도 rc에 빈 줄이 쌓이지 않는다(Minor)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      for (let i = 0; i < 3; i++) {
+        expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
+        const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+        expect(r.status, r.stderr).toBe(0);
+      }
+      expect(readFileSync(join(rig.home, ".zshrc"), "utf8")).toBe("");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  // macOS(이 저장소의 실제 실행 환경)에서는 Terminal.app이 로그인 셸을 띄우고, 로그인 bash는
+  // .bashrc가 아니라 .bash_profile을 읽는다.
+  it("macOS에서 로그인 셸이 bash면 .bashrc가 아니라 .bash_profile을 쓴다(Minor)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-open"], { ...env(rig), SHELL: "/bin/bash" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(rig.home, ".bash_profile"))).toBe(true);
+      expect(existsSync(join(rig.home, ".bashrc"))).toBe(false);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it(
+    "런처가 --port=5000 형식도 알아본다(Minor)",
+    async () => {
+      requireBuildOk();
+      const rig = makeRig();
+      try {
+        writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
+        chmodSync(join(rig.stubBin, "open"), 0o755);
+
+        const prefix = join(rig.home, ".claude-office");
+        expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+
+        const port = await getFreePort();
+        const fakeClaudeHome = join(rig.home, "fake-claude-home");
+        mkdirSync(fakeClaudeHome, { recursive: true });
+        // CLAUDE_OFFICE_NO_OPEN을 안 줘서(install 테스트들과 달리) open이 실제로 불리게 둔다.
+        const child = spawn(join(prefix, "bin/claude-office"), [`--port=${port}`, "--claude-home", fakeClaudeHome], { env: env(rig) });
+        try {
+          await new Promise<void>((resolvePromise, reject) => {
+            let out = "";
+            const onData = (b: Buffer) => {
+              out += b.toString();
+              if (out.includes(`:${port}`)) resolvePromise();
+            };
+            child.stdout?.on("data", onData);
+            child.stderr?.on("data", onData);
+            child.on("exit", (code) => reject(new Error(`서버가 일찍 끝남(code ${code}): ${out}`)));
+            setTimeout(() => reject(new Error("서버 시작 시간초과")), 10_000);
+          });
+          await new Promise((r) => setTimeout(r, 1500)); // 런처의 "(sleep 1; open ...) &" 기다림
+          const log = readFileSync(rig.stubLog, "utf8");
+          expect(log).toContain(`open http://127.0.0.1:${port}/`);
+        } finally {
+          child.kill();
+        }
+      } finally {
+        rig.cleanup();
+      }
+    },
+    20_000,
+  );
 });
