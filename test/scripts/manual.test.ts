@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
+
+/** 인라인 그림 하나의 <text> 내용을 줄마다 모은다 */
+function figureText(id: string): string {
+  const start = html.indexOf(`<figure class="fig" data-fig="${id}">`);
+  const fig = html.slice(start, html.indexOf("</figure>", start));
+  return [...fig.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1].replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&")).join("\n");
+}
 
 describe("사용설명서(docs/manual/index.html)", () => {
   it("외부 요청이 없다(스크립트·스타일·그림·글꼴 모두 안에)", () => {
@@ -52,9 +59,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다");
     // Ruling B12
     expect(html).toContain("PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음)");
-    // 본문만 본다. designer 그림(fig-install-ok, fig-diag-chip-panel)의 옛 문구는 designer가 고친 뒤 다시 넣고 html 전체로 바꾼다
-    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
-    expect(prose).not.toContain("요금제 한도 설정을 따라");
+    // 옛 statusline fix 문구가 본문에도 그림에도 없다
+    expect(html).not.toContain("요금제 한도 설정을 따라");
   });
 
   it("doctor·CLI 문구가 실제 코드와 같다", () => {
@@ -77,6 +83,36 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).not.toContain('class="fig-slot"');
     const dup = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]).filter((id, i, all) => all.indexOf(id) !== i);
     expect(dup).toEqual([]);
+  });
+
+  it("그림 11개가 designer 원본 SVG와 같다", () => {
+    const dir = join(__dirname, "../../docs/design/beta/manual-figures");
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".svg"))) expect(html, f).toContain(readFileSync(join(dir, f), "utf8").trim());
+  });
+
+  it("설치 직후 노란 줄: 본문과 그림(fig-install-ok)이 같은 두 줄(포트, 실시간 이벤트)", () => {
+    const fig = figureText("fig-install-ok");
+    const warnLines = (t: string) => t.split("\n").filter((l) => l.startsWith("⚠️")).map((l) => l.trim());
+    const expected = ["⚠️ 포트: 서버가 꺼져 있습니다(4317)", "⚠️ 실시간 이벤트: 서버가 꺼져 있어 확인하지 못했습니다"];
+    expect(warnLines(fig)).toEqual(expected);
+    expect(fig).toContain("노란 줄(포트, 실시간 이벤트)");
+    const install = html.slice(html.indexOf('id="s3"'), html.indexOf('id="s4"')).replace(/<svg[\s\S]*?<\/svg>/g, "");
+    expect(install).toContain("노란 줄 두 개");
+    expect(warnLines(install.replace(/<[^>]+>/g, "\n"))).toEqual(expected);
+  });
+
+  it("그림 속 doctor 행 문구가 doctor 코드와 같다(fig-diag-chip-panel)", () => {
+    const doctor = readFileSync(join(__dirname, "../../server/diag/doctor.ts"), "utf8");
+    // 그림은 긴 문장을 여러 줄로 나누므로 공백을 지우고 비교한다
+    const fig = figureText("fig-diag-chip-panel").replace(/\s+/g, "");
+    // 코드는 "있음: ${problems.join(", ")}"처럼 조립하므로 조각으로 확인한다
+    for (const s of ["`있음: ${problems.join(\", \")}`", '"관리자 hook만 허용"', "사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요.", "있음(로컬 주소 예외 없음)", "환경변수 NO_PROXY에 127.0.0.1,localhost 를 넣어 주세요(회사 IT 담당자에게 문의).", "최근 10분 ${v.last10min}건"]) {
+      expect(doctor, s).toContain(s);
+    }
+    for (const s of ["있음: 관리자 hook만 허용", "사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요.", "있음(로컬 주소 예외 없음)", "환경변수 NO_PROXY에 127.0.0.1,localhost 를 넣어 주세요(회사 IT 담당자에게 문의).", "최근 10분 5건"]) {
+      expect(fig, s).toContain(s.replace(/\s+/g, ""));
+    }
+    for (const title of ["회사 관리자 설정", "프록시", "포트", "실시간 이벤트", "Node.js"]) expect(doctor).toContain(`"${title}"`);
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
