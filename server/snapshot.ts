@@ -10,6 +10,7 @@ import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
 import type { EventStore } from "./events/store";
 import { readLimits } from "./collectors/limits";
+import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
@@ -119,9 +120,10 @@ export class SnapshotBuilder {
     };
     // 빌드마다 부른다 — list()가 30초 지난 끝난 결정을 정리한다(Task 3 리뷰 M4)
     const decisions = this.opts.decisions?.list();
+    const teamItems: DecisionView[] = [];
     const views = await Promise.all(
       ordered.map(async (s) =>
-        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions),
+        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions, teamItems),
       ),
     );
     const budget = this.opts.budget;
@@ -134,11 +136,12 @@ export class SnapshotBuilder {
       }
     }
     const defaultBudgetTokens = budget?.store.defaultTokens();
+    // 팀원 요청(보고서만)도 손을 든 만큼 센다
     const decisionCount = decisions
-      ? decisions.filter((d) => d.state === "pending").length
+      ? decisions.filter((d) => d.state === "pending").length + teamItems.length
       : views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
 
-    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: decisions ?? [], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}) };
+    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}) };
   }
 
   private async sessionView(
@@ -149,19 +152,43 @@ export class SnapshotBuilder {
     stale: boolean,
     floor: number,
     decisions?: readonly DecisionView[],
+    teamItems: DecisionView[] = [],
   ): Promise<SessionView> {
     const leadFile = this.usage.findFile((p) => basename(p) === `${s.sessionId}.jsonl`);
     const last = leadFile ? this.usage.lastUsage(leadFile) : undefined;
     const status: MemberState = !s.alive ? "offline" : s.status === "busy" ? "working" : "idle";
     const agents = this.opts.events?.agents(s.sessionId);
+    // 팀원 "[결정 필요]"(스펙 6장): 리드 대화 기록의 끝부분에서 찾는다. 실패하면 요청 없음
+    const teamRequests: TeamRequest[] =
+      s.alive && leadFile && (team?.members.length ?? 0) > 0
+        ? await readTeamRequests(leadFile, now).catch((e) => (warnCaught("snapshot", "cannot read team requests", e, "transcript"), []))
+        : [];
     const derived = (name: string): Derived | undefined => {
       const list = agents?.get(name);
-      const d = list ? deriveAgent(list, now) : undefined;
-      if (!decisions) return d;
-      // 큐가 연결되면 결정은 큐에서만 온다. 진행 중 도구·활동은 이벤트 그대로
-      const { decision: _derived, ...rest } = d ?? { toolRunning: false };
-      const decision = queuedDecision(decisions, s.sessionId, name);
-      return decision ? { ...rest, decision } : rest;
+      let d = list ? deriveAgent(list, now) : undefined;
+      if (decisions) {
+        // 큐가 연결되면 결정은 큐에서만 온다. 진행 중 도구·활동은 이벤트 그대로
+        const { decision: _derived, ...rest } = d ?? { toolRunning: false };
+        const decision = queuedDecision(decisions, s.sessionId, name);
+        d = decision ? { ...rest, decision } : rest;
+      }
+      if (d?.decision) return d; // 큐(또는 Phase 1 derive)가 먼저
+      const req = teamRequests.find((r) => r.from === name);
+      if (!req) return d;
+      const since = iso(req.at);
+      teamItems.push({
+        id: `team:${s.sessionId}:${name}:${req.at}`,
+        sessionId: s.sessionId,
+        agent: name,
+        kind: "team",
+        toolName: "SendMessage",
+        state: "pending",
+        createdAt: since,
+        deadline: iso(req.at + TEAM_REQUEST_TTL),
+        detail: { description: req.summary },
+        answerable: false,
+      });
+      return { ...(d ?? { toolRunning: false }), decision: { kind: "team", since, summary: req.summary } };
     };
 
     const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, "transcript")) : undefined;

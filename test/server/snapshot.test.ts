@@ -287,6 +287,44 @@ describe("SnapshotBuilder + 결정 큐(Phase 2, Ruling B28·B40)", () => {
     expect(HOLD_MS).toBe(590_000);
   });
 
+  /** 리드 대화 기록에 팀원 메시지(가짜 값, 실제와 같은 태그 모양)를 더한다 */
+  const teamMsg = (from: string, summary: string, msAgo: number) =>
+    h.append("projects/-p/s1.jsonl", [
+      { type: "user", timestamp: new Date(T - msAgo).toISOString(), message: { role: "user", content: `<teammate-message teammate_id="${from}" color="blue" summary="${summary}">\n본문\n</teammate-message>` } },
+    ]);
+
+  it("팀원 요청이 있으면 그 책상이 decision(team)이고 decisions에 answerable:false로 나온다", async () => {
+    await seed();
+    await teamMsg("developer", "[결정 필요] 포트를 무엇으로 할까요 token=FAKE12345", 60_000);
+    const snap = await build();
+    const dev = snap.sessions.find((s) => s.id === "s1")!.members.find((m) => m.name === "developer")!;
+    const at = T - 60_000;
+    expect(dev.state).toBe("decision");
+    expect(dev.decision).toEqual({ kind: "team", since: new Date(at).toISOString(), summary: "[결정 필요] 포트를 무엇으로 할까요 token=***" });
+    const item = snap.decisions.find((d) => d.kind === "team")!;
+    expect(item).toMatchObject({ id: `team:s1:developer:${at}`, sessionId: "s1", agent: "developer", state: "pending", answerable: false, detail: { description: "[결정 필요] 포트를 무엇으로 할까요 token=***" } });
+    expect(snap.decisionCount).toBe(1);
+    expect(JSON.stringify(snap)).not.toContain("FAKE12345");
+  });
+
+  it("대기 중인 큐 결정이 있으면 큐가 먼저다", async () => {
+    await seed();
+    await teamMsg("developer", "[결정 필요] 질문", 60_000);
+    const v = hold({ agent_id: "adeveloper-1", agent_type: "developer" });
+    const snap = await build();
+    const dev = snap.sessions.find((s) => s.id === "s1")!.members.find((m) => m.name === "developer")!;
+    expect(dev.decision).toMatchObject({ kind: "permission", id: v.id });
+    expect(snap.decisions.filter((d) => d.kind === "team")).toEqual([]);
+    expect(snap.decisionCount).toBe(1);
+  });
+
+  it("결정 API로 team 항목에 답하면 404", async () => {
+    await seed();
+    await teamMsg("developer", "[결정 필요] 질문", 60_000);
+    const item = (await build()).decisions.find((d) => d.kind === "team")!;
+    expect(q.answer(item.id, { action: "allow" })).toEqual({ ok: false, status: 404 });
+  });
+
   it("스냅샷 JSON에 원래 입력이 없다", async () => {
     await seed();
     hold({ tool_name: "Write", tool_input: { file_path: "/tmp/a.txt", content: `RAW-SECRET-LIKE-${"x".repeat(200_000)}` } });
