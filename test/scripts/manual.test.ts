@@ -222,7 +222,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const { JSDOM } = await import("jsdom");
     const dom = new JSDOM(html, {
       runScripts: "dangerously",
-      beforeParse(w) {
+      beforeParse(w: import("jsdom").DOMWindow) {
         Object.defineProperty(w.navigator, "userAgent", { get: () => "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)" });
         Object.defineProperty(w.navigator, "clipboard", { value: { writeText: () => Promise.resolve() } });
       },
