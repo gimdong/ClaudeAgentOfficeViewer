@@ -182,12 +182,21 @@ function main() {
     const zipPath = r("release", `claude-office-${v}.zip`);
     rmSync(zipPath, { force: true });
     try {
-      execFileSync("zip", ["-qr", zipPath, `claude-office-${v}`], { cwd: zipStage });
+      // FB-3(사용자 피드백, 2026-10-01): macOS 기본 `zip -qr`은 파일 이름에 UTF-8 플래그(EFS,
+      // bit 11 = 0x800)를 켜지 않는다 — 실측으로 모든 항목의 flag_bits가 0x0이었다. 플래그가
+      // 없으면 한국어 Windows의 탐색기나 PowerShell 5.1의 Expand-Archive가 "사용설명서.html"
+      // 같은 비-ASCII 이름을 시스템 코드페이지(CP949)로 잘못 해석해 이름이 깨질 수 있다(사용자의
+      // 실제 Windows 설치에서는 안 깨졌지만, beta.2에서 예방 차원으로 고친다). 파이썬 zipfile
+      // 모듈은 비-ASCII 이름에 이 플래그를 자동으로 켠다(직접 확인). python3는 macOS 기본
+      // 제공이라 새 의존성이 아니다.
+      execFileSync("python3", ["-m", "zipfile", "-c", zipPath, `claude-office-${v}`], { cwd: zipStage });
       return zipPath;
     } catch (e) {
-      console.error(`[package-beta] zip 명령이 필요합니다(macOS·Linux 기본 제공): ${e.message}`);
-      process.exitCode = 1;
-      return undefined;
+      // 전에는 여기서 exitCode만 1로 두고 tar.gz만으로 "완료"를 출력했다 — zip 없이도 조용히
+      // 성공한 것처럼 보였다. FB-3: python3가 없으면 원인을 알리고 크게 실패시킨다(그대로 던져서
+      // 전체 스크립트를 비정상 종료시킨다 — withLock의 "exit" 핸들러가 락은 정리한다).
+      console.error(`[package-beta] zip 생성 실패 — python3가 필요합니다(macOS·Linux 기본 제공): ${e.message}`);
+      throw e;
     } finally {
       rmSync(zipStage, { recursive: true, force: true });
     }

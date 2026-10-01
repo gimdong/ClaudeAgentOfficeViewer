@@ -227,6 +227,22 @@ describe("npm run package:beta", () => {
     }
   });
 
+  // FB-3(사용자 피드백, 2026-10-01): macOS 기본 `zip -qr`은 파일 이름에 UTF-8 플래그(EFS,
+  // bit 11 = 0x800)를 안 켜서, 한국어 Windows의 탐색기·PowerShell 5.1 Expand-Archive가
+  // "사용설명서.html"을 시스템 코드페이지로 잘못 해석해 이름이 깨질 수 있었다(실측: flag_bits가
+  // 전부 0x0). package-beta.mjs를 python3 -m zipfile로 바꿔 비-ASCII 이름에 이 플래그가 자동으로
+  //켜지는지 zip 결과물로 직접 확인한다.
+  it.skipIf(!existsSync(join(ROOT, "packaging/install.ps1")))("zip 안 사용설명서.html 항목의 flag_bits에 UTF-8 플래그(0x800)가 있다(FB-3)", () => {
+    requireBuildOk();
+    const script = [
+      "import zipfile, sys",
+      "z = zipfile.ZipFile(sys.argv[1])",
+      'print(next(i.flag_bits for i in z.infolist() if i.filename.endswith("사용설명서.html")))',
+    ].join("\n");
+    const out = execFileSync("python3", ["-c", script, ZIP], { encoding: "utf8" });
+    expect(Number(out.trim()) & 0x800, `flag_bits=${out.trim()}`).toBe(0x800);
+  });
+
   // #77: 저장소 원본뿐 아니라 tar.gz 안의 .ps1도 BOM이 있어야 한다(team-lead Ruling B16 — BOM이
   // 가장 먼저). tar.gz는 CRLF 변환을 안 거치지만(.sh용 LF 그대로 보존), 그래도 원본 그대로 BOM이
   // 보존되는지 직접 확인한다.
