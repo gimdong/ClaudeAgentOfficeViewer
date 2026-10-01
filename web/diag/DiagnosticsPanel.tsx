@@ -9,13 +9,16 @@ const LABEL = { fail: "문제", warn: "확인 필요", ok: "정상" } as const;
 type Bundle = { state: "idle" | "busy" } | { state: "done"; file: string } | { state: "fail" };
 
 /** "진단 파일" 절(디자인 6장). 패널을 닫으면 사라지므로 다시 열면 기본 상태다 */
-function BundleSection({ diagDir }: { diagDir: string | null }) {
+function BundleSection({ diagDir, announce }: { diagDir: string | null; announce(text: string): void }) {
   const [b, setB] = useState<Bundle>({ state: "idle" });
   const btn = useRef<HTMLButtonElement>(null);
   const link = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
-    if (b.state === "done") link.current?.focus();
+    if (b.state === "done") {
+      link.current?.focus();
+      announce("진단 파일을 만들었습니다");
+    }
     if (b.state === "fail") btn.current?.focus();
   }, [b]);
 
@@ -45,7 +48,7 @@ function BundleSection({ diagDir }: { diagDir: string | null }) {
         </button>
       )}
       {b.state === "done" && (
-        <div className="dp-result" role="status">
+        <div className="dp-result">
           <p>진단 파일을 만들었습니다</p>
           <span className="name">{diagDir ? `${diagDir}${sep}${b.file}` : b.file}</span>
           <a ref={link} className="pbtn" href={`/api/diagnostics/files/${b.file}`} download>
@@ -63,13 +66,13 @@ function BundleSection({ diagDir }: { diagDir: string | null }) {
   );
 }
 
-function Body({ data }: { data: DiagnosticsSummary }) {
+function Body({ data, announce }: { data: DiagnosticsSummary; announce(text: string): void }) {
   const items = sortItems(data.doctor);
   const v = verdict(items);
   return (
     <>
       <section className="dp-sec">
-        <div className={`dp-verdict ${v.status}`} role="status">
+        <div className={`dp-verdict ${v.status}`}>
           <DiagIcon name={v.status} />
           {v.text}
         </div>
@@ -108,7 +111,7 @@ function Body({ data }: { data: DiagnosticsSummary }) {
           ))}
         </ul>
       </section>
-      <BundleSection diagDir={data.diagDir || null} />
+      <BundleSection diagDir={data.diagDir || null} announce={announce} />
     </>
   );
 }
@@ -126,6 +129,16 @@ export function DiagnosticsPanel(props: {
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => title.current?.focus({ preventScroll: true }), []);
 
+  // 알림은 패널과 함께 처음부터 있는 빈 status 노드 하나에 글자만 바꿔 넣는다. 내용을 가진 채 새로 생기는
+  // role=status는 일부 스크린 리더가 읽지 않는다(Phase 1 Ruling P16). 같은 문장을 다시 알릴 때는 끝에
+  // NBSP를 번갈아 붙여 글자가 바뀌게 한다(App.tsx와 같은 방법)
+  const [say, setSay] = useState({ text: "", n: 0 });
+  const announce = (text: string) => setSay((p) => ({ text, n: p.n + 1 }));
+  const verdictText = data ? verdict(data.doctor).text : "";
+  useEffect(() => {
+    if (verdictText) announce(verdictText);
+  }, [verdictText, checkedAt]);
+
   let body;
   if (error) {
     body = (
@@ -139,11 +152,9 @@ export function DiagnosticsPanel(props: {
     );
   } else if (!data) {
     body = (
-      <div className="dp-state" role="status">
-        진단 정보를 불러오는 중…
-      </div>
+      <div className="dp-state">진단 정보를 불러오는 중…</div>
     );
-  } else body = <Body data={data} />;
+  } else body = <Body data={data} announce={announce} />;
 
   return (
     <aside id="diag-panel" className="diag-panel" role="dialog" aria-modal="false" aria-labelledby="dp-title">
@@ -161,6 +172,9 @@ export function DiagnosticsPanel(props: {
         </button>
       </header>
       <div className="dp-scroll">{body}</div>
+      <div className="sr-only" role="status">
+        {say.n % 2 === 0 ? say.text : `${say.text}\u00A0`}
+      </div>
     </aside>
   );
 }

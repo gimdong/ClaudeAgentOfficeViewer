@@ -19,27 +19,31 @@ export function useDiagnostics(open: boolean): {
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
+  const seq = useRef(0); // 요청 순번. 늦게 온 옛 응답이 새 값을 덮지 않게 마지막 요청만 반영한다
 
   const reload = useCallback(() => {
+    const n = ++seq.current;
+    const latest = () => alive.current && n === seq.current;
     setBusy(true);
     fetch("/api/diagnostics")
       .then((r) => (r.ok ? (r.json() as Promise<DiagnosticsSummary>) : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (!alive.current) return;
+        if (!latest()) return;
         setData(d);
         setError(null);
         setCheckedAt(Date.now());
       })
       .catch(() => {
-        if (alive.current) setError("진단 정보를 가져오지 못했습니다. 서버가 켜져 있는지 확인해 주세요.");
+        if (latest()) setError("진단 정보를 가져오지 못했습니다. 서버가 켜져 있는지 확인해 주세요.");
       })
       .finally(() => {
-        if (alive.current) setBusy(false);
+        if (latest()) setBusy(false);
       });
   }, []);
 
   useEffect(() => {
     alive.current = true;
+    reload(); // 칩의 점을 위해 처음 한 번
     const t = setInterval(reload, POLL_MS);
     return () => {
       alive.current = false;
@@ -47,9 +51,9 @@ export function useDiagnostics(open: boolean): {
     };
   }, [reload]);
 
-  // 처음 한 번과, 패널을 열 때마다 새로 가져온다
+  // 패널을 열 때마다 새로 가져온다(닫을 때는 가져오지 않는다)
   useEffect(() => {
-    reload();
+    if (open) reload();
   }, [open, reload]);
 
   return { data, error, checkedAt, busy, reload };

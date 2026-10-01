@@ -120,7 +120,7 @@ describe("Hud의 진단 칩과 패널", () => {
     expect(link.getAttribute("href")).toBe("/api/diagnostics/files/claude-office-diag-20261001-143205.json");
     expect(link.hasAttribute("download")).toBe(true);
     expect(screen.getByText("~/.claude-office/diagnostics/claude-office-diag-20261001-143205.json")).toBeTruthy();
-    expect(screen.getByText("진단 파일을 만들었습니다").closest("[role=status]")).not.toBeNull();
+    expect(screen.getByText("진단 파일을 만들었습니다", { selector: ".dp-result p" })).toBeTruthy();
     expect(document.activeElement).toBe(link);
     expect(screen.getByRole("button", { name: "다시 만들기" })).toBeTruthy();
   });
@@ -190,12 +190,49 @@ describe("Hud의 진단 칩과 패널", () => {
   });
 });
 
+describe("알림 영역(live region)과 요청 순서", () => {
+  it("패널 안 status 노드는 하나이고 계속 유지되며 글자만 바뀐다(불러오는 중 → 판정 → 파일 완료)", async () => {
+    let resolveDiag!: (r: Response) => void;
+    diag = () => new Promise((r) => (resolveDiag = r));
+    render(<Hud snapshot={makeSnapshot()} live />);
+    fireEvent.click(await screen.findByRole("button", { name: "진단 열기" }));
+    const panel = await screen.findByRole("dialog");
+    const live = within(panel).getByRole("status");
+    expect(live.textContent).toBe("");
+    await act(async () => resolveDiag(new Response(JSON.stringify(summary()), { status: 200 })));
+    await waitFor(() => expect(live.textContent?.trim()).toBe("문제 1개를 찾았습니다"));
+    expect(within(panel).getAllByRole("status")).toEqual([live]);
+    fireEvent.click(screen.getByRole("button", { name: "진단 파일 만들기" }));
+    await screen.findByRole("link", { name: "받기" });
+    expect(within(panel).getAllByRole("status")).toEqual([live]);
+    expect(live.textContent?.trim()).toBe("진단 파일을 만들었습니다");
+    expect(live.isConnected).toBe(true);
+  });
+
+  it("늦게 온 옛 응답이 새 값을 덮지 않고, 패널을 닫을 때는 다시 가져오지 않는다", async () => {
+    const pending: Array<(r: Response) => void> = [];
+    diag = () => new Promise((r) => pending.push(r));
+    render(<Hud snapshot={makeSnapshot()} live />);
+    const chip = await screen.findByRole("button", { name: "진단 열기" });
+    fireEvent.click(chip); // 열 때 두 번째 요청
+    await waitFor(() => expect(pending.length).toBe(2));
+    // 새 요청(2번째)이 먼저 끝나고, 옛 요청(1번째)이 나중에 끝난다
+    await act(async () => pending[1](new Response(JSON.stringify(summary({ errorsLastHour: 2 })), { status: 200 })));
+    await act(async () => pending[0](new Response(JSON.stringify(summary({ errorsLastHour: 7 })), { status: 200 })));
+    expect(screen.getByRole("button", { name: "진단 열기, 최근 1시간 오류 2건" })).toBeTruthy();
+    const before = calls.filter((c) => c.url === "/api/diagnostics").length;
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    await act(async () => {});
+    expect(calls.filter((c) => c.url === "/api/diagnostics").length).toBe(before);
+  });
+});
+
 describe("DiagnosticsPanel", () => {
   it("모두 정상이면 '모두 정상입니다', 불러오는 중이면 안내", () => {
     const ok = summary({ doctor: [{ id: "node", status: "ok", title: "Node.js", detail: "버전 24", fix: "" }] });
     const { rerender } = render(<DiagnosticsPanel data={ok} error={null} checkedAt={NOW} busy={false} onReload={() => {}} onClose={() => {}} />);
-    expect(screen.getByText("모두 정상입니다")).toBeTruthy();
+    expect(screen.getByText("모두 정상입니다", { selector: ".dp-verdict" })).toBeTruthy();
     rerender(<DiagnosticsPanel data={null} error={null} checkedAt={null} busy={false} onReload={() => {}} onClose={() => {}} />);
-    expect(screen.getByRole("status").textContent).toBe("진단 정보를 불러오는 중…");
+    expect(screen.getByText("진단 정보를 불러오는 중…")).toBeTruthy();
   });
 });

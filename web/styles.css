@@ -267,6 +267,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 /* 패널 안 버튼은 시안 값(높이 36, 13px). Phase 1의 .pbtn(28px)은 그대로 둔다 */
 .diag-panel .pbtn { justify-content: center; height: 36px; padding: 0 16px; font-size: 13px; text-decoration: none; }
 .diag-panel .pbtn:disabled { opacity: .5; cursor: progress; transform: none; }
+.diag-panel .pbtn--primary:disabled { border-color: var(--green); } /* 전역 .pbtn:disabled의 회색 테두리 대신 시안 값 */
 .dp-result { margin-top: 10px; padding: 8px 10px; border: 2px solid var(--green); display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
 .dp-result p { margin: 0; font-family: var(--font-text); font-size: 13px; color: var(--green); }
 .dp-result .name { grid-column: 1; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--ink); word-break: break-all; }
