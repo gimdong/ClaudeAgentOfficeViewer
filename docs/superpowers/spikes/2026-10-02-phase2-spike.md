@@ -3,7 +3,7 @@
 - 날짜: 2026-10-02, 실행: developer (배정 #123), 기준 HEAD `35224fe`
 - Claude Code: 시작 시 `2.1.286`, 첫 세션 시작 직후 자동 업데이트로 **`2.1.287`**. 모든 시나리오(S1~S3)는 2.1.287에서 실행.
 - 모델: `--model sonnet`. 리드 세션만 썼다(팀원·서브에이전트의 PermissionRequest는 확인하지 않음).
-- 증거 폴더: `$CLAUDE_JOB_DIR/tmp/spike2/` (`/Users/gdh/.claude/jobs/034395cd/tmp/spike2/`, 커밋하지 않음). 판정은 director가 한다.
+- 증거 폴더: `$CLAUDE_JOB_DIR/tmp/spike2/` (커밋하지 않음). 판정은 director가 한다.
 
 ## 1. 안전 값
 
@@ -23,7 +23,7 @@
 
 - `receiver.mjs`: `127.0.0.1:4319/hooks/event`. `{t, n, event, tool, keys, toolInputKeys, hasToolUseId}`만 `events.jsonl`에 쓴다(값은 남기지 않음). 요청마다 `scenario.json`을 다시 읽어 이벤트·도구별 응답 JSON과 지연(초)을 정한다. `res.on("close")`에서 `writableEnded`를 기록한다.
 - 플러그인 사본: `node scripts/make-dev-plugin.mjs --port 4319 --out spike2/plugin`, 사본의 `PermissionRequest` timeout만 600(나머지 5).
-- `run.mjs`: `spawnSync("/opt/homebrew/bin/tmux", ["-L","spike2",…], { env })`. `env`는 `{ HOME: "/Users/gdh", USER: "gdh", PATH: "<claude 버전 폴더>:/usr/bin:/bin", TERM }`만 명시(`process.env` 펼치지 않음). 명령은 `readlink ~/.local/bin/claude`의 절대 경로 + `--plugin-dir <사본> --model sonnet --permission-mode <모드>`. 시작 전 `realpath`로 작업 폴더·플러그인 사본이 job tmp 아래인지 확인.
+- `run.mjs`: `spawnSync("/opt/homebrew/bin/tmux", ["-L","spike2",…], { env })`. `env`는 `{ HOME: "$HOME"(실제 값), USER: "<사용자 이름>", PATH: "<claude 버전 폴더>:/usr/bin:/bin", TERM }`만 명시(`process.env` 펼치지 않음). 명령은 `readlink ~/.local/bin/claude`의 절대 경로 + `--plugin-dir <사본> --model sonnet --permission-mode <모드>`. 시작 전 `realpath`로 작업 폴더·플러그인 사본이 job tmp 아래인지 확인.
 - 계획과 다른 점 두 가지:
   1. **`USER` 추가.** `HOME`·`PATH`·`TERM`만으로는 첫 프롬프트에 "Not logged in · Please run /login"이 떴다(그 캡처는 같은 이름 `pane-s1a-window.txt`로 다시 찍으며 덮어써져 파일로는 남지 않음). 베타 B24 Step 4 선례(`HOME`·`PATH`·`USER`·`TERM`)대로 `USER`를 더해 로그인됨. 비밀값 아님.
   2. **`--permission-mode default` 명시.** 이 Mac의 기본 모드가 auto라 첫 세션이 "auto mode on"으로 열렸다(`pane-start2.txt`). S1 (a) "평소 권한 창이 뜨는 도구" 조건을 맞추려고 default(manual)로 다시 열었다. S2는 `plan`.
@@ -97,3 +97,18 @@
 - auto 모드에서는 평소(hook 통과) 이 두 호출에 PermissionRequest가 없었다. 즉 auto 세션에서는 예산 관문(`ask`) 말고는 대시보드에 권한 결정이 거의 오지 않을 수 있다(분류기가 막거나 묻는 명령은 이번에 시험하지 않음).
 - auto 모드 첫 응답 뒤 "Teach auto mode about your environment? 1. Yes 2. Not now 3. Don't show again" 팝업이 떴다. 설정에 쓰지 않도록 Esc로 닫았고, 직후 settings sha1이 그대로임을 확인했다(`pane-s4a-popup-esc.txt`).
 - 안전 값: 시작(06:58:37)·끝(07:00:47) 다섯 가지 모두 같음(`safety-before-s4.txt`, `safety-after-s4.txt`). 4319 리슨 없음, tmux spike2 종료. 분류기 차단 없음.
+
+### S4d — PreToolUse·PermissionRequest의 tool_input 해시 비교 (배정 #130 보충)
+
+- default 모드, 한 프롬프트에서 Read → Bash(`echo spike4d`) → Write 순서. 수신기가 세 이벤트 모두 PreToolUse에 `ask`, PermissionRequest에 2초 뒤 `allow`.
+- 수신기는 값 없이 해시(sha256 앞 16자)만 기록: (a) `JSON.stringify(tool_input)` 그대로, (b) 키를 재귀적으로 정렬한 정규 직렬화. 그 밖에 `tool_input` 키의 원래 순서와 `prompt_id` 해시.
+
+| 도구 | Pre / PermissionRequest / Post의 (a) | Pre / PermissionRequest / Post의 (b) | 키 순서 | prompt_id |
+|---|---|---|---|---|
+| Read | 세 이벤트 같음 | 세 이벤트 같음 | `file_path` | 세 도구 모두 같은 값 |
+| Bash | 세 이벤트 같음 | 세 이벤트 같음 | `command, description` | 〃 |
+| Write | 세 이벤트 같음 | 세 이벤트 같음 | `file_path, content`(정렬 순서와 다름 → (a)≠(b)지만 이벤트 사이에서는 각각 같음) | 〃 |
+
+- 결과: 같은 도구 호출에서 PreToolUse와 PermissionRequest(와 PostToolUse)의 `tool_input`은 (a)·(b) 모두 같다. 키 순서도 이벤트 사이에서 유지된다.
+- `prompt_id`는 한 프롬프트 안의 여러 도구 호출에서 같은 값이다. 이것만으로는 호출을 구분할 수 없다.
+- 증거: `ev-s4d-hash.jsonl`(n2–10), `pane-s4d-hash.txt`. 안전 값 전후 같음(`safety-before-s4d.txt`, `safety-after-s4d.txt`). 4319·tmux 정리 완료.
