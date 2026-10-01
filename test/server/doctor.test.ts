@@ -186,6 +186,18 @@ describe("runDoctor", () => {
     expect((await item("hook_timeout")).detail).toContain("5초");
   });
 
+  it("hook_timeout: hooks.json이 깨졌거나 PermissionRequest 항목이 없으면 던지지 않고 warn('알 수 없음', '초'를 붙이지 않음)", async () => {
+    const file = ".claude/plugins/cache/claude-office/claude-office/2.1.0-dev/hooks/hooks.json";
+    await h.write(file, "{not json");
+    const broken = await item("hook_timeout");
+    expect(broken).toMatchObject({ status: "warn", detail: "알 수 없음 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요" });
+    expect(broken.detail).not.toContain("초");
+    await h.write(file, { hooks: { PreToolUse: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: 5 }] }] } });
+    const missing = await item("hook_timeout");
+    expect(missing).toMatchObject({ status: "warn", detail: "알 수 없음 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요" });
+    expect(missing.fix).toContain("claude plugin install claude-office@claude-office");
+  });
+
   it("managed: 파일 없음 ok, 훅 차단 fail, 허용 목록 확인", async () => {
     const none = await item("managed");
     expect(none).toMatchObject({ status: "ok", detail: "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)" });

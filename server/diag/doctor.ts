@@ -204,7 +204,8 @@ const checks: Check[] = [
     const parsed = (await readJson(join(root, newest, "hooks", "hooks.json"))) as { hooks?: { PermissionRequest?: Array<{ hooks?: Array<{ timeout?: unknown }> }> } } | null;
     const t = parsed?.hooks?.PermissionRequest?.[0]?.hooks?.[0]?.timeout;
     if (t === PERMISSION_TIMEOUT_S) return item("hook_timeout", "ok", title, `${PERMISSION_TIMEOUT_S}초`);
-    return item("hook_timeout", "warn", title, `${typeof t === "number" ? t : "알 수 없음"}초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, INSTALL_FIX);
+    // 숫자일 때만 "초"를 붙인다(hooks.json이 깨졌거나 PermissionRequest 항목이 없으면 "알 수 없음")
+    return item("hook_timeout", "warn", title, `${typeof t === "number" ? `${t}초` : "알 수 없음"} — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, INSTALL_FIX);
   },
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);
