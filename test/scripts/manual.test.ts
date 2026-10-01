@@ -160,6 +160,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
       [launcher, "제거를 마쳤습니다."],
       [launcher, "지움: "],
       [launcher, "남김: "],
+      // B19: 요약에 프로그램 파일·PATH 설정이 항상 들어간다
+      [launcher, "프로그램 파일"],
+      [launcher, "PATH 설정"],
     ];
     for (const [src, text] of pairs) {
       expect(src, text).toContain(text);
@@ -168,6 +171,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // install.sh가 가리키는 6장이 "문제가 생겼을 때"다
     expect(html).toContain('<h2 id="s6">6. 문제가 생겼을 때</h2>');
     expect(html).not.toMatch(/TODO\(/);
+    expect(html).toContain("지움: 프로그램 파일, PATH 설정, 플러그인, logs, diagnostics");
+    expect(html).toContain("지움: 프로그램 파일, PATH 설정\n남김: 플러그인, logs, diagnostics");
+    expect(html).not.toContain("지움: 없음");
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
