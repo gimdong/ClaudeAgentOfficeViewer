@@ -797,6 +797,22 @@ describe("packaging/install.sh, claude-office.sh", () => {
     }
   });
 
+  // #115 Minor(리뷰어 지적): --no-path이고 claude도 없으면 질문을 하나도 안 하는데, 그래도
+  // "입력을 받을 수 없어..." 안내가 나오면 거짓말이다(실제로는 아무것도 안 물어봤다). RED로
+  // 먼저 확인했다 — ASKED 가드를 빼면 이 테스트가 실패한다.
+  it('질문이 하나도 없으면(--no-path, claude 없음) 입력 못 받아도 안내가 안 나온다(#115 Minor)', () => {
+    requireBuildOk();
+    const rig = makeRig({ claude: false });
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).not.toContain("입력을 받을 수 없어");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
   it('--yes로 설치하면 입력 관련 안내가 안 나온다(FB-1)', () => {
     requireBuildOk();
     const rig = makeRig();

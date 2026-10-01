@@ -64,8 +64,14 @@ if ((Test-Path -LiteralPath $Prefix) -and ((Get-ChildItem -Force -LiteralPath $P
   Write-Fail "이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요."
 }
 
+# FB-1 fix round 1(#115) Minor: -NoPath이고 claude도 없으면(또는 PATH가 이미 등록돼 있으면)
+# 질문을 하나도 안 하는데, 그런 경우에도 안내가 나오면 거짓말이다 — 실제로 물어본 적이 있을
+# 때만(그리고 그게 입력 차단 때문에 아니오가 됐을 때만) 세운다. Confirm-Step이 $Yes로 건너뛰지
+# 않고 실제로 물을 때만 $Asked를 세운다. 함수 안에서 바깥 변수를 바꾸려면 $script: 범위가 필요하다.
+$Asked = $false
 function Confirm-Step([string]$Message) {
   if ($Yes) { return $true }
+  $script:Asked = $true
   $a = Read-Host "$Message [y/N]"
   return ($a -eq "y" -or $a -eq "Y")
 }
@@ -219,7 +225,10 @@ if (-not $pathAdded) {
   # (sh와 글자까지 같은 문구 — B17, Windows는 .cmd까지 적는다).
   Write-Host "다음부터는 이렇게 켜세요: $Prefix\bin\claude-office.cmd"
 }
-if ($InputBlocked -and -not $Yes) {
-  # FB-1: sh와 글자까지 같은 문구.
-  Write-Host "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요."
+if ($InputBlocked -and -not $Yes -and $Asked) {
+  # FB-1 fix round 1(#115) Important(리뷰어 지적): install.ps1은 [switch]$Yes라서 "--yes"는
+  # 매개변수로 안 먹히고 첫 위치 매개변수($Prefix)로 들어가 엉뚱한 폴더에 설치하려 든다 —
+  # 여기만 "-Yes"로 안내한다(sh·claude-office.ps1의 uninstall은 원시 문자열 "--yes"를 직접 보므로
+  # 그대로 "--yes"). ASKED=1(실제로 물어본 적 있음)일 때만 세운다(#115 Minor).
+  Write-Host "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 -Yes를 붙여 다시 실행하세요."
 }

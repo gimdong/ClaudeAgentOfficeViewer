@@ -82,7 +82,12 @@ if [ -d "$PREFIX" ] && [ -n "$(ls -A "$PREFIX" 2>/dev/null)" ] && [ ! -f "$PREFI
   exit 2
 fi
 
-ask() { [ "$YES" = 1 ] && return 0; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
+# FB-1 fix round 1(#115) Minor: --no-path이고 claude도 없으면(또는 PATH가 이미 등록돼 있으면)
+# 질문을 하나도 안 하는데, 그런 경우에도 "입력을 받을 수 없어 '아니오'로 처리했습니다"가 나오면
+# 거짓말이다 — 실제로 물어본 적이 있을 때만(그리고 그게 입력 차단 때문에 아니오가 됐을 때만)
+# 세운다. ask()가 YES=1로 건너뛰지 않고 실제로 묻는 순간에만 ASKED=1로 세운다.
+ASKED=0
+ask() { [ "$YES" = 1 ] && return 0; ASKED=1; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
 
 # FB-1(사용자 피드백, 2026-10-01): 표준 입력이 터미널이 아니면(예: `!`로 돌리거나 파이프로 실행)
 # read가 바로 EOF를 받아 모든 질문이 조용히 "아니오"가 된다 — 스펙대로지만 안내가 없어서, 사용자가
@@ -189,7 +194,7 @@ if [ "$PATH_ADDED" = 0 ]; then
   # (ps1과 글자까지 같은 문구 — B17).
   echo "다음부터는 이렇게 켜세요: $PREFIX/bin/claude-office"
 fi
-if [ "$STDIN_TTY" = 0 ] && [ "$YES" = 0 ]; then
-  # FB-1: ps1과 글자까지 같은 문구.
+if [ "$STDIN_TTY" = 0 ] && [ "$YES" = 0 ] && [ "$ASKED" = 1 ]; then
+  # FB-1: ps1과 글자까지 같은 문구. ASKED=1(실제로 물어본 적 있음)일 때만 세운다(#115 Minor).
   echo "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요."
 fi

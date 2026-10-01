@@ -117,7 +117,11 @@ switch ($cmd) {
   "uninstall" {
     $rest = if ($RestArgs.Count -gt 1) { $RestArgs[1..($RestArgs.Count - 1)] } else { @() }
     $UYes = $rest -contains "--yes"
-    $ask_u = { param($m) if ($UYes) { $true } else { Confirm-Step $m } }
+    # FB-1 fix round 1(#115) Minor: 실제로 물어본 적이 있을 때만(그리고 그게 입력 차단 때문에
+    # 아니오가 됐을 때만) 끝에 안내를 세운다 — install.ps1의 $Asked와 같은 이유. $ask_u 스크립트
+    # 블록은 새 범위에서 돌아서 $script: 접두사가 있어야 바깥 변수가 바뀐다.
+    $UninstallAsked = $false
+    $ask_u = { param($m) if ($UYes) { $true } else { $script:UninstallAsked = $true; Confirm-Step $m } }
     # FB-1(사용자 피드백): install.ps1과 같은 이유로, 입력이 리다이렉트돼 있으면 두 질문 다
     # 조용히 "아니오"가 된다 — --yes 없이 그런 환경이면 끝에 안내한다(설치 쪽과 글자만 다름).
     $UninstallInputBlocked = [Console]::IsInputRedirected
@@ -192,8 +196,10 @@ switch ($cmd) {
     Write-Host "제거를 마쳤습니다."
     Write-Host "지움: $($removed -join ', ')"
     Write-Host "남김: $(if ($kept.Count -gt 0) { $kept -join ', ' } else { '없음' })"
-    if ($UninstallInputBlocked -and -not $UYes) {
-      # FB-1: sh와 글자까지 같은 문구(설치 쪽은 "설치하려면", 여기는 "제거하려면").
+    if ($UninstallInputBlocked -and -not $UYes -and $UninstallAsked) {
+      # FB-1: sh와 글자까지 같은 문구(설치 쪽은 "설치하려면", 여기는 "제거하려면"). uninstall은
+      # 런처가 "--yes" 원시 문자열을 직접 보므로(install.ps1의 [switch]$Yes와 달리) 여기는
+      # "--yes" 그대로 쓴다(#115 Important). $UninstallAsked=1(실제로 물어본 적 있음)일 때만 세운다.
       Write-Host "입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요."
     }
   }
