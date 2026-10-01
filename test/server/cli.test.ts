@@ -192,6 +192,42 @@ describe("CLI", () => {
     }
   }, 40_000);
 
+  it("서버가 켜져 있으면 doctor·diag가 Bearer로 서버 통계를 읽는다(긍정 경로, Ruling B52)", async () => {
+    const s = await startServer();
+    try {
+      const { request } = await import("node:http");
+      const hookPost = (body: object) =>
+        new Promise<void>((resolve) => {
+          const r = request({ host: "127.0.0.1", port: s.port, path: "/hooks/event", method: "POST", headers: { "Content-Type": "application/json" } }, (res) => {
+            res.resume();
+            res.on("end", resolve);
+          });
+          r.on("error", () => resolve());
+          r.end(JSON.stringify(body));
+          // PermissionRequest는 서버가 붙잡는다 — 잠시 뒤 끊어 closed-terminal로 만든다
+          if ((body as { hook_event_name: string }).hook_event_name === "PermissionRequest") setTimeout(() => (r.destroy(), resolve()), 300);
+        });
+      await hookPost({ hook_event_name: "Stop", session_id: "s-fake" });
+      await hookPost({ hook_event_name: "PermissionRequest", session_id: "s-fake", tool_name: "Bash", tool_input: { command: "echo fake" } });
+      await new Promise((r) => setTimeout(r, 200));
+
+      const d = await run(["doctor", "--json", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      const hooks = (JSON.parse(d.stdout) as Array<{ id: string; status: string; detail: string }>).find((i) => i.id === "hooks")!;
+      expect(hooks.detail).not.toContain("확인하지 못했습니다"); // 401이면 서버 통계를 못 읽어 이 문구가 된다
+      expect(hooks.detail).toMatch(/^최근 10분 \d+건$/);
+
+      const g = await run(["diag", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      expect(g.code).toBe(0);
+      const [file] = readdirSync(join(s.prefix, "diagnostics"));
+      const bundle = JSON.parse(readFileSync(join(s.prefix, "diagnostics", file), "utf8")) as { hooks: { total: number }; decisions: { byKind: Record<string, number>; byState: Record<string, number> } };
+      expect(bundle.hooks.total).toBeGreaterThanOrEqual(2); // CLI가 직접 만들면 0이다
+      expect(bundle.decisions.byKind.permission).toBe(1);
+      expect(bundle.decisions.byState["closed-terminal"]).toBe(1);
+    } finally {
+      await s.stop();
+    }
+  }, 40_000);
+
   it("설치본 모드에서는 콘솔에 토큰이 나오지 않는다", async () => {
     const s = await startServer();
     try {

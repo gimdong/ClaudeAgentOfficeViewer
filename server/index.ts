@@ -8,7 +8,7 @@ import { loadOrCreateToken, readToken } from "./auth";
 import { loadConfig } from "./config";
 import { BudgetGate } from "./budget/gate";
 import { BudgetStore } from "./budget/store";
-import { DecisionQueue } from "./decisions/queue";
+import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
@@ -99,9 +99,10 @@ async function doctorCli(argv: string[]): Promise<void> {
 }
 
 /** 진단 파일을 만들어 paths.diagDir에 쓰고 파일 이름을 돌려준다(서버 버튼과 CLI가 같이 쓴다) */
-async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>): Promise<string> {
+/** decisions는 켜진 서버의 큐 통계. CLI가 직접 만들 때는 없다(진단 파일에는 0으로 들어간다) */
+async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, decisions?: DecisionStats): Promise<string> {
   const claudeVersion = await readClaudeVersion(defaultWhich(process.env, process.platform)("claude"));
-  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion }));
+  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions }));
 }
 
 /**
@@ -236,7 +237,7 @@ async function main(): Promise<void> {
       logDir: scrub(paths.logDir, home) as string,
       diagDir: scrub(paths.diagDir, home) as string,
     }),
-    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor),
+    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, decisions.stats()),
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);
