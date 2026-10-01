@@ -213,6 +213,23 @@ describe("알림 영역(live region)과 요청 순서", () => {
     expect(live.textContent?.trim()).toBe("진단 파일을 만들었습니다");
   });
 
+  it("같은 문장을 두 번 알리면 끝의 NBSP가 번갈아 붙는다(일반 공백이 아님)", async () => {
+    render(<Hud snapshot={makeSnapshot()} live />);
+    fireEvent.click(await screen.findByRole("button", { name: "진단 열기" }));
+    const panel = await screen.findByRole("dialog");
+    const live = within(panel).getByRole("status");
+    await waitFor(() => expect(live.textContent?.trim()).toBe("문제 1개를 찾았습니다"));
+    const states: boolean[] = [];
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(await screen.findByRole("button", { name: i === 0 ? "진단 파일 만들기" : "다시 만들기" }));
+      await waitFor(() => expect(live.textContent?.replace(/\u00A0$/, "")).toBe("진단 파일을 만들었습니다"));
+      // trim()은 NBSP도 지우므로 쓰지 않는다. 끝 글자를 직접 본다
+      states.push(live.textContent!.endsWith("\u00A0"));
+      expect(live.textContent!.endsWith(" ")).toBe(false);
+    }
+    expect(states[0]).toBe(!states[1]);
+  });
+
   it("늦게 온 옛 응답이 새 값을 덮지 않고, 패널을 닫을 때는 다시 가져오지 않는다", async () => {
     const pending: Array<(r: Response) => void> = [];
     diag = () => new Promise((r) => pending.push(r));
