@@ -258,8 +258,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
       seen.push(status.textContent!);
       expect(d.getElementById("copy-status")).toBe(status); // 같은 노드
     }
-    expect(seen.map((x) => x.replace(/ $/, ""))).toEqual(["복사했습니다", "복사했습니다"]);
-    expect(seen[0].endsWith(" ")).toBe(!seen[1].endsWith(" "));
+    expect(seen.map((x) => x.replace(/\u00A0$/, ""))).toEqual(["복사했습니다", "복사했습니다"]);
+    expect(seen[0].endsWith("\u00A0")).toBe(!seen[1].endsWith("\u00A0"));
     expect(button.textContent).toBe("복사됨");
   });
 
