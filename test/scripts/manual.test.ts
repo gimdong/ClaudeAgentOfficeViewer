@@ -320,6 +320,28 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain(`claude-office-${version}.zip`);
   });
 
+  it("입력을 받을 수 없을 때의 안내가 스크립트와 같다(FB-1: sh 설치 --yes, Windows 설치 -Yes, 제거 --yes)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const sh = "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.";
+    const ps1 = "설치하려면 -Yes를 붙여 다시 실행하세요.";
+    const un = "제거하려면 --yes를 붙여 다시 실행하세요.";
+    expect(read("packaging/install.sh")).toContain(sh);
+    expect(read("packaging/install.ps1")).toContain(`입력을 받을 수 없어 '아니오'로 처리했습니다. ${ps1}`);
+    expect(read("packaging/claude-office.sh")).toContain(`입력을 받을 수 없어 '아니오'로 처리했습니다. ${un}`);
+    expect(read("packaging/claude-office.ps1")).toContain(`입력을 받을 수 없어 '아니오'로 처리했습니다. ${un}`);
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    expect(prose).toContain(`<pre class="out">${sh}</pre>`);
+    expect(prose).toContain(`<code>${ps1}</code>`);
+    expect(prose).toContain(`<code>${un}</code>`);
+    // 해결 명령(복사 상자)
+    for (const cmd of ["sh install.sh --yes", "powershell -ExecutionPolicy Bypass -File .\\install.ps1 -Yes", "claude-office uninstall --yes"]) {
+      expect(prose, cmd).toContain(`<code>${cmd}</code></pre><button class="copy"`);
+    }
+    // Windows 설치에는 --yes가 아니라 -Yes
+    expect(prose).not.toMatch(/install\.ps1[^<]*--yes/);
+    expect(read("packaging/install.ps1")).toMatch(/\[switch\]\$Yes/);
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);
