@@ -118,6 +118,9 @@ switch ($cmd) {
     $rest = if ($RestArgs.Count -gt 1) { $RestArgs[1..($RestArgs.Count - 1)] } else { @() }
     $UYes = $rest -contains "--yes"
     $ask_u = { param($m) if ($UYes) { $true } else { Confirm-Step $m } }
+    # FB-1(사용자 피드백): install.ps1과 같은 이유로, 입력이 리다이렉트돼 있으면 두 질문 다
+    # 조용히 "아니오"가 된다 — --yes 없이 그런 환경이면 끝에 안내한다(설치 쪽과 글자만 다름).
+    $UninstallInputBlocked = [Console]::IsInputRedirected
 
     # SPEC 3장 "동의 필요": 플러그인 제거 전에 따로 묻는다. --yes면 묻지 않고, EOF 등으로 입력을
     # 못 받으면(Confirm-Step 자체가 처리) "아니오"로 — 플러그인은 남겨 두고 지우는 법만 안내한다.
@@ -189,6 +192,10 @@ switch ($cmd) {
     Write-Host "제거를 마쳤습니다."
     Write-Host "지움: $($removed -join ', ')"
     Write-Host "남김: $(if ($kept.Count -gt 0) { $kept -join ', ' } else { '없음' })"
+    if ($UninstallInputBlocked -and -not $UYes) {
+      # FB-1: sh와 글자까지 같은 문구(설치 쪽은 "설치하려면", 여기는 "제거하려면").
+      Write-Host "입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요."
+    }
   }
   default {
     $port = 4317

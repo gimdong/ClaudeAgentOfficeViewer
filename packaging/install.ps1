@@ -70,6 +70,12 @@ function Confirm-Step([string]$Message) {
   return ($a -eq "y" -or $a -eq "Y")
 }
 
+# FB-1(사용자 피드백, 2026-10-01): 표준 입력이 리다이렉트돼 있으면(터미널이 아니면) Read-Host가
+# 바로 빈 값을 받아 모든 질문이 조용히 "아니오"가 된다 — sh와 같은 이유로 안내가 없으면 왜
+# 전부 거절됐는지 알기 어렵다. -Yes가 없는데 입력을 못 받는 환경이면 끝에 안내를 한 줄 낸다
+# (install.sh와 글자까지 같은 문구).
+$InputBlocked = [Console]::IsInputRedirected
+
 # 설치 로그(SPEC 4장, install.sh와 같은 형식): 단계마다 한 줄
 # "<시각+오프셋> <단계> ok|fail|skip <설명> "<경로>"". 비밀값·USER·호스트 이름·환경변수 값은 안
 # 쓴다 — 경로는 되지만, 반드시 줄 끝에 큰따옴표로 감싸고 설명은 그 앞에 쓴다(Ruling B10 보강 —
@@ -212,4 +218,8 @@ if (-not $pathAdded) {
   # SPEC 3장 3단계: PATH에 안 들어갔으면(거절했거나 -NoPath) 전체 경로 실행법을 안내한다
   # (sh와 글자까지 같은 문구 — B17, Windows는 .cmd까지 적는다).
   Write-Host "다음부터는 이렇게 켜세요: $Prefix\bin\claude-office.cmd"
+}
+if ($InputBlocked -and -not $Yes) {
+  # FB-1: sh와 글자까지 같은 문구.
+  Write-Host "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요."
 }

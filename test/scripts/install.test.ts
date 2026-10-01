@@ -762,4 +762,63 @@ describe("packaging/install.sh, claude-office.sh", () => {
       rig.cleanup();
     }
   });
+
+  // FB-1(사용자 피드백, 2026-10-01): `!`로 돌리면 표준 입력이 터미널이 아니라 두 질문이 조용히
+  // "아니오"가 되는데 안내가 없었다. spawnSync는 input을 안 주면 기본적으로 비어 있는 pipe라
+  // [ -t 0 ]가 이미 거짓이다(직접 확인) — 그러니 별도 stdio 조작 없이 runInstall을 그대로 쓴다.
+  it('입력을 못 받는 환경에서 --yes 없이 설치하면 "입력을 받을 수 없어..." 안내를 낸다(FB-1)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('--yes로 설치하면 입력 관련 안내가 안 나온다(FB-1)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).not.toContain("입력을 받을 수 없어");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('입력을 못 받는 환경에서 --yes 없이 uninstall하면 "...제거하려면..." 안내를 낸다(FB-1)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요.");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('--yes로 uninstall하면 입력 관련 안내가 안 나온다(FB-1)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).not.toContain("입력을 받을 수 없어");
+    } finally {
+      rig.cleanup();
+    }
+  });
 });

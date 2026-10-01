@@ -329,6 +329,26 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     // "지움"은 "프로그램 파일"로 시작해서 무조건 들어간다(두 질문에 다 아니오여도 빠지면 안 된다).
     expect(launcherSh).toMatch(/removed="프로그램 파일"/);
     expect(launcherPs1).toMatch(/\$removed\.Add\("프로그램 파일"\)/);
+
+    // FB-1(사용자 피드백): 입력을 못 받는 환경(비TTY)에서 --yes 없이 돌리면 끝에 안내한다.
+    // install/uninstall 둘 다, sh/ps1 글자까지 같다(동사만 "설치하려면"/"제거하려면"으로 다름).
+    const blockedPrefix = "입력을 받을 수 없어 '아니오'로 처리했습니다. ";
+    const installHint = `${blockedPrefix}설치하려면 --yes를 붙여 다시 실행하세요.`;
+    const uninstallHint = `${blockedPrefix}제거하려면 --yes를 붙여 다시 실행하세요.`;
+    expect(installSh).toContain(installHint);
+    expect(installPs1).toContain(installHint);
+    expect(launcherSh).toContain(uninstallHint);
+    expect(launcherPs1).toContain(uninstallHint);
+  });
+
+  // FB-1: 입력 차단 감지 자체가 sh는 [ -t 0 ], ps1은 [Console]::IsInputRedirected를 쓰는지 확인한다.
+  it("FB-1: 입력 차단 감지는 sh가 [ -t 0 ], ps1이 [Console]::IsInputRedirected를 쓴다", () => {
+    const installSh = readFileSync(join(ROOT, "packaging/install.sh"), "utf8");
+    const launcherSh = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8");
+    const installPs1 = readFileSync(INSTALL_PS1, "utf8");
+    const launcherPs1 = readFileSync(LAUNCHER_PS1, "utf8");
+    for (const f of [installSh, launcherSh]) expect(f).toMatch(/if \[ -t 0 \]; then STDIN_TTY=1/);
+    for (const f of [installPs1, launcherPs1]) expect(f).toContain("[Console]::IsInputRedirected");
   });
 
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {

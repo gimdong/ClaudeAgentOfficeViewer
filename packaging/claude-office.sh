@@ -75,6 +75,9 @@ case "$cmd" in
     UYES=0
     for a in "$@"; do [ "$a" = "--yes" ] && UYES=1; done
     ask_u() { [ "$UYES" = 1 ] && return 0; ask "$1"; }
+    # FB-1(사용자 피드백): install.sh와 같은 이유로, 표준 입력이 터미널이 아니면 두 질문 다
+    # 조용히 "아니오"가 된다 — --yes 없이 그런 환경이면 끝에 안내한다(설치 쪽과 글자만 다름).
+    if [ -t 0 ]; then STDIN_TTY=1; else STDIN_TTY=0; fi
 
     # SPEC 3장 "동의 필요": 플러그인 제거 전에 따로 묻는다. --yes면 묻지 않고, EOF 등으로 입력을
     # 못 받으면 ask()가 그대로 "아니오"가 된다(read 실패 시 $a가 비어 y/Y와 안 같음) — 플러그인은
@@ -153,6 +156,10 @@ case "$cmd" in
     echo "제거를 마쳤습니다."
     echo "지움: $removed"
     echo "남김: ${kept:-없음}"
+    if [ "$STDIN_TTY" = 0 ] && [ "$UYES" = 0 ]; then
+      # FB-1: ps1과 글자까지 같은 문구(설치 쪽은 "설치하려면", 여기는 "제거하려면").
+      echo "입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요."
+    fi
     ;;
   *)
     port=4317
