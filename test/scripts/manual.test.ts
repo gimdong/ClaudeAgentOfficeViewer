@@ -331,8 +331,10 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(read("packaging/claude-office.ps1")).toContain(`입력을 받을 수 없어 '아니오'로 처리했습니다. ${un}`);
     const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
     expect(prose).toContain(`<pre class="out">${sh}</pre>`);
-    expect(prose).toContain(`<code>${ps1}</code>`);
-    expect(prose).toContain(`<code>${un}</code>`);
+    expect(prose).toContain(`<li>Windows 설치: <code>입력을 받을 수 없어 '아니오'로 처리했습니다. ${ps1}</code></li>`);
+    expect(prose).toContain(`<code>입력을 받을 수 없어 '아니오'로 처리했습니다. ${un}</code></li>`);
+    // B26: "모두 예" 명령이 무엇에 동의하는지 밝힌다
+    expect(prose).toContain("이 명령은 PATH 추가와 Claude Code 플러그인 설치에 모두 동의합니다.");
     // 해결 명령(복사 상자)
     for (const cmd of ["sh install.sh --yes", "powershell -ExecutionPolicy Bypass -File .\\install.ps1 -Yes", "claude-office uninstall --yes"]) {
       expect(prose, cmd).toContain(`<code>${cmd}</code></pre><button class="copy"`);
