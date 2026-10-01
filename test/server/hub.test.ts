@@ -74,10 +74,18 @@ describe("SnapshotHub", () => {
       });
       await hub.start();
       const seen = new Promise<Snapshot>((r) => hub!.subscribe(r));
+      // macOS 재귀 fs.watch(FSEvents)는 감시를 막 시작한 직후의 변경을 부하가 클 때 놓칠 수 있다. 주기 갱신은
+      // 꺼 두었으므로(60초) 한 번 놓치면 알림이 영영 오지 않는다. 알림이 올 때까지 500ms마다 내용을 바꿔 다시 쓴다.
+      // 첫 쓰기부터 5초 안에 와야 한다는 기준은 그대로다
       const t0 = Date.now();
-      await h.write("sessions/2.json", { pid: process.pid, sessionId: "w2", updatedAt: Date.now() });
-      const s = await seen;
-      expect(s.sessions.map((x) => x.id).sort()).toEqual(["w1", "w2"]);
+      let n = 0;
+      const write = () => h.write("sessions/2.json", { pid: process.pid, sessionId: "w2", updatedAt: Date.now() + n++ });
+      await write();
+      const again = setInterval(() => void write(), 500);
+      const s = await Promise.race([seen, new Promise<null>((r) => setTimeout(() => r(null), 5000))]);
+      clearInterval(again);
+      expect(s, "fs.watch 알림이 5초 안에 오지 않았다").not.toBeNull();
+      expect(s!.sessions.map((x) => x.id).sort()).toEqual(["w1", "w2"]);
       expect(Date.now() - t0).toBeLessThan(5000);
     } finally {
       hub?.stop();
