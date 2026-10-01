@@ -25,7 +25,16 @@ resolve_self() {
   echo "$p"
 }
 SELF=$(resolve_self "$0")
-PREFIX=$(cd "$(dirname "$SELF")/.." && pwd)
+# pwd -P로 중간 경로의 심볼릭 링크까지 전부 물리 경로로 푼다(resolve_self는 $0 자체만 풀었다).
+PREFIX=$(cd "$(dirname "$SELF")/.." && pwd -P)
+
+# PREFIX나 $HOME을 글자 그대로 비교하면 $HOME 끝에 "/"가 붙은 경우 등을 놓친다(T7 fix round 2,
+# install.sh와 같은 이유 — Ruling B15). $HOME도 pwd -P로 같은 방식으로 정규화해서 비교한다.
+NORM_HOME=$(cd "$HOME" 2>/dev/null && pwd -P) || NORM_HOME=$HOME
+case "$PREFIX" in
+  /*[!/]*) : ;;
+  *) PREFIX="/" ;; # 선행 "//"를 그대로 돌려주는 환경 대응(install.sh와 같음)
+esac
 
 # PREFIX가 비었거나 "/"이거나 $HOME 자체면(위 심볼릭 링크 버그나 손상된 설치) 아래 rm -rf들이
 # 엉뚱한 곳을 지울 수 있다 — uninstall뿐 아니라 서버·doctor·diag 실행 전에도 항상 검증한다
@@ -33,7 +42,7 @@ PREFIX=$(cd "$(dirname "$SELF")/.." && pwd)
 case "$PREFIX" in
   "" | "/") echo "설치 폴더 경로가 올바르지 않습니다(\"$PREFIX\"). 다시 설치해 주세요." >&2; exit 1 ;;
 esac
-if [ "$PREFIX" = "$HOME" ]; then
+if [ "$PREFIX" = "$NORM_HOME" ]; then
   echo "설치 폴더 경로가 올바르지 않습니다(홈 폴더 자체). 다시 설치해 주세요." >&2
   exit 1
 fi

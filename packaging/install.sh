@@ -15,18 +15,70 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# 빈 값·"/"는 절대/상대 변환 전에 먼저 걸러낸다 — 변환하면 빈 문자열이 "$(pwd)/"가 되어 거부를
-# 피해갈 수 있다. 홈 폴더 자체도 거부한다(uninstall이 이 안을 통째로 지우므로 — 리뷰어 Critical).
+# 빈 값은 절대/상대 변환 전에 먼저 걸러낸다 — 변환하면 빈 문자열이 "$(pwd)/"가 되어 거부를
+# 피해갈 수 있다.
 case "$PREFIX" in
   "") echo "설치 폴더로 빈 값은 쓸 수 없습니다." >&2; exit 2 ;;
-  "/") echo "설치 폴더로 \"/\"는 쓸 수 없습니다." >&2; exit 2 ;;
 esac
 case "$PREFIX" in
   /*) : ;;
   *) PREFIX="$(pwd)/$PREFIX" ;; # 상대 경로는 지금 디렉터리 기준 절대 경로로(cwd가 나중에 바뀌면 꼬인다)
 esac
-if [ "$PREFIX" = "$HOME" ]; then
+
+# "$PREFIX" = "$HOME"처럼 글자 그대로 비교하면 --prefix "$HOME/"나 "//"나 "$HOME/."가 거부를
+# 피해간다(리뷰어 실측 — Important, B15). cd+pwd -P로 심볼릭 링크·"."·".."·중복/끝 슬래시를 전부
+# 같은 결과로 정규화한 뒤 비교한다. 처음 설치할 땐 PREFIX 자체가 아직 없는 게 보통이라(기본값
+# ~/.claude-office도 처음엔 없음), 존재하는 가장 가까운 조상까지 올라가 그걸 정규화하고 없는
+# 나머지 이름을 뒤에 붙인다 — 그 "없는 나머지" 안에 "."·".."가 있으면 뜻이 애매해지므로 거부한다.
+normalize_path() {
+  p=$1
+  if existing=$(cd "$p" 2>/dev/null && pwd -P); then
+    printf '%s\n' "$existing"
+    return 0
+  fi
+  rest=""
+  cur=$p
+  i=0
+  while [ "$i" -lt 64 ]; do
+    name=$(basename "$cur")
+    case "$name" in
+      "." | "..")
+        echo "설치 폴더 경로에 \".\"나 \"..\"가 있으면 안 됩니다." >&2
+        exit 2
+        ;;
+    esac
+    rest="$name${rest:+/$rest}"
+    parent=$(dirname "$cur")
+    if existing=$(cd "$parent" 2>/dev/null && pwd -P); then
+      printf '%s/%s\n' "$existing" "$rest"
+      return 0
+    fi
+    cur=$parent
+    i=$((i + 1))
+  done
+  printf '%s\n' "$p" # 여기까지 왔으면(사실상 안 옴 — "/"는 항상 있다) 원래 값을 그대로 쓴다
+}
+PREFIX=$(normalize_path "$PREFIX")
+NORM_HOME=$(normalize_path "$HOME")
+# POSIX는 선행 "//"를 구현 정의로 남겨 둬서, 이 환경의 pwd -P는 "//"를 "/"로 뭉개지 않고 그대로
+# 돌려준다(직접 확인) — 슬래시만 있는 결과는 전부 "/"로 본다.
+case "$PREFIX" in
+  /*[!/]*) : ;;
+  *) PREFIX="/" ;;
+esac
+if [ "$PREFIX" = "/" ]; then
+  echo "설치 폴더로 \"/\"는 쓸 수 없습니다." >&2
+  exit 2
+fi
+if [ "$PREFIX" = "$NORM_HOME" ]; then
   echo "설치 폴더로 홈 폴더 자체는 쓸 수 없습니다. 예: --prefix \"\$HOME/.claude-office\"" >&2
+  exit 2
+fi
+
+# 대상 폴더가 이미 있고 비어 있지 않은데 우리가 설치한 흔적(VERSION)이 없으면 남의 폴더일 수
+# 있다 — 재설치(VERSION 있음)는 그대로 두고, 그 밖의 경우만 거부한다(B15).
+if [ -d "$PREFIX" ] && [ -n "$(ls -A "$PREFIX" 2>/dev/null)" ] && [ ! -f "$PREFIX/VERSION" ]; then
+  echo "이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요." >&2
   exit 2
 fi
 

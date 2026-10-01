@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -189,7 +189,10 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }));
       expect(r.status, r.stderr).toBe(0);
       const log = readFileSync(rig.stubLog, "utf8").trim().split("\n");
-      expect(log[0]).toBe(`plugin marketplace add ${prefix}/plugin`);
+      // install.sh가 이제 pwd -P로 정규화해서(T7 fix round 2) macOS의 /var -> /private/var 같은
+      // 심볼릭 링크를 실제 물리 경로로 바꿔 쓴다 — mkdtemp가 돌려준 그대로가 아니라 realpath와 비교한다.
+      const realPrefix = realpathSync(prefix);
+      expect(log[0]).toBe(`plugin marketplace add ${realPrefix}/plugin`);
       expect(log[1]).toBe("plugin install claude-office@claude-office --scope user");
     } finally {
       rig.cleanup();
@@ -238,9 +241,13 @@ describe("packaging/install.sh, claude-office.sh", () => {
     try {
       const prefix = join(rig.home, ".claude-office");
       expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
+      // pwd -P 정규화(T7 fix round 2) 때문에 rc에는 mkdtemp가 돌려준 경로가 아니라 실제 물리
+      // 경로(macOS의 /var -> /private/var 등)가 적힌다 — install 뒤(prefix가 실제로 생긴 뒤)
+      // realpath로 비교한다.
+      const realPrefix = realpathSync(prefix);
       const rc1 = readFileSync(join(rig.home, ".zshrc"), "utf8");
       expect(rc1.split("\n").filter((l) => l === "# claude-office PATH")).toHaveLength(1);
-      expect(rc1).toContain(`export PATH="${prefix}/bin:$PATH"`);
+      expect(rc1).toContain(`export PATH="${realPrefix}/bin:$PATH"`);
       expectValidInstallLog(installLogLines(prefix), basename(dirname(rig.home))); // path ok 줄에 실제 경로 포함(#36 형식 확인)
 
       expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
@@ -456,9 +463,10 @@ describe("packaging/install.sh, claude-office.sh", () => {
     }
   });
 
-  // macOS(이 저장소의 실제 실행 환경)에서는 Terminal.app이 로그인 셸을 띄우고, 로그인 bash는
-  // .bashrc가 아니라 .bash_profile을 읽는다.
-  it("macOS에서 로그인 셸이 bash면 .bashrc가 아니라 .bash_profile을 쓴다(Minor)", () => {
+  // macOS에서는 Terminal.app이 로그인 셸을 띄우고, 로그인 bash는 .bashrc가 아니라
+  // .bash_profile을 읽는다 — 이 분기는 install.sh의 `uname = Darwin` 검사라 다른 OS에서
+  // 돌리면 의미가 없다(#69 보충).
+  it.skipIf(process.platform !== "darwin")("macOS에서 로그인 셸이 bash면 .bashrc가 아니라 .bash_profile을 쓴다(Minor)", () => {
     requireBuildOk();
     const rig = makeRig();
     try {
@@ -513,4 +521,94 @@ describe("packaging/install.sh, claude-office.sh", () => {
     },
     20_000,
   );
+
+  // T7 fix round 2(#69/#73, Ruling B15) — "$PREFIX" = "$HOME"처럼 글자 그대로 비교하면
+  // --prefix "$HOME/"나 "//"나 "$HOME/."가 거부를 피해간다(리뷰어 실측). pwd -P 정규화 뒤
+  // 비교해야 셋 다 거부된다.
+  it('--prefix "$HOME/", "//", "$HOME/."는 모두 거부된다(Important, B15)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      expect(runInstall(["--prefix", `${rig.home}/`, "--yes", "--no-open"], env(rig)).status).not.toBe(0);
+      expect(runInstall(["--prefix", "//", "--yes", "--no-open"], env(rig)).status).not.toBe(0);
+      expect(runInstall(["--prefix", `${rig.home}/.`, "--yes", "--no-open"], env(rig)).status).not.toBe(0);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("이미 다른 파일이 있는 폴더(VERSION 없음)에는 설치를 거부하고 내용을 그대로 둔다(B15)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const foreign = join(dirname(rig.home), "foreign");
+      mkdirSync(foreign, { recursive: true });
+      writeFileSync(join(foreign, "mydata.txt"), "my precious data");
+
+      const r = runInstall(["--prefix", foreign, "--yes", "--no-open"], env(rig));
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요.");
+      expect(readFileSync(join(foreign, "mydata.txt"), "utf8")).toBe("my precious data");
+      expect(existsSync(join(foreign, "app"))).toBe(false); // 설치 흔적이 안 생김
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("재설치(VERSION 있음)는 거부되지 않는다(정상 동작 확인, B15)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      // 재설치 — 이미 VERSION이 있으니 "남의 폴더" 거부에 걸리면 안 된다.
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("아직 없는 기본 경로(--prefix 생략, ~/.claude-office)에 첫 설치가 성공한다(정규화가 정상 설치를 안 깨뜨림)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const r = runInstall(["--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(rig.home, ".claude-office/app/server.mjs"))).toBe(true);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("아직 없는 여러 단계 경로(--prefix <임시>/a/b/c)에 설치가 성공한다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, "a/b/c");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(prefix, "app/server.mjs"))).toBe(true);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it('HOME 끝에 "/"가 붙어도 런처의 홈 폴더 자체 거부가 동작한다', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      // 런처를 "$HOME/bin/claude-office"에 직접 둬서(설치 없이) PREFIX가 $HOME 자체가 되게
+      // 만든다 — 손상된 설치를 흉내 낸다.
+      mkdirSync(join(rig.home, "bin"), { recursive: true });
+      const launcher = join(rig.home, "bin/claude-office");
+      writeFileSync(launcher, readFileSync(join(releaseAppDir, "claude-office.sh"), "utf8"));
+      chmodSync(launcher, 0o755);
+
+      const r = spawnSync(launcher, ["doctor"], { env: { ...env(rig), HOME: `${rig.home}/` }, encoding: "utf8" });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("홈 폴더 자체");
+    } finally {
+      rig.cleanup();
+    }
+  });
 });
