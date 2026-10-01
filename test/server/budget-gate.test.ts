@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BudgetGate } from "../../server/budget/gate";
+import { BudgetGate, GATE_KEEP_MS } from "../../server/budget/gate";
 import { BudgetStore } from "../../server/budget/store";
 import { budgetReason, preToolAsk } from "../../server/decisions/protocol";
 import { Logger, setLogger } from "../../server/log";
@@ -169,6 +169,29 @@ describe("계속·중단·터미널 허용", () => {
     gate.onEvent({ hook_event_name: "PostToolUse", session_id: "s1", tool_use_id: "tu-1" });
     expect(store.get("s1")!.nextGateAt).toBe(2000);
     expect(demoted).toEqual(["s1"]);
+  });
+
+  it("1분 뒤에 온 PostToolUse(관문 호출의 tool_use_id)도 계속으로 본다", () => {
+    reach();
+    gate.preToolUse(pre());
+    clock += 60_000;
+    gate.onEvent({ hook_event_name: "PostToolUse", session_id: "s1", tool_use_id: "tu-1" });
+    expect(store.get("s1")!.nextGateAt).toBe(2000);
+  });
+
+  it("30분 지난 관문 기록은 다른 세션 호출 때 지워진다(세션 키 포함, Ruling B54)", () => {
+    reach();
+    gate.preToolUse(pre());
+    const calls = (gate as unknown as { calls: Map<string, unknown[]> }).calls;
+    expect(calls.has("s1")).toBe(true);
+    clock += GATE_KEEP_MS; // 정확히 30분은 남긴다
+    gate.claim(perm({ session_id: "s2" }));
+    expect(calls.has("s1")).toBe(true);
+    clock += 1;
+    gate.preToolUse(pre({ session_id: "s2" }));
+    expect(calls.has("s1")).toBe(false);
+    gate.onEvent({ hook_event_name: "PostToolUse", session_id: "s1", tool_use_id: "tu-1" });
+    expect(store.get("s1")!.nextGateAt).toBe(1000); // 지워진 기록으로는 올리지 않는다
   });
 
   it("PermissionDenied면 그대로", () => {

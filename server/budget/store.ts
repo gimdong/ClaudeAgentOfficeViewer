@@ -128,7 +128,8 @@ export class BudgetStore {
     const tmp = `${this.file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
     try {
       mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(tmp, JSON.stringify(this.state));
+      // 세션 id가 들어 있으므로 본인만 읽게 한다. rename은 임시 파일의 권한을 그대로 가져간다
+      writeFileSync(tmp, JSON.stringify(this.state), { mode: 0o600 });
       renameSync(tmp, this.file);
       this.lastSaveAt = this.now();
       this.seenDirty = false;

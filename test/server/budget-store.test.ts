@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,6 +42,13 @@ describe("BudgetStore", () => {
     expect(renames[0][0].startsWith(`${file}.tmp-`)).toBe(true);
     expect(renames[0][1]).toBe(file);
     expect(readdirSync(dir).filter((f) => f.includes(".tmp-"))).toEqual([]);
+  });
+
+  it("state.json은 0600으로 쓴다(세션 id가 들어 있다)", () => {
+    if (process.platform === "win32") return;
+    const s = store();
+    s.setDefault(2000);
+    expect(statSync(join(dir, "state.json")).mode & 0o777).toBe(0o600);
   });
 
   it("손상된 state.json이면 빈 상태로 시작하고 warn", () => {

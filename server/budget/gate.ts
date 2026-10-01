@@ -5,6 +5,11 @@ import type { BudgetStore } from "./store";
 
 /** PermissionRequest가 관문 호출을 찾을 수 있는 시간(Ruling B48) */
 export const CLAIM_MS = 10_000;
+/**
+ * 관문 기록을 남겨 두는 시간(Ruling B54). claim은 10초 안의 기록만 보지만, 터미널에서 몇 분 뒤 허용해도
+ * PostToolUse로 "계속"을 알아봐야 하므로(B35) PermissionRequest timeout(600초)보다 넉넉히 둔다
+ */
+export const GATE_KEEP_MS = 30 * 60_000;
 /** 세션마다 기억하는 관문 호출 수 */
 const KEEP_CALLS = 20;
 /** 사용자와의 대화이지 실행이 아니므로 관문을 걸지 않는다(Ruling B35) */
@@ -62,6 +67,7 @@ export class BudgetGate {
 
   preToolUse(input: Record<string, unknown>): object | null {
     try {
+      this.prune();
       const sessionId = str(input.session_id);
       const toolName = str(input.tool_name);
       if (!sessionId || !toolName || NOT_GATED.has(toolName)) return null;
@@ -81,6 +87,7 @@ export class BudgetGate {
   /** Ruling B48: 같은 세션·도구·입력 해시(양쪽에 있으면 prompt_id도)의 관문 호출이 10초 안에 있으면 한 번만 값을 준다 */
   claim(input: Record<string, unknown>): { budgetTokens: number; usedTokens: number } | null {
     try {
+      this.prune();
       const sessionId = str(input.session_id);
       const list = sessionId ? this.calls.get(sessionId) : undefined;
       const e = sessionId ? this.store.get(sessionId) : undefined;
@@ -103,6 +110,7 @@ export class BudgetGate {
   /** 터미널에서 관문 호출을 허용하면(그 tool_use_id로 PostToolUse가 옴) "계속"으로 본다(Ruling B35). 거부·실패는 그대로 */
   onEvent(input: Record<string, unknown>): void {
     try {
+      this.prune();
       if (input.hook_event_name !== "PostToolUse") return;
       const sessionId = str(input.session_id);
       const toolUseId = str(input.tool_use_id);
@@ -115,6 +123,16 @@ export class BudgetGate {
   /** 큐의 onResolve. 대시보드에서 예산 결정에 "계속"을 누르면 올린다. "중단"은 그대로(다음 호출도 다시 묻는다) */
   resolved(v: DecisionView): void {
     if (v.kind === "budget" && v.outcome === "continue") this.continue(v.sessionId);
+  }
+
+  /** 모든 세션에서 30분 넘은 기록을 지우고, 비면 세션 키도 지운다(끝난 세션의 기록이 남지 않게) */
+  private prune(): void {
+    const cutoff = this.now() - GATE_KEEP_MS;
+    for (const [id, list] of this.calls) {
+      const kept = list.filter((c) => c.at >= cutoff);
+      if (kept.length === 0) this.calls.delete(id);
+      else if (kept.length !== list.length) this.calls.set(id, kept);
+    }
   }
 
   /** nextGateAt을 올리고, 이 세션의 관문 호출 기록을 비우고(같은 관문을 두 번 올리지 않게), 남은 예산 결정을 permission으로 바꾼다 */

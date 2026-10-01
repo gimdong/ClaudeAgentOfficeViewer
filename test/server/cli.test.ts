@@ -96,7 +96,7 @@ describe("CLI", () => {
     expect(body.doctor).toHaveLength(12);
   }, 30_000);
 
-  it("doctor --json은 서버를 켜지 않고 10개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
+  it("doctor --json은 서버를 켜지 않고 12개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
     const home = mkdtempSync(join(tmpdir(), "office-doctor-home-"));
     const logDir = mkdtempSync(join(tmpdir(), "office-doctor-log-"));
     const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", String(await freePort()), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
@@ -227,6 +227,24 @@ describe("CLI", () => {
       await s.stop();
     }
   }, 40_000);
+
+  it("예산 배선: Bearer로 PUT /api/budget(기본값)이면 204이고 prefix의 state.json에 저장된다", async () => {
+    const s = await startServer();
+    try {
+      const token = readFileSync(join(s.prefix, "token"), "utf8").trim();
+      const r = await fetch(`http://127.0.0.1:${s.port}/api/budget`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ budgetTokens: 5000 }),
+      });
+      expect(r.status).toBe(204);
+      const state = JSON.parse(readFileSync(join(s.prefix, "state.json"), "utf8")) as { defaultBudgetTokens?: number };
+      expect(state.defaultBudgetTokens).toBe(5000);
+      if (process.platform !== "win32") expect(statSync(join(s.prefix, "state.json")).mode & 0o777).toBe(0o600);
+    } finally {
+      await s.stop();
+    }
+  }, 30_000);
 
   it("설치본 모드에서는 콘솔에 토큰이 나오지 않는다", async () => {
     const s = await startServer();
