@@ -32,6 +32,7 @@ export function emptySnapshot(now: number, config: OfficeConfig, error?: string)
     limits: null,
     sessions: [],
     decisionCount: 0,
+    decisions: [],
   };
 }
 

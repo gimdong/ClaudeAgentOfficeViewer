@@ -22,7 +22,45 @@ export interface Decision {
   kind: DecisionKind;
   since: string;
   summary?: string;
+  /** 큐의 결정 id(Phase 2). 보고서를 열 때 쓴다 */
+  id?: string;
+  /** 서버가 놓아주는 시각(createdAt + 590초, Ruling B29) */
+  deadline?: string;
 }
+
+// ───────── 결정 큐(Phase 2): 서버와 화면이 같이 쓴다 ─────────
+export type DecisionState = "pending" | "answered-dashboard" | "closed-terminal" | "expired";
+/** 화면에 보내는 도구 입력 요약. 모두 가림(redact)과 200자 자르기를 거친 값이다 */
+export interface DecisionDetail { command?: string; description?: string; filePath?: string; pattern?: string; query?: string; domain?: string; to?: string }
+export interface QuestionView { question: string; header?: string; multiSelect: boolean; options: Array<{ label: string; description?: string }> }
+export interface DecisionView {
+  id: string;
+  sessionId: string;
+  agent: string;
+  kind: DecisionKind;
+  toolName: string;
+  state: DecisionState;
+  createdAt: string;
+  /** createdAt + 590초 (Ruling B29) */
+  deadline: string;
+  resolvedAt?: string;
+  /** 대시보드에서 답했을 때의 결과: allow | deny | answer | continue | stop */
+  outcome?: string;
+  detail: DecisionDetail;
+  questions?: QuestionView[];
+  plan?: string;
+  /** plan이 4000자에서 잘렸다(Ruling B47) */
+  planTruncated?: boolean;
+  budget?: { budgetTokens: number; usedTokens: number };
+  /** false면 보고서만(팀원 요청, 보고서만으로 판정된 계획) */
+  answerable: boolean;
+}
+export type DecisionAnswer =
+  | { action: "allow" }
+  | { action: "deny"; reason?: string }
+  | { action: "answer"; answers: Array<{ labels: number[] } | { other: string }> }
+  | { action: "continue" }
+  | { action: "stop" };
 
 export interface TokenSum {
   input: number;
@@ -101,6 +139,8 @@ export interface Snapshot {
   sessions: SessionView[];
   /** HUD "결정 대기 N" 칩 */
   decisionCount: number;
+  /** 결정 큐: pending(오래된 것부터) + 최근 30초 안에 끝난 것 */
+  decisions: DecisionView[];
 }
 
 // ───────── 진단(베타): 서버와 화면이 같이 쓴다 ─────────

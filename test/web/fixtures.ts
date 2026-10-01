@@ -17,6 +17,7 @@ export function makeSnapshot(p: Partial<Snapshot> = {}): Snapshot {
     limits: null,
     sessions: [],
     decisionCount: 0,
+    decisions: [],
     ...p,
   };
 }
