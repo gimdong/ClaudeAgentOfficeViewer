@@ -77,8 +77,9 @@ function getFreePort(): Promise<number> {
   });
 }
 
-// 느린 테스트: npm run package:beta를 한 번 돌려서 웹 빌드·서버 번들·release/ 폴더·tar.gz·zip을
-// 전부 만든 뒤 그 결과물만 검사한다(director 지시: package:beta는 beforeAll에서 한 번만 실행).
+// 느린 빌드(npm run package:beta)는 vitest globalSetup(test/setup/package-once.ts)에서 전체
+// 실행에 한 번만 돈다(director #79 — 테스트 파일마다 beforeAll에서 따로 돌리면 release/ 폴더·
+// tar.gz·zip을 서로 지우고 다시 써서 간헐적으로 깨진다, B14). 여기서는 그 결과물만 읽는다.
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const VERSION = pkg.version as string;
@@ -89,15 +90,16 @@ const ZIP = join(ROOT, "release", `claude-office-${VERSION}.zip`);
 let buildError: Error | undefined;
 
 beforeAll(() => {
-  try {
-    execFileSync("npm", ["run", "package:beta"], { cwd: ROOT, stdio: "pipe", timeout: 110_000 });
-  } catch (e) {
-    buildError = e as Error;
+  // globalSetup이 CLAUDE_OFFICE_SKIP_PACKAGE_BUILD=1로 건너뛰었거나 실패를 삼켰을 리는 없지만
+  // (실패하면 globalSetup 자체가 던져서 전체 실행이 멎는다), 혹시 산출물이 없으면 각 테스트에서
+  // "왜 실패했는지" 바로 알 수 있게 명확한 메시지를 남긴다.
+  if (!existsSync(TAR)) {
+    buildError = new Error(`${TAR} 없음 — package:beta 산출물이 없습니다(globalSetup 확인 필요)`);
   }
-}, 120_000);
+});
 
 function requireBuildOk() {
-  if (buildError) throw new Error(`package:beta 실패: ${buildError.message}`);
+  if (buildError) throw new Error(`package:beta 산출물 없음: ${buildError.message}`);
 }
 
 describe("npm run package:beta", () => {

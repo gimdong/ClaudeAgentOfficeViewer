@@ -23,9 +23,12 @@ symlinkSync(process.execPath, join(NODE_ONLY_DIR, "node"));
 let buildError: Error | undefined;
 let releaseAppDir: string; // .tar.gz를 풀어 만든 실제 배포물 폴더(app/plugin/install.sh/claude-office.sh가 이 안에 있음) — T6 규칙대로 release/app을 직접 쓰지 않는다.
 
+// 빌드(npm run package:beta)는 vitest globalSetup(test/setup/package-once.ts)에서 전체 실행에
+// 한 번만 돈다(director #79 — package.test.ts와 여기서 각자 beforeAll에 따로 돌리면 둘이 동시에
+// release/ 산출물을 지우고 다시 써서 간헐적으로 깨진다, B14). 여기서는 이미 만들어진 tar.gz를
+// 내 전용 임시 폴더에 풀기만 한다.
 beforeAll(() => {
   try {
-    execFileSync("npm", ["run", "package:beta"], { cwd: ROOT, stdio: "pipe", timeout: 110_000 });
     const extracted = mkdtempSync(join(tmpdir(), "claude-office-installtest-pkg-"));
     execFileSync("tar", ["-xzf", join(ROOT, "release", `claude-office-${VERSION}.tar.gz`), "-C", extracted]);
     releaseAppDir = join(extracted, `claude-office-${VERSION}`);
@@ -35,7 +38,7 @@ beforeAll(() => {
 }, 120_000);
 
 function requireBuildOk() {
-  if (buildError) throw new Error(`package:beta 실패: ${buildError.message}`);
+  if (buildError) throw new Error(`package:beta 산출물 없음: ${buildError.message}`);
 }
 
 function getFreePort(): Promise<number> {
