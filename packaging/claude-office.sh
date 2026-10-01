@@ -103,9 +103,13 @@ case "$cmd" in
     # inode에 내용만 다시 써 넣는다(리뷰어 Important).
     # macOS(Darwin)에서 로그인 셸이 bash면 터미널이 .bashrc가 아니라 .bash_profile을 읽으므로
     # 그것도 대상에 넣는다(설치 때도 같은 파일을 쓴다 — 아래 install.sh 참고).
+    # #82(qa 발견): PATH 줄 삭제는 두 질문(플러그인·logs)과 무관하게 항상 시도된다 — 실제로
+    # 지워졌으면(표지가 있어서 걸러낸 rc가 하나라도 있었으면) 아래 요약의 "지움"에도 넣는다.
+    path_removed=0
     for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
       [ -f "$rc" ] || continue
       if grep -q '^# claude-office PATH$' "$rc"; then
+        path_removed=1
         tmp="$rc.tmp-$$"
         awk '
           { lines[NR] = $0 }
@@ -133,17 +137,21 @@ case "$cmd" in
     fi
 
     # SPEC 3장: 제거가 끝나면 무엇을 지웠고 무엇을 남겼는지 알린다(ps1과 글자까지 같은 문구 — B17).
-    removed=""
+    # #82(qa 발견): app/bin/plugin·VERSION·사용설명서 삭제는 두 질문과 무관하게 항상 일어나므로
+    # "지움"에 항상 "프로그램 파일"을 넣는다 — 전에는 두 질문에 모두 아니오로 답하면 "지움: 없음"
+    # 이라고 나왔지만 실제로는 이 파일들이 지워져 요약이 사실과 달랐다.
+    removed="프로그램 파일"
     kept=""
-    [ "$plugin_removed" = 1 ] && removed="${removed:+$removed, }플러그인"
+    [ "$path_removed" = 1 ] && removed="$removed, PATH 설정"
+    [ "$plugin_removed" = 1 ] && removed="$removed, 플러그인"
     [ "$plugin_kept" = 1 ] && kept="${kept:+$kept, }플러그인"
     if [ "$logs_removed" = 1 ]; then
-      removed="${removed:+$removed, }logs, diagnostics"
+      removed="$removed, logs, diagnostics"
     else
       kept="${kept:+$kept, }logs, diagnostics"
     fi
     echo "제거를 마쳤습니다."
-    echo "지움: ${removed:-없음}"
+    echo "지움: $removed"
     echo "남김: ${kept:-없음}"
     ;;
   *)

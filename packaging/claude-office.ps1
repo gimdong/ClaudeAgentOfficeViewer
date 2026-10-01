@@ -145,12 +145,17 @@ switch ($cmd) {
     # 기존 값을 통째로 덮어쓰지 않고 우리 항목만 걸러낸다. 대소문자와 끝의 "\" 차이는 같은
     # 항목으로 본다(Ruling B13). 우리 항목이 애초에 없으면(필터링 전후 값이 같으면)
     # Set-UserPathIfChanged가 아예 쓰지 않는다(리뷰어 지시).
+    # #82(qa 발견): PATH 정리는 두 질문(플러그인·logs)과 무관하게 항상 시도된다 — 값이 실제로
+    # 바뀌었으면(우리 항목이 있어서 걸러졌으면) 아래 요약의 "지움"에도 넣는다.
+    $pathRemoved = $false
     $binDir = Join-Path $Prefix "bin"
     $normalize = { param($p) $p.TrimEnd('\').ToLowerInvariant() }
     $userPath = Get-UserPath
     if ($userPath) {
       $parts = ($userPath -split ";") | Where-Object { $_ -ne "" -and (& $normalize $_) -ne (& $normalize $binDir) }
-      Set-UserPathIfChanged ($parts -join ";") $userPath
+      $newUserPath = $parts -join ";"
+      if ($newUserPath -ne $userPath) { $pathRemoved = $true }
+      Set-UserPathIfChanged $newUserPath $userPath
     }
 
     Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "app")
@@ -171,13 +176,18 @@ switch ($cmd) {
     }
 
     # SPEC 3장: 제거가 끝나면 무엇을 지웠고 무엇을 남겼는지 알린다(sh와 글자까지 같은 문구 — B17).
+    # #82(qa 발견): app/bin/plugin·VERSION·사용설명서 삭제는 두 질문과 무관하게 항상 일어나므로
+    # "지움"에 항상 "프로그램 파일"을 넣는다 — 전에는 두 질문에 모두 아니오로 답하면 "지움: 없음"
+    # 이라고 나왔지만 실제로는 이 파일들이 지워져 요약이 사실과 달랐다.
     $removed = New-Object System.Collections.Generic.List[string]
+    $removed.Add("프로그램 파일")
     $kept = New-Object System.Collections.Generic.List[string]
+    if ($pathRemoved) { $removed.Add("PATH 설정") }
     if ($pluginRemoved) { $removed.Add("플러그인") }
     if ($pluginKept) { $kept.Add("플러그인") }
     if ($removeLogs) { $removed.Add("logs"); $removed.Add("diagnostics") } else { $kept.Add("logs"); $kept.Add("diagnostics") }
     Write-Host "제거를 마쳤습니다."
-    Write-Host "지움: $(if ($removed.Count -gt 0) { $removed -join ', ' } else { '없음' })"
+    Write-Host "지움: $($removed -join ', ')"
     Write-Host "남김: $(if ($kept.Count -gt 0) { $kept -join ', ' } else { '없음' })"
   }
   default {

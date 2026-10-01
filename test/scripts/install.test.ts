@@ -512,8 +512,15 @@ describe("packaging/install.sh, claude-office.sh", () => {
             child.on("exit", (code) => reject(new Error(`서버가 일찍 끝남(code ${code}): ${out}`)));
             setTimeout(() => reject(new Error("서버 시작 시간초과")), 10_000);
           });
-          await new Promise((r) => setTimeout(r, 1500)); // 런처의 "(sleep 1; open ...) &" 기다림
-          const log = readFileSync(rig.stubLog, "utf8");
+          // 런처의 "(sleep 1; open ...) &"가 부하 상황에서 1초보다 늦게 끝날 수 있어(리뷰어 실측,
+          // B14 — 원인 모르는 간헐 실패 금지) 고정 대기 대신 최대 5초 동안 100ms마다 로그를 본다.
+          const deadline = Date.now() + 5000;
+          let log = "";
+          for (;;) {
+            log = readFileSync(rig.stubLog, "utf8");
+            if (log.includes(`open http://127.0.0.1:${port}/`) || Date.now() > deadline) break;
+            await new Promise((r) => setTimeout(r, 100));
+          }
           expect(log).toContain(`open http://127.0.0.1:${port}/`);
         } finally {
           child.kill();
@@ -697,6 +704,34 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const log = readFileSync(rig.stubLog, "utf8");
       expect(log).not.toContain("plugin uninstall");
       expect(r.stdout).toContain("플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user");
+      // #82(qa 발견): 플러그인을 거절해도 프로그램 파일은 이미 지워졌다 — "지움: 없음"이면 거짓말이다.
+      // 이 설치는 --no-path였으니 PATH 설정까지 지웠다고 하면 그건 또 틀린 말이라 거기엔 없어야 한다.
+      expect(r.stdout).toContain("지움: 프로그램 파일");
+      expect(r.stdout).not.toContain("PATH 설정");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  // #82(qa 발견): 플러그인·logs 질문에 모두 "아니오"로 답해도 app/bin/plugin·VERSION·사용설명서·
+  // PATH 줄은 질문과 무관하게 항상 지워진다. 전에는 요약이 "지움: 없음"이라 사실과 달랐다(두
+  // 질문 모두 거절해도 프로그램은 실제로 제거됨). --no-path 없이 설치해서 PATH 설정도 같이 본다.
+  it('uninstall에서 두 질문 모두 n으로 답해도 "지움: 프로그램 파일, PATH 설정"을 알린다(#82)', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)).status).toBe(0);
+      expect(existsSync(join(rig.home, ".zshrc"))).toBe(true); // PATH 줄이 실제로 들어갔는지 먼저 확인
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input: "n\nn\n" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("지움: 프로그램 파일, PATH 설정");
+      expect(r.stdout).toContain("남김: 플러그인, logs, diagnostics");
+      // 요약 문구만 맞고 실제로는 안 지워지는 반대쪽 버그도 같이 막는다.
+      expect(existsSync(join(prefix, "app"))).toBe(false);
+      expect(existsSync(join(prefix, "VERSION"))).toBe(false);
+      expect(readFileSync(join(rig.home, ".zshrc"), "utf8")).not.toContain("claude-office PATH");
     } finally {
       rig.cleanup();
     }
@@ -713,7 +748,8 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout).toContain("제거를 마쳤습니다.");
-      expect(r.stdout).toMatch(/지움: .*플러그인/);
+      expect(r.stdout).toMatch(/지움: 프로그램 파일.*플러그인/);
+      expect(r.stdout).not.toContain("PATH 설정"); // 이 설치는 --no-path였다
       expect(r.stdout).toMatch(/지움: .*logs, diagnostics|남김: .*logs, diagnostics/);
     } finally {
       rig.cleanup();

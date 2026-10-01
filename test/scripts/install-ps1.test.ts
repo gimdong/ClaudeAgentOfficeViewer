@@ -317,6 +317,18 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     expect(launcherPs1).toContain("지움:");
     expect(launcherSh).toContain("남김:");
     expect(launcherPs1).toContain("남김:");
+
+    // #82(qa 발견, B19): 두 질문(플러그인·logs)과 무관하게 항상 지워지는 것들은 "지움"에 항상
+    // 들어가야 한다 — "프로그램 파일"은 무조건, "PATH 설정"은 실제로 지워졌을 때만.
+    const programFiles = "프로그램 파일";
+    const pathSetting = "PATH 설정";
+    expect(launcherSh).toContain(programFiles);
+    expect(launcherPs1).toContain(programFiles);
+    expect(launcherSh).toContain(pathSetting);
+    expect(launcherPs1).toContain(pathSetting);
+    // "지움"은 "프로그램 파일"로 시작해서 무조건 들어간다(두 질문에 다 아니오여도 빠지면 안 된다).
+    expect(launcherSh).toMatch(/removed="프로그램 파일"/);
+    expect(launcherPs1).toMatch(/\$removed\.Add\("프로그램 파일"\)/);
   });
 
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {
