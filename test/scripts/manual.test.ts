@@ -57,6 +57,11 @@ describe("사용설명서(docs/manual/index.html)", () => {
   it("알려진 제한과 B9 안내를 빠뜨리지 않는다", () => {
     for (const s of ["확인되지 않은 개발자", "데이터 없음", "검증하지 못했습니다", "allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"]) expect(html).toContain(s);
     expect(html).toContain("doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다");
+    // Windows 실행 정책·내려받은 파일 차단(T8 리뷰, Ruling B16): 두 명령 모두 복사 상자로
+    expect(html).toContain("<code>Get-ChildItem -Recurse $HOME\\Downloads\\claude-office-2.0.0-beta.1 | Unblock-File</code></pre><button class=\"copy\"");
+    expect(html).toContain("<code>powershell -ExecutionPolicy Bypass -File install.ps1</code></pre><button class=\"copy\"");
+    expect(html).toContain("코드 서명이 없습니다.");
+    expect(html).toContain("Windows에서는 실행 정책에 막힐 수 있습니다");
     // Ruling B12
     expect(html).toContain("PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음)");
     // 옛 statusline fix 문구가 본문에도 그림에도 없다
