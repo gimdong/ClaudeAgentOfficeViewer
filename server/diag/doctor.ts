@@ -91,6 +91,8 @@ export async function defaultProbePort(port: number): Promise<PortState> {
     // v1도 같은 /api/snapshot을 갖는다. 진단 API가 있어야 이 프로그램(베타 이후)이다.
     // v1은 이 경로에 404나 화면 HTML(SPA)을 돌려준다
     const diag = await fetch(`http://127.0.0.1:${port}/api/diagnostics`, { signal: AbortSignal.timeout(3000) });
+    // 5xx는 진단 API가 있는데 내부 오류가 난 것 — 이전 버전이 아니다(hooks 쪽에서 못 읽은 이유가 따로 드러난다)
+    if (diag.status >= 500) return "ours";
     const summary = (await diag.json().catch(() => null)) as { doctor?: unknown } | null;
     return diag.ok && summary && Array.isArray(summary.doctor) ? "ours" : "v1";
   } catch (e) {

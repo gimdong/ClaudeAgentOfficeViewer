@@ -257,13 +257,16 @@ describe("defaultProbePort", () => {
     // v1처럼 SPA가 모든 경로에 index.html(200)을 돌려주는 경우도 v1이다
     const spa = await serve({ "/api/snapshot": snap, "/api/diagnostics": [200, "text/html", "<!doctype html><div id=root>"] });
     const other = await serve({ "/api/snapshot": [200, "text/html", "<!doctype html>"] });
+    // 베타 서버의 진단 API가 내부 오류(500)면 v1이 아니다(진짜 우리 서버가 아픈 것)
+    const sick = await serve({ "/api/snapshot": snap, "/api/diagnostics": [500, "application/json", JSON.stringify({ error: "진단 정보를 만들지 못했습니다" })] });
     try {
       expect(await defaultProbePort(v1.port)).toBe("v1");
       expect(await defaultProbePort(v2.port)).toBe("ours");
       expect(await defaultProbePort(spa.port)).toBe("v1");
       expect(await defaultProbePort(other.port)).toBe("other");
+      expect(await defaultProbePort(sick.port)).toBe("ours");
     } finally {
-      for (const s of [v1, v2, spa, other]) s.close();
+      for (const s of [v1, v2, spa, other, sick]) s.close();
     }
   });
 
