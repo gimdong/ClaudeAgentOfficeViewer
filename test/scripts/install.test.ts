@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, inject, it } from "vitest";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -60,6 +60,22 @@ function getFreePort(): Promise<number> {
   });
 }
 
+// B14(director #113): child.kill() 직후 바로 rig.cleanup()(rmSync)을 부르면, 서버가 종료 로그를
+// 아직 쓰는 중이라(서버는 종료할 때 exit 로그를 쓴다) 그 로그 파일이 들어있는 폴더를 지우다
+// ENOTEMPTY로 간헐 실패할 수 있다(package.test.ts에서 리뷰어 실측). kill 신호를 보낸 뒤 "exit"
+// 이벤트까지 기다리고 나서 정리한다. 정해진 시간 안에 안 끝나면 SIGKILL로 강제 종료한다.
+function killAndWait(child: ChildProcess, timeoutMs = 3000): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolvePromise) => {
+    const t = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(t);
+      resolvePromise();
+    });
+    child.kill();
+  });
+}
+
 interface Rig {
   home: string;
   stubBin: string;
@@ -80,7 +96,9 @@ function makeRig(opts: { claude?: boolean } = {}): Rig {
   }
   const stubLog = join(base, "stub.log");
   writeFileSync(stubLog, "");
-  return { home, stubBin, stubLog, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+  // maxRetries/retryDelay: 서버를 띄웠다 끈 테스트에서 아직 핸들이 덜 풀린 파일이 있어도(killAndWait로
+  // "exit" 이벤트까지는 기다리지만, OS가 핸들을 완전히 닫는 데는 한 박자 더 걸릴 수 있다) 몇 번 재시도한다.
+  return { home, stubBin, stubLog, cleanup: () => rmSync(base, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }) };
 }
 
 function env(rig: Rig, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -318,7 +336,7 @@ describe("packaging/install.sh, claude-office.sh", () => {
           const logText = readFileSync(join(prefix, "logs", logFiles[0]), "utf8");
           expect(logText).toContain('"msg":"start"');
         } finally {
-          child.kill();
+          await killAndWait(child);
         }
       } finally {
         rig.cleanup();
@@ -530,7 +548,7 @@ describe("packaging/install.sh, claude-office.sh", () => {
           }
           expect(log).toContain(`open http://127.0.0.1:${port}/`);
         } finally {
-          child.kill();
+          await killAndWait(child);
         }
       } finally {
         rig.cleanup();
@@ -658,7 +676,7 @@ describe("packaging/install.sh, claude-office.sh", () => {
           });
           expect(out).toContain("이 창을 닫으면 대시보드가 꺼집니다.");
         } finally {
-          child.kill();
+          await killAndWait(child);
         }
       } finally {
         rig.cleanup();

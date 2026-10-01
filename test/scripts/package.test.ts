@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, inject, it } from "vitest";
-import { execFileSync, spawnSync, spawn } from "node:child_process";
+import { execFileSync, spawnSync, spawn, type ChildProcess } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -74,6 +74,22 @@ function getFreePort(): Promise<number> {
       const port = typeof address === "object" && address ? address.port : undefined;
       srv.close(() => (port ? resolvePromise(port) : reject(new Error("빈 포트를 못 얻음"))));
     });
+  });
+}
+
+// B14(director #113): child.kill() 직후 바로 rmSync를 부르면, 서버가 종료 로그를 아직 쓰는
+// 중이라(서버는 종료할 때 exit 로그를 쓴다) 그 로그 파일이 들어있는 폴더를 지우다 ENOTEMPTY로
+// 간헐 실패할 수 있다(리뷰어 실측). kill 신호를 보낸 뒤 "exit" 이벤트까지 기다리고 나서 정리한다.
+// 정해진 시간 안에 안 끝나면 SIGKILL로 강제 종료한다(자식이 신호를 무시하는 경우 대비).
+function killAndWait(child: ChildProcess, timeoutMs = 3000): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolvePromise) => {
+    const t = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(t);
+      resolvePromise();
+    });
+    child.kill();
   });
 }
 
@@ -177,9 +193,9 @@ describe("npm run package:beta", () => {
         expect(snapRes.status).toBe(200);
         expect(snapRes.headers.get("content-type") ?? "").toContain("application/json");
       } finally {
-        child.kill();
-        rmSync(home, { recursive: true, force: true });
-        rmSync(extracted, { recursive: true, force: true });
+        await killAndWait(child);
+        rmSync(home, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        rmSync(extracted, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
       }
     },
     30_000,
