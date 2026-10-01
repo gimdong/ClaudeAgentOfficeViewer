@@ -74,9 +74,26 @@
 - **hook이 deny하면 뒤따르는 이벤트가 없다.** S1b deny 뒤 `PostToolUse`·`PostToolUseFailure`·`PermissionDenied` 모두 오지 않고 바로 `Stop`(n20). ExitPlanMode deny도 같다.
 - **Notification은 PermissionRequest 약 6초 뒤에 온다**(창이 대기 중일 때. n7·n55). hook이 그 전에 답하면 오지 않는다(S1b 3초 allow·deny).
 - 매 `Stop` 뒤 `SubagentStop`(agent_id·agent_type 있음)이 1~2초 뒤에 온다(상태 줄 "← 1 agent", 사용자 환경의 백그라운드 보조 에이전트로 보임). 계획에는 영향 없다.
-- PreToolUse `ask`의 `permissionDecisionReason`이 창에 보이는지는 캡처에서 확인되지 않았다(창 문구는 평소와 같음).
+- PreToolUse `ask`의 `permissionDecisionReason`은 Write·Read 창에는 보이지 않았다(창 문구는 평소와 같음). Bash 창에는 보인다(S4a, 8절).
 
 ## 7. 막힌 항목
 
 - 권한 분류기에 막힌 것 없음.
 - 확인하지 못한 것: 팀원·서브에이전트 PermissionRequest의 `agent_id`/`agent_type`, `SessionStart`가 http hook으로 오지 않는 이유.
+
+## 8. S4 — auto·acceptEdits 모드 보충 (배정 #130)
+
+같은 방법(env `HOME·USER·PATH·TERM`, 포트 4319, `tmux -L spike2`, 작업 폴더 job tmp), Claude Code 2.1.287. 이전 이벤트 기록은 `events-s1-s3.jsonl`로 옮기고 새 `events.jsonl`에서 시작.
+
+| # | 조건 | 결과 | 증거 |
+|---|---|---|---|
+| S4a Read | `--permission-mode auto`, PreToolUse `ask` → PermissionRequest 4초 뒤 `allow` | ✅ 창("Do you want to proceed? 1. Yes 2. No") 뜸, PermissionRequest 옴(29ms 뒤), "Allowed by PermissionRequest hook" 뒤 PostToolUse | `ev-s4a.jsonl` n2–4, `pane-s4a-read-window.txt`, `pane-s4a-read-after.txt` |
+| S4a Bash deny | auto, `echo spike4`, `ask` → 4초 뒤 `deny` + message | ✅ 창 뜸("Hook PreToolUse:Bash requires confirmation for this command: SPIKE4 ask" — **reason이 창에 보임**), "Denied by PermissionRequest hook", Claude가 message 원문을 받음. 뒤따르는 Post/Denied 없음 | `ev-s4a.jsonl` n8–10, `pane-s4a-bash-window.txt`, `pane-s4a-bash-deny.txt` |
+| S4a Bash allow | auto, 같은 명령, 4초 뒤 `allow` | ✅ 실행, 출력 `spike4`, PostToolUse | `ev-s4a.jsonl` n13–15, `pane-s4a-bash-allow.txt` |
+| S4b | `--permission-mode acceptEdits`, Write에 `ask` → 4초 뒤 `allow` | ✅ 창("Do you want to create note-4b.txt?") 뜸, PermissionRequest 옴(29ms 뒤), "Allowed by PermissionRequest hook", 파일 생성 | `ev-s4b.jsonl` n27–29, `pane-s4b-window.txt`, `pane-s4b-after.txt` |
+| S4c | auto, hook은 모두 빈 200. Write 한 번, Bash(`echo spike4c`) 한 번 | **PermissionRequest 안 옴.** Write는 "Allowed by auto mode classifier", Bash도 창 없이 실행. 순서 Pre→Post→Pre→Post | `ev-s4c.jsonl` n19–22, `pane-s4c-auto.txt` |
+
+- 정리: auto·acceptEdits에서도 PreToolUse `ask`는 분류기·모드 자동 허용보다 앞서 터미널 창과 PermissionRequest를 만든다. hook의 allow·deny는 default 모드와 같이 적용된다.
+- auto 모드에서는 평소(hook 통과) 이 두 호출에 PermissionRequest가 없었다. 즉 auto 세션에서는 예산 관문(`ask`) 말고는 대시보드에 권한 결정이 거의 오지 않을 수 있다(분류기가 막거나 묻는 명령은 이번에 시험하지 않음).
+- auto 모드 첫 응답 뒤 "Teach auto mode about your environment? 1. Yes 2. Not now 3. Don't show again" 팝업이 떴다. 설정에 쓰지 않도록 Esc로 닫았고, 직후 settings sha1이 그대로임을 확인했다(`pane-s4a-popup-esc.txt`).
+- 안전 값: 시작(06:58:37)·끝(07:00:47) 다섯 가지 모두 같음(`safety-before-s4.txt`, `safety-after-s4.txt`). 4319 리슨 없음, tmux spike2 종료. 분류기 차단 없음.
