@@ -207,6 +207,10 @@ describe("알림 영역(live region)과 요청 순서", () => {
     expect(within(panel).getAllByRole("status")).toEqual([live]);
     expect(live.textContent?.trim()).toBe("진단 파일을 만들었습니다");
     expect(live.isConnected).toBe(true);
+    // 그 뒤 다시 가져와도(판정이 같으면) 완료 알림을 덮어쓰지 않는다
+    fireEvent.click(screen.getByRole("button", { name: "다시 확인" }));
+    await act(async () => resolveDiag(new Response(JSON.stringify(summary()), { status: 200 })));
+    expect(live.textContent?.trim()).toBe("진단 파일을 만들었습니다");
   });
 
   it("늦게 온 옛 응답이 새 값을 덮지 않고, 패널을 닫을 때는 다시 가져오지 않는다", async () => {

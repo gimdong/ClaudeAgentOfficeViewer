@@ -15,10 +15,7 @@ function BundleSection({ diagDir, announce }: { diagDir: string | null; announce
   const link = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
-    if (b.state === "done") {
-      link.current?.focus();
-      announce("진단 파일을 만들었습니다");
-    }
+    if (b.state === "done") link.current?.focus();
     if (b.state === "fail") btn.current?.focus();
   }, [b]);
 
@@ -27,7 +24,11 @@ function BundleSection({ diagDir, announce }: { diagDir: string | null; announce
     fetch("/api/diagnostics/bundle", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then(async (r) => {
         const file = r.status === 201 ? ((await r.json()) as { file?: unknown }).file : undefined;
-        setB(typeof file === "string" ? { state: "done", file } : { state: "fail" });
+        if (typeof file === "string") {
+          // 완료 상자와 같은 업데이트에서 알린다(effect에서 하면 한 박자 늦다)
+          setB({ state: "done", file });
+          announce("진단 파일을 만들었습니다");
+        } else setB({ state: "fail" });
       })
       .catch(() => setB({ state: "fail" }));
   };
@@ -135,9 +136,11 @@ export function DiagnosticsPanel(props: {
   const [say, setSay] = useState({ text: "", n: 0 });
   const announce = (text: string) => setSay((p) => ({ text, n: p.n + 1 }));
   const verdictText = data ? verdict(data.doctor).text : "";
+  // 판정이 바뀔 때만 알린다. 다시 가져올 때마다(60초 주기 포함) 알리면 같은 문장이 반복되고,
+  // 방금 알린 "진단 파일을 만들었습니다"를 덮어쓴다
   useEffect(() => {
     if (verdictText) announce(verdictText);
-  }, [verdictText, checkedAt]);
+  }, [verdictText]);
 
   let body;
   if (error) {
