@@ -189,7 +189,13 @@ describe("npm run package:beta", () => {
         expect(rootRes.status).toBe(200);
         expect(rootRes.headers.get("content-type") ?? "").toContain("text/html");
 
-        const snapRes = await fetch(`http://127.0.0.1:${port}/api/snapshot`);
+        // Phase 2(Ruling B51): /api는 토큰이 있어야 한다. PREFIX 없이 켜면 토큰은 풀어 놓은 폴더의 .logs/token에 생긴다
+        const noAuth = await fetch(`http://127.0.0.1:${port}/api/snapshot`);
+        expect(noAuth.status).toBe(401);
+        expect(((await noAuth.json()) as { app?: unknown }).app).toBe("claude-office");
+        const token = readFileSync(join(appDir, "..", ".logs", "token"), "utf8").trim();
+        expect(/^[0-9a-f]{64}$/.test(token)).toBe(true); // 값은 출력하지 않는다
+        const snapRes = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { headers: { Authorization: `Bearer ${token}` } });
         expect(snapRes.status).toBe(200);
         expect(snapRes.headers.get("content-type") ?? "").toContain("application/json");
       } finally {

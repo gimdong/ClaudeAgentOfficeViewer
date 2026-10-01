@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createApp } from "./app";
+import { loadOrCreateToken, readToken } from "./auth";
 import { loadConfig } from "./config";
 import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem } from "./diag/doctor";
@@ -52,6 +53,11 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
 /** 플러그인 hooks.json의 주소에 고정된 포트 */
 const HOOK_PORT = 4317;
 
+/** 개발 모드에서만 콘솔에 찍는 토큰 주소 줄(Ruling B33). 설치본은 런처가 브라우저를 연다. 로거에는 넣지 않는다 */
+export function tokenUrlLine(mode: OfficePaths["mode"], port: number, token: string): string | null {
+  return mode === "dev" ? `대시보드 열기(개발): http://127.0.0.1:${port}/?k=${token}` : null;
+}
+
 /** Node가 24 미만이면 쉬운 말 안내를, 아니면 null을 돌려준다(스펙 5장 1번) */
 export function checkNode(version: string): string | null {
   const major = Number(/^v(\d+)/.exec(version)?.[1] ?? 0);
@@ -62,12 +68,17 @@ export function checkNode(version: string): string | null {
 async function doctorCli(argv: string[]): Promise<void> {
   const json = argv.includes("--json");
   const opts = parseCliArgs(argv.filter((a) => a !== "--json"));
+  const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
+  // 켜져 있는 서버에 묻는 데 쓴다(스펙 7.1 CLI). 값은 출력하지 않는다
+  const token = readToken(paths.tokenFile);
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
   const items = await runDoctor({
     claudeHome: opts.claudeHome,
-    paths: resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir }),
+    paths,
     port: opts.port,
+    probePort: (port) => defaultProbePort(port, token),
     hooks: () =>
-      fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { signal: AbortSignal.timeout(1500) })
+      fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { headers, signal: AbortSignal.timeout(1500) })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => (j as { hooks?: HookStatsView } | null)?.hooks ?? null)
         .catch(() => null),
@@ -90,11 +101,13 @@ async function diagCli(argv: string[]): Promise<void> {
   const opts = parseCliArgs(argv);
   const paths = resolvePaths({ moduleUrl: import.meta.url, env: process.env, logDir: opts.logDir });
   let file: string | null = null;
-  if ((await defaultProbePort(opts.port)) === "ours") {
+  const token = readToken(paths.tokenFile);
+  if ((await defaultProbePort(opts.port, token)) === "ours") {
     try {
       const r = await fetch(`http://127.0.0.1:${opts.port}/api/diagnostics/bundle`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Bearer + Origin 없음(Ruling B32). 토큰이 없거나 틀리면 401 → 아래에서 직접 만든다
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: "{}",
         signal: AbortSignal.timeout(30_000),
       });
@@ -198,10 +211,14 @@ async function main(): Promise<void> {
     }),
     makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
+  const token = loadOrCreateToken(paths.tokenFile);
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
+    const line = tokenUrlLine(paths.mode, opts.port, token);
+    if (line) console.log(line);
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
     if (e.code === "EADDRINUSE") {

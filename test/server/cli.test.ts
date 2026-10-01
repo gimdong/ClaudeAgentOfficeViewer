@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseCliArgs } from "../../server/index";
+import { parseCliArgs, tokenUrlLine } from "../../server/index";
 
 describe("parseCliArgs", () => {
   it("옵션 > 환경변수 > 기본값 순서", () => {
@@ -37,6 +37,12 @@ describe("parseCliArgs", () => {
 
   it("단독 ~도 homedir()로 확장된다", () => {
     expect(parseCliArgs(["--claude-home", "~"], {})).toMatchObject({ claudeHome: homedir() });
+  });
+
+  it("토큰 주소 줄은 개발 모드에서만 만든다(Ruling B33)", () => {
+    const t = "a".repeat(64);
+    expect(tokenUrlLine("dev", 4319, t)).toContain(`http://127.0.0.1:4319/?k=${t}`);
+    expect(tokenUrlLine("installed", 4317, t)).toBeNull();
   });
 
   it("--log-dir는 홈을 전개해 logDir로 들어오고, 없으면 undefined", () => {
@@ -115,7 +121,9 @@ describe("CLI", () => {
     const logDir = mkdtempSync(join(tmpdir(), "office-cli-log-"));
     // OS 임시 폴더 전체를 데이터 폴더로 주면 서버가 켜지기 전에 그 전체를 감시·수집해 부하 때 느려진다. 빈 폴더를 준다
     const home = mkdtempSync(join(tmpdir(), "office-cli-home-"));
-    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", home, "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
+    // 개발 모드로 켜면 서버가 저장소 .logs/token을 만든다(Task 4). 임시 prefix로 설치본 모드로 켠다
+    const prefix = mkdtempSync(join(tmpdir(), "office-cli-prefix-"));
+    const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", home, "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CLAUDE_OFFICE_PREFIX: prefix } });
     let stderr = "";
     let stdout = "";
     child.stderr.on("data", (d) => (stderr += d));
@@ -129,7 +137,73 @@ describe("CLI", () => {
     const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
     rmSync(logDir, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
+    rmSync(prefix, { recursive: true, force: true });
     expect(log).toContain('"msg":"port in use"');
     expect(log).toContain('"msg":"exit"');
   }, 20_000); // 다른 CLI 테스트와 같게. 전체 테스트 부하에서는 tsx 시작만 몇 초 걸릴 수 있다
+
+  it("서버를 켜면 토큰 파일이 생기고, 쿠키 없는 /api/snapshot은 401, doctor는 포트를 \"이 프로그램\"으로 본다", async () => {
+    const s = await startServer();
+    try {
+      const token = readFileSync(join(s.prefix, "token"), "utf8").trim();
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      if (process.platform !== "win32") expect(statSync(join(s.prefix, "token")).mode & 0o777).toBe(0o600);
+      const r = await fetch(`http://127.0.0.1:${s.port}/api/snapshot`);
+      expect(r.status).toBe(401);
+      expect(await r.json()).toEqual({ error: "unauthorized", app: "claude-office" });
+      expect((await fetch(`http://127.0.0.1:${s.port}/api/snapshot`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
+      // doctor는 토큰 파일을 읽어 Bearer로 묻는다. 4317이 아니므로 "켜져 있지만 플러그인은 4317로" 안내 = 이 프로그램으로 인식
+      const d = await run(["doctor", "--json", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      const port = (JSON.parse(d.stdout) as Array<{ id: string; detail: string }>).find((i) => i.id === "port")!;
+      expect(port.detail).toBe(`서버가 ${s.port}에서 켜져 있지만 플러그인은 4317로 보냅니다`);
+      // diag는 켜진 서버에게 만들게 한다(Bearer + Origin 없음, Ruling B32)
+      const g = await run(["diag", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      expect(g.code).toBe(0);
+      expect(readdirSync(join(s.prefix, "diagnostics"))).toHaveLength(1);
+      for (const out of [d.stdout, d.stderr, g.stdout, g.stderr]) expect(out).not.toContain(token);
+    } finally {
+      await s.stop();
+    }
+  }, 40_000);
+
+  it("설치본 모드에서는 콘솔에 토큰이 나오지 않는다", async () => {
+    const s = await startServer();
+    try {
+      const token = readFileSync(join(s.prefix, "token"), "utf8").trim();
+      expect(s.stdout()).toContain(`http://127.0.0.1:${s.port}`);
+      expect(s.stdout()).not.toContain(token);
+      expect(s.stdout()).not.toContain("?k=");
+      const logs = readdirSync(s.logDir).map((f) => readFileSync(join(s.logDir, f), "utf8")).join("");
+      expect(logs).not.toContain(token);
+    } finally {
+      await s.stop();
+    }
+  }, 30_000);
 });
+
+/** 임시 prefix(설치본 모드)·로그·데이터 폴더로 빈 포트에 서버를 켜고 "켜졌다" 줄까지 기다린다 */
+async function startServer() {
+  const prefix = mkdtempSync(join(tmpdir(), "office-auth-prefix-"));
+  const home = mkdtempSync(join(tmpdir(), "office-auth-home-"));
+  const logDir = mkdtempSync(join(tmpdir(), "office-auth-log-"));
+  const port = await freePort();
+  const env = { ...process.env, CLAUDE_OFFICE_PREFIX: prefix };
+  const child: ChildProcess = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "--port", String(port), "--claude-home", home, "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"], env });
+  let out = "";
+  child.stdout!.on("data", (d) => (out += d));
+  await new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`서버가 켜지지 않았습니다: ${out}`)), 20_000);
+    child.stdout!.on("data", () => out.includes("Claude Agent Office: http") && (clearTimeout(t), resolve()));
+    child.on("close", () => (clearTimeout(t), reject(new Error("서버가 끝났습니다"))));
+  });
+  return {
+    prefix, home, logDir, port, env,
+    stdout: () => out,
+    stop: async () => {
+      const closed = new Promise((r) => child.once("close", r));
+      child.kill("SIGTERM");
+      await closed;
+      for (const d of [prefix, home, logDir]) rmSync(d, { recursive: true, force: true });
+    },
+  };
+}

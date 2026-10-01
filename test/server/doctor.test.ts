@@ -27,7 +27,7 @@ beforeEach(async () => {
   opened.length = 0;
   await h.write("app/web/index.html", "<!doctype html>");
   await h.write("app/server.mjs", "");
-  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web") };
+  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web"), tokenFile: h.path("prefix/token"), stateFile: h.path("prefix/state.json") };
 });
 afterEach(() => h.cleanup());
 
@@ -267,6 +267,35 @@ describe("defaultProbePort", () => {
       expect(await defaultProbePort(sick.port)).toBe("ours");
     } finally {
       for (const s of [v1, v2, spa, other, sick]) s.close();
+    }
+  });
+
+  it("401과 app 표시가 있으면 ours, 토큰이 있으면 Bearer로 보낸다", async () => {
+    const { createServer } = await import("node:http");
+    const TOKEN = "a".repeat(64);
+    const seen: Array<string | undefined> = [];
+    const s = createServer((req, res) => {
+      seen.push(req.headers.authorization);
+      const ok = req.headers.authorization === `Bearer ${TOKEN}`;
+      if (!ok) return void res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "unauthorized", app: "claude-office" }));
+      const body = req.url === "/api/snapshot" ? { generatedAt: "2026-10-02T00:00:00.000Z" } : { doctor: [] };
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+    }).listen(0, "127.0.0.1");
+    await new Promise((r) => s.once("listening", r));
+    const p = (s.address() as { port: number }).port;
+    const other401 = createServer((_req, res) => void res.writeHead(401, { "Content-Type": "application/json" }).end("{}")).listen(0, "127.0.0.1");
+    await new Promise((r) => other401.once("listening", r));
+    try {
+      expect(await defaultProbePort(p)).toBe("ours");
+      expect(await defaultProbePort(p, null)).toBe("ours");
+      expect(seen).toEqual([undefined, undefined]);
+      seen.length = 0;
+      expect(await defaultProbePort(p, TOKEN)).toBe("ours");
+      expect(seen).toEqual([`Bearer ${TOKEN}`, `Bearer ${TOKEN}`]); // snapshot과 diagnostics 둘 다
+      expect(await defaultProbePort((other401.address() as { port: number }).port)).toBe("other");
+    } finally {
+      s.close();
+      other401.close();
     }
   });
 

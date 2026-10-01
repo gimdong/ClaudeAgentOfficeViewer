@@ -1,7 +1,17 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export interface OfficePaths { mode: "installed" | "dev"; prefix: string | null; logDir: string; diagDir: string; staticDir: string }
+export interface OfficePaths {
+  mode: "installed" | "dev";
+  prefix: string | null;
+  logDir: string;
+  diagDir: string;
+  staticDir: string;
+  /** 대시보드 토큰(스펙 7.1). --log-dir와 무관하게 prefix(개발은 .logs) 아래 */
+  tokenFile: string;
+  /** 예산 상태 파일(스펙 5.1) */
+  stateFile: string;
+}
 
 /**
  * moduleUrl은 index.ts(묶음에서는 server.mjs)의 import.meta.url이다.
@@ -14,7 +24,7 @@ export function resolvePaths(o: { moduleUrl: string; env: NodeJS.ProcessEnv; log
   const staticDir = basename(file) === "server.mjs" ? join(here, "web") : resolve(here, "../dist/web");
   const prefix = o.env.CLAUDE_OFFICE_PREFIX ? resolve(o.env.CLAUDE_OFFICE_PREFIX) : null;
   const base = prefix
-    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics") }
-    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics") };
+    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics"), tokenFile: join(prefix, "token"), stateFile: join(prefix, "state.json") }
+    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics"), tokenFile: resolve(here, "../.logs/token"), stateFile: resolve(here, "../.logs/state.json") };
   return { mode: prefix ? "installed" : "dev", prefix, staticDir, ...base, ...(o.logDir ? { logDir: resolve(o.logDir) } : {}) };
 }

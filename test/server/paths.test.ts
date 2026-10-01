@@ -13,6 +13,8 @@ describe("resolvePaths", () => {
       logDir: resolve("/p/logs"),
       diagDir: resolve("/p/diagnostics"),
       staticDir: resolve("/x/app/app/web"),
+      tokenFile: resolve("/p/token"),
+      stateFile: resolve("/p/state.json"),
     });
   });
 
@@ -23,11 +25,19 @@ describe("resolvePaths", () => {
       logDir: resolve("/repo/.logs"),
       diagDir: resolve("/repo/.logs/diagnostics"),
       staticDir: resolve("/repo/dist/web"),
+      tokenFile: resolve("/repo/.logs/token"),
+      stateFile: resolve("/repo/.logs/state.json"),
     });
   });
 
   it("--log-dir는 로그 폴더만 바꾼다", () => {
     const p = resolvePaths({ moduleUrl: url("/repo/server/index.ts"), env: { CLAUDE_OFFICE_PREFIX: "/p" }, logDir: "/elsewhere" });
-    expect(p).toMatchObject({ mode: "installed", logDir: resolve("/elsewhere"), diagDir: resolve("/p/diagnostics") });
+    expect(p).toMatchObject({ mode: "installed", logDir: resolve("/elsewhere"), diagDir: resolve("/p/diagnostics"), tokenFile: resolve("/p/token") });
+  });
+
+  it("설치본은 <prefix>/token·state.json, 개발은 .logs 아래", () => {
+    expect(resolvePaths({ moduleUrl: url("/x/app/app/server.mjs"), env: { CLAUDE_OFFICE_PREFIX: "/p" } })).toMatchObject({ tokenFile: resolve("/p/token"), stateFile: resolve("/p/state.json") });
+    // 개발 모드는 --log-dir를 줘도 토큰·상태 파일은 저장소 .logs에 둔다(시험이 고른 임시 로그 폴더와 섞이지 않게)
+    expect(resolvePaths({ moduleUrl: url("/repo/server/index.ts"), env: {}, logDir: "/tmp/x" })).toMatchObject({ tokenFile: resolve("/repo/.logs/token"), stateFile: resolve("/repo/.logs/state.json") });
   });
 });

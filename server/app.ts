@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
 import type { DiagnosticsSummary } from "../src/shared/types";
 import type { HookStats } from "./events/stats";
+import { COOKIE, bearerOf, cookieOf, tokenMatches } from "./auth";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
 
@@ -54,7 +55,15 @@ export function isSameOrigin(origin: string | undefined, host: string | undefine
 
 export function createApp(
   hub: Pick<SnapshotHub, "current" | "subscribe">,
-  opts: { staticDir?: string; heartbeatMs?: number; onHookEvent?: (input: Record<string, unknown>) => void; stats?: HookStats; diagnostics?: DiagnosticsDeps } = {},
+  opts: {
+    staticDir?: string;
+    heartbeatMs?: number;
+    onHookEvent?: (input: Record<string, unknown>) => void;
+    stats?: HookStats;
+    diagnostics?: DiagnosticsDeps;
+    /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
+    auth?: { token: string };
+  } = {},
 ): Express {
   const app = express();
 
@@ -68,7 +77,7 @@ export function createApp(
     next();
   });
 
-  // hook 이벤트 수신(스펙 5장). 토큰은 Phase 2에서 도입한다. 지금은 Host 검사(위), Origin 거부,
+  // hook 이벤트 수신(스펙 5장). hook 요청은 인증하지 않는다(Phase 2 스펙 7.2 — 결정을 요청할 뿐이다). Host 검사(위), Origin 거부,
   // Content-Type 강제로 외부 웹페이지의 위조 요청을 막는다: 다른 출처의 브라우저가 JSON을 보내려면
   // 사전 확인이 필요한데 이 서버는 CORS를 허용하지 않는다. Claude Code의 hook 요청에는 Origin이 없다.
   app.post(
@@ -118,6 +127,37 @@ export function createApp(
     opts.stats?.reject(status === 413 ? "413" : "400");
     res.status(status).end();
   });
+
+  if (opts.auth) {
+    const { token } = opts.auth;
+    // 토큰 주소(/?k=…)를 쿠키로 바꾸고 /로 돌려보내 주소창·방문 기록에 토큰이 남지 않게 한다(스펙 7.1)
+    app.get("/", (req, res, next) => {
+      const k = req.query.k;
+      if (k === undefined) return next();
+      res.setHeader("Cache-Control", "no-store");
+      if (!tokenMatches(typeof k === "string" ? k : undefined, token)) {
+        res.status(401).type("text/plain").send("주소가 올바르지 않습니다. 터미널에서 claude-office로 다시 열어 주세요");
+        return;
+      }
+      res.setHeader("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`);
+      res.redirect(302, "/");
+    });
+    // /api/* 전체. /hooks/event와 화면 정적 파일은 여기를 지나지 않는다(스펙 7.1·7.2).
+    // 쓰기는 Ruling B32: (쿠키 + 같은 출처 Origin) 또는 (Bearer + Origin 없음 — CLI). 401에 app 표시를 넣어
+    // doctor가 토큰 없이도 이 프로그램인지 알아보게 한다
+    app.use("/api", (req, res, next) => {
+      const byCookie = tokenMatches(cookieOf(req.headers.cookie), token);
+      const byBearer = tokenMatches(bearerOf(req.headers.authorization), token);
+      if (!byCookie && !byBearer) return void res.status(401).json({ error: "unauthorized", app: "claude-office" });
+      if (req.method === "GET" || req.method === "HEAD") return next();
+      const origin = req.headers.origin;
+      const fromPage = byCookie && origin !== undefined && isSameOrigin(origin, req.headers.host);
+      const fromCli = byBearer && origin === undefined;
+      if (!fromPage && !fromCli) return void res.status(403).end();
+      if (!req.is("application/json")) return void res.status(415).end();
+      next();
+    });
+  }
 
   if (opts.diagnostics) {
     const diag = opts.diagnostics;
