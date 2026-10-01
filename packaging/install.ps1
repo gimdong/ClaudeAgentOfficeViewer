@@ -16,11 +16,36 @@ if ([string]::IsNullOrWhiteSpace($Prefix) -or ($Prefix -match '^[A-Za-z]:\\?$'))
   Write-Host "설치 폴더 경로가 올바르지 않습니다(`"$Prefix`")."
   exit 2
 }
-if ($Prefix.TrimEnd('\') -ieq $env:USERPROFILE.TrimEnd('\')) {
+
+# -Prefix를 글자 그대로 %USERPROFILE%과 비교하면 "%USERPROFILE%\"(끝 \)나 대소문자가 다른 드라이브
+# 글자(Windows 경로는 대소문자를 구분 안 함) 같은 표기가 거부를 피해간다(T7 fix round 2와 같은
+# 이유 — Ruling B15). 있는 경로는 Resolve-Path(링크·정션까지 실제 경로로), 아직 없는 경로(기본값
+# %USERPROFILE%\.claude-office도 처음엔 없다)는 GetFullPath로 정규화한다. 둘 다 끝의 "\"를 떼고
+# 대소문자를 무시해 비교한다.
+function Normalize-InstallPath([string]$Path) {
+  if (Test-Path -LiteralPath $Path) {
+    return (Resolve-Path -LiteralPath $Path).Path.TrimEnd('\')
+  }
+  return ([System.IO.Path]::GetFullPath($Path)).TrimEnd('\')
+}
+$NormPrefix = Normalize-InstallPath $Prefix
+$NormUserProfile = Normalize-InstallPath $env:USERPROFILE
+if ($NormPrefix -match '^[A-Za-z]:$') {
+  Write-Host "설치 폴더 경로가 올바르지 않습니다(`"$Prefix`")."
+  exit 2
+}
+if ($NormPrefix -ieq $NormUserProfile) {
   Write-Host "설치 폴더로 사용자 폴더 자체는 쓸 수 없습니다. 예: -Prefix `"$env:USERPROFILE\.claude-office`""
   exit 2
 }
-$Prefix = [System.IO.Path]::GetFullPath($Prefix)
+$Prefix = $NormPrefix
+
+# 대상 폴더가 이미 있고 비어 있지 않은데 우리가 설치한 흔적(VERSION)이 없으면 남의 폴더일 수
+# 있다 — 재설치(VERSION 있음)는 그대로 두고, 그 밖의 경우만 거부한다(B15, install.sh와 같은 문구).
+if ((Test-Path $Prefix) -and ((Get-ChildItem -Force $Prefix | Measure-Object).Count -gt 0) -and -not (Test-Path (Join-Path $Prefix "VERSION"))) {
+  Write-Host "이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요."
+  exit 2
+}
 
 function Confirm-Step([string]$Message) {
   if ($Yes) { return $true }

@@ -146,6 +146,40 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     }
   });
 
+  // T7 fix round 2 / #69·#73(Ruling B15): -Prefix·%USERPROFILE%을 글자 그대로 비교하면
+  // 끝에 "\"가 붙거나 대소문자가 다른 표기가 거부를 피해간다. 있는 경로는 Resolve-Path(링크까지
+  // 실제 경로로), 아직 없는 경로는 GetFullPath로 정규화한 뒤 비교해야 한다.
+  it("Normalize-InstallPath는 있는 경로엔 Resolve-Path, 없는 경로엔 GetFullPath를 쓴다(B15)", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      expect(text, f).toContain("function Normalize-InstallPath");
+      expect(text, f).toContain("Resolve-Path");
+      expect(text, f).toContain("[System.IO.Path]::GetFullPath");
+      // "있으면 Resolve-Path, 없으면 GetFullPath" 분기 구조인지(Test-Path로 갈라짐) 확인한다.
+      const fnBody = text.slice(text.indexOf("function Normalize-InstallPath"), text.indexOf("function Normalize-InstallPath") + 400);
+      expect(fnBody, f).toContain("Test-Path");
+      const testPathIdx = fnBody.indexOf("Test-Path");
+      const resolvePathIdx = fnBody.indexOf("Resolve-Path");
+      const getFullPathIdx = fnBody.indexOf("GetFullPath");
+      expect(resolvePathIdx, fnBody).toBeGreaterThan(testPathIdx); // Resolve-Path는 Test-Path 분기 안
+      expect(getFullPathIdx, fnBody).toBeGreaterThan(resolvePathIdx); // GetFullPath는 그 뒤(없을 때) 분기
+    }
+  });
+
+  it("install.ps1은 Normalize-InstallPath로 $Prefix와 %USERPROFILE%을 비교한 뒤에야 쓴다", () => {
+    const text = readFileSync(INSTALL_PS1, "utf8");
+    expect(text).toContain("$NormPrefix = Normalize-InstallPath $Prefix");
+    expect(text).toContain("$NormUserProfile = Normalize-InstallPath $env:USERPROFILE");
+    expect(text).toContain("$NormPrefix -ieq $NormUserProfile");
+  });
+
+  it("이미 다른 파일이 있는 폴더(VERSION 없음)에는 설치를 거부한다(B15)", () => {
+    const text = readFileSync(INSTALL_PS1, "utf8");
+    expect(text).toContain("이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요.");
+    expect(text).toMatch(/Get-ChildItem.*\$Prefix/);
+    expect(text).toContain('Test-Path (Join-Path $Prefix "VERSION")');
+  });
+
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {
     for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
       const script = `

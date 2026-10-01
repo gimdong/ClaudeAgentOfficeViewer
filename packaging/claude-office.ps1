@@ -35,7 +35,15 @@ if ([string]::IsNullOrWhiteSpace($Prefix) -or ($Prefix -match '^[A-Za-z]:\\?$'))
   Write-Error "설치 폴더 경로가 올바르지 않습니다(`"$Prefix`"). 다시 설치해 주세요."
   exit 1
 }
-if ($Prefix.TrimEnd('\') -ieq $env:USERPROFILE.TrimEnd('\')) {
+# install.ps1과 같은 방식(있으면 Resolve-Path, 없으면 GetFullPath, 끝 "\"와 대소문자 무시)으로
+# %USERPROFILE%과 비교한다 — Ruling B15.
+function Normalize-InstallPath([string]$Path) {
+  if (Test-Path -LiteralPath $Path) {
+    return (Resolve-Path -LiteralPath $Path).Path.TrimEnd('\')
+  }
+  return ([System.IO.Path]::GetFullPath($Path)).TrimEnd('\')
+}
+if ((Normalize-InstallPath $Prefix) -ieq (Normalize-InstallPath $env:USERPROFILE)) {
   Write-Error "설치 폴더 경로가 올바르지 않습니다(사용자 폴더 자체). 다시 설치해 주세요."
   exit 1
 }
