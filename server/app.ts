@@ -2,8 +2,8 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
-import type { DoctorItem } from "./diag/doctor";
-import type { HookStats, HookStatsView } from "./events/stats";
+import type { DiagnosticsSummary } from "../src/shared/types";
+import type { HookStats } from "./events/stats";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
 
@@ -33,7 +33,7 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
   return ALLOWED_HOSTNAMES.has(hostnameOf(hostHeader).toLowerCase());
 }
 
-export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView; errorsLastHour: number; logDir: string; diagDir: string } // 경로는 "~" 치환
+export type { DiagnosticsSummary }; // 화면과 같이 쓰도록 src/shared/types.ts로 옮겼다
 export interface DiagnosticsDeps { summary(): Promise<DiagnosticsSummary>; makeBundle(): Promise<string>; diagDir: string }
 
 const BUNDLE_NAME = /^claude-office-diag-\d{8}-\d{6}\.json$/;

@@ -1,4 +1,9 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Snapshot } from "../../src/shared/types";
+import { DiagnosticsChip } from "../diag/DiagnosticsChip";
+import { DiagnosticsPanel } from "../diag/DiagnosticsPanel";
+import { useDiagnostics } from "../diag/useDiagnostics";
 import { formatTokens, remainingPct } from "../format";
 import { DecisionChip } from "./DecisionChip";
 import { Elevator } from "./Elevator";
@@ -24,6 +29,26 @@ export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
   const plan = worst ? 100 - worst.pct : null;
   const planHint = worst?.hint;
 
+  // 진단 칩과 패널(베타 디자인 2·3·7장)
+  const [diagOpen, setDiagOpen] = useState(false);
+  const diag = useDiagnostics(diagOpen);
+  const chip = useRef<HTMLButtonElement>(null);
+  const closeDiag = () => {
+    setDiagOpen(false);
+    chip.current?.focus();
+  };
+  useEffect(() => {
+    if (!diagOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      // 말풍선이 떠 있으면 Esc는 말풍선이 먼저 닫는다(Phase 1 규칙). 패널은 다음 Esc에 닫는다
+      if (e.key !== "Escape" || document.querySelector('.say[role="tooltip"]')) return;
+      setDiagOpen(false);
+      chip.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [diagOpen]);
+
   return (
     <header className="hud">
       <TokenCounter label="TODAY" value={usage.today.total} sub={`캐시 읽기 ${formatTokens(usage.today.cacheRead)}`} />
@@ -33,8 +58,20 @@ export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
       <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
       <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
       <DecisionChip snapshot={snapshot} />
+      <DiagnosticsChip
+        ref={chip}
+        errorsLastHour={diag.data?.errorsLastHour ?? 0}
+        open={diagOpen}
+        onToggle={() => (diagOpen ? closeDiag() : setDiagOpen(true))}
+      />
       <span className={`live ${live ? "on" : "off"}`}>{live ? "● LIVE" : "○ 재연결 중"}</span>
       <Elevator sessions={snapshot.sessions} />
+      {/* .hud는 sticky라 그 안의 fixed 서랍이 HUD 쌓임 맥락에 갇힌다. body에 그린다 */}
+      {diagOpen &&
+        createPortal(
+          <DiagnosticsPanel data={diag.data} error={diag.error} checkedAt={diag.checkedAt} busy={diag.busy} onReload={diag.reload} onClose={closeDiag} />,
+          document.body,
+        )}
     </header>
   );
 }

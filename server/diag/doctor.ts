@@ -3,11 +3,12 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HookStatsView } from "../events/stats";
 import type { OfficePaths } from "../paths";
+import type { DoctorItem, DoctorStatus } from "../../src/shared/types";
 
-export type Status = "ok" | "warn" | "fail";
+export type Status = DoctorStatus;
+export type { DoctorItem }; // 화면과 같이 쓰도록 src/shared/types.ts로 옮겼다
 /** timeout: 연결은 됐는데 답이 없다(멈춘 우리 서버일 수도 있어 "다른 프로그램"과 구분한다) */
 export type PortState = "ours" | "other" | "free" | "timeout";
-export interface DoctorItem { id: string; status: Status; title: string; detail: string; fix: string }
 export interface DoctorDeps {
   claudeHome: string;
   paths: OfficePaths;

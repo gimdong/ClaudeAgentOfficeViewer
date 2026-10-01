@@ -1,7 +1,9 @@
 import { getLogger } from "../log";
 
-export type Rejected = "403" | "415" | "413" | "400";
-export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<Rejected, number>; last10min: number }
+import type { HookStatsView } from "../../src/shared/types";
+
+export type Rejected = keyof HookStatsView["rejected"];
+export type { HookStatsView }; // 화면과 같이 쓰도록 src/shared/types.ts로 옮겼다
 
 const TEN_MIN = 10 * 60_000;
 /** plugins/claude-office/hooks/hooks.json이 보내는 이벤트. 나머지는 "other" 한 칸에 센다(키가 무한히 늘지 않게) */
