@@ -14,14 +14,16 @@ while [ $# -gt 0 ]; do
 done
 ask() { [ "$YES" = 1 ] && return 0; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
 
-# 설치 로그(SPEC 4장): 단계마다 한 줄 "<ISO시각> <단계> ok|fail|skip <쉬운 말 메시지>". 비밀값·환경변수
-# 값(USER, whoami, 호스트 이름 등)은 안 쓴다 — 경로는 되지만, 반드시 줄 끝에 큰따옴표로 감싸 쓴다
-# (Ruling B10 보강 — 리뷰어 실측: 진단 파일의 경로 가림이 공백을 포함해 다음 "/"·따옴표·줄 끝까지를
+# 설치 로그(SPEC 4장): 단계마다 한 줄 "<ISO 오프셋 시각> <단계> ok|fail|skip <쉬운 말 메시지>". 비밀값·
+# 환경변수 값(USER, whoami, 호스트 이름 등)은 안 쓴다 — 경로는 되지만, 반드시 줄 끝에 큰따옴표로 감싸
+# 쓴다(Ruling B10 보강 — 리뷰어 실측: 진단 파일의 경로 가림이 공백을 포함해 다음 "/"·따옴표·줄 끝까지를
 # 경로로 보기 때문에, 경로 뒤에 설명을 쓰면 그 설명까지 함께 가려진다. 설명은 항상 경로보다 앞에 쓴다).
+# 줄의 시각은 로컬 시각 + 오프셋(%z, 예: +0900)이다 — 파일 이름(아래 LOGFILE)도 로컬 시각이라
+# 둘을 맞췄다(UTC "Z"로 쓰면 파일 이름과 줄 시각이 서로 다른 기준이 되어 혼란을 준다).
 # Node 검사가 실패할 수도 있으니 logs 폴더는 그보다 먼저 만든다.
 mkdir -p "$PREFIX/logs"
 LOGFILE="$PREFIX/logs/install-$(date +%Y%m%d-%H%M%S).log"
-log() { printf '%s %s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" >> "$LOGFILE"; }
+log() { printf '%s %s %s %s\n' "$(date +%Y-%m-%dT%H:%M:%S%z)" "$1" "$2" "$3" >> "$LOGFILE"; }
 fail() {
   log "$1" fail "$2"
   echo "$2" >&2

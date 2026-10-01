@@ -93,7 +93,8 @@ function installLogLines(prefix: string): string[] {
  * 앞부분(설명)에는 임시 HOME의 mkdtemp 고유 이름이 나오면 안 된다(비밀값·사용자 식별 정보 금지).
  */
 function expectValidInstallLog(lines: string[], tempMarker: string) {
-  const re = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z (node|copy|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
+  // 시각은 로컬+오프셋(%z, 예: +0900)으로 바뀌어 자릿수가 고정이 아니다(director 지시 #52.h) — \S+로 느슨하게 받는다.
+  const re = /^\S+ (node|copy|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
   for (const line of lines) {
     expect(line, line).toMatch(re);
     if (!line.includes("/")) continue;
