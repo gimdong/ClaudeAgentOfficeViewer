@@ -113,4 +113,10 @@ describe("POST /hooks/event", () => {
     const res = await fetch(`http://127.0.0.1:${port}/hooks/event`);
     expect(res.status).toBe(404);
   });
+
+  it("decisions 없이 만든 앱은 PermissionRequest도 즉시 빈 200(Phase 1 동작)", async () => {
+    const r = await post(JSON.stringify({ hook_event_name: "PermissionRequest", session_id: "s-fake", tool_name: "Bash", tool_input: { command: "echo fake" } }));
+    expect(r).toEqual({ status: 200, body: "" });
+    expect(received).toHaveLength(1);
+  });
 });

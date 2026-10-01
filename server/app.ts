@@ -2,9 +2,10 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
-import type { DiagnosticsSummary } from "../src/shared/types";
+import type { DecisionAnswer, DiagnosticsSummary } from "../src/shared/types";
 import type { HookStats } from "./events/stats";
 import { COOKIE, bearerOf, cookieOf, tokenMatches } from "./auth";
+import type { DecisionQueue } from "./decisions/queue";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
 
@@ -35,6 +36,14 @@ export function isAllowedHost(hostHeader: string | undefined): boolean {
 }
 
 export type { DiagnosticsSummary }; // 화면과 같이 쓰도록 src/shared/types.ts로 옮겼다
+
+/** 예산 관문(Task 6이 채운다). 둘 다 메모리 값만으로 즉시 답한다(1초 안) */
+export interface BudgetGateHooks {
+  /** PreToolUse에 돌려줄 JSON. 관문이 아니면 null(빈 200) */
+  preToolUse(input: Record<string, unknown>): object | null;
+  /** 이 PermissionRequest가 방금 연 관문 호출이면 예산 값, 아니면 null */
+  claim(input: Record<string, unknown>): { budgetTokens: number; usedTokens: number } | null;
+}
 export interface DiagnosticsDeps { summary(): Promise<DiagnosticsSummary>; makeBundle(): Promise<string>; diagDir: string }
 
 const BUNDLE_NAME = /^claude-office-diag-\d{8}-\d{6}\.json$/;
@@ -63,6 +72,9 @@ export function createApp(
     diagnostics?: DiagnosticsDeps;
     /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
     auth?: { token: string };
+    /** 결정 큐(스펙 3.2). 없으면 PermissionRequest도 즉시 빈 200(Phase 1 동작) */
+    decisions?: Pick<DecisionQueue, "hold" | "answer">;
+    gate?: BudgetGateHooks;
   } = {},
 ): Express {
   const app = express();
@@ -107,12 +119,27 @@ export function createApp(
         res.status(400).end();
         return;
       }
-      opts.stats?.accept((body as Record<string, string>).hook_event_name);
+      const input = body as Record<string, unknown>;
+      opts.stats?.accept(input.hook_event_name as string);
       try {
-        opts.onHookEvent?.(body as Record<string, unknown>);
+        opts.onHookEvent?.(input);
       } catch (e) {
         // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
         getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
+      }
+      try {
+        if (input.hook_event_name === "PreToolUse") {
+          const out = opts.gate?.preToolUse(input);
+          if (out) return void res.status(200).json(out);
+        } else if (input.hook_event_name === "PermissionRequest" && opts.decisions) {
+          const budget = opts.gate?.claim(input);
+          // 붙잡은 응답에는 큐만 쓴다(대시보드 답, 590초 빈 200, 상한 초과 빈 200)
+          opts.decisions.hold(input, res, budget ? { kind: "budget", budget } : undefined);
+          return;
+        }
+      } catch (e) {
+        getLogger().error("hooks", "decision handling failed", { error: errInfo(e) });
+        if (res.headersSent) return;
       }
       res.status(200).end();
     },
@@ -190,6 +217,34 @@ export function createApp(
       res.download(name, name, { root: diag.diagDir }, (err) => {
         if (err && !res.headersSent) res.status(404).end();
       });
+    });
+  }
+
+  if (opts.decisions) {
+    const queue = opts.decisions;
+    const ACTIONS = new Set(["allow", "deny", "answer", "continue", "stop"]);
+    // 쓰기 인증(쿠키 + 같은 출처, B32)은 위 /api 미들웨어가 한다. auth 없이 만든 앱은 예전 Origin 규칙
+    app.post(
+      "/api/decisions/:id",
+      (req, res, next) => {
+        if (!isSameOrigin(req.headers.origin, req.headers.host)) return void res.status(403).end();
+        if (!req.is("application/json")) return void res.status(415).end();
+        next();
+      },
+      express.json({ limit: "16kb", type: () => true }),
+      (req, res) => {
+        const body = req.body as { action?: unknown } | null;
+        if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.action !== "string" || !ACTIONS.has(body.action)) {
+          return void res.status(400).json({});
+        }
+        // 종류·형식 판단은 큐가 한다. 이유·답 내용은 로그에 남기지 않는다
+        const r = queue.answer(req.params.id as string, body as DecisionAnswer);
+        if (r.ok) res.status(200).json({ state: r.state });
+        else res.status(r.status).json(r.state ? { state: r.state } : {});
+      },
+    );
+    app.use("/api/decisions", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(err.status === 413 ? 413 : 400).json({});
     });
   }
 

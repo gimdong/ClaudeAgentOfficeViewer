@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
+import { DecisionQueue, RESOLVED_KEEP_MS, type HeldResponse } from "../../server/decisions/queue";
+import { HOLD_MS } from "../../server/decisions/protocol";
 import { EventStore } from "../../server/events/store";
 import { getLogger } from "../../server/log";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
@@ -173,5 +175,123 @@ describe("SnapshotBuilder v2", () => {
     const quill = s.members.find((m) => m.name === "quill");
     expect(quill).toBeDefined();
     expect(quill!.activity).toEqual({ kind: "tool", tool: "Bash", target: "echo hi", startedAt: new Date(T - 400).toISOString() });
+  });
+});
+
+/** 큐가 쓰는 응답 부분만 흉내 낸다 */
+function heldRes(): HeldResponse & { close(): void } {
+  const fns: Array<() => void> = [];
+  const r = {
+    writableEnded: false,
+    on: (_e: "close", fn: () => void) => void fns.push(fn),
+    status: () => ({ json: () => void (r.writableEnded = true), end: () => void (r.writableEnded = true) }),
+    close: () => fns.forEach((f) => f()),
+  };
+  return r;
+}
+
+describe("SnapshotBuilder + 결정 큐(Phase 2, Ruling B28·B40)", () => {
+  const T = NOW;
+  let clock = T;
+  let q: DecisionQueue;
+  beforeEach(() => {
+    clock = T - 1000;
+    q = new DecisionQueue({ now: () => clock });
+  });
+  afterEach(() => q.stop());
+  const hold = (o: Record<string, unknown>) => q.hold({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "rm -rf /tmp/fake" }, ...o }, heldRes())!;
+  const build = (events?: EventStore) => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, decisions: q, ...(events ? { events } : {}) }).build(T);
+
+  it("큐에 pending이 있으면 그 구성원이 decision 상태이고 id·deadline이 붙는다", async () => {
+    await seed();
+    const v = hold({ agent_id: "areviewer-1", agent_type: "reviewer" });
+    const snap = await build();
+    const s1 = snap.sessions.find((s) => s.id === "s1")!;
+    const reviewer = s1.members.find((m) => m.name === "reviewer")!;
+    expect(reviewer.state).toBe("decision");
+    expect(reviewer.decision).toEqual({ kind: "permission", since: v.createdAt, summary: "rm -rf /tmp/fake", id: v.id, deadline: v.deadline });
+    expect(s1.members.find((m) => m.name === "team-lead")!.decision).toBeUndefined();
+    expect(snap.decisions.map((d) => d.id)).toEqual([v.id]);
+    expect(snap.decisionCount).toBe(1);
+  });
+
+  it("같은 구성원에 결정이 여럿이면 가장 오래된 pending을 쓴다", async () => {
+    await seed();
+    const first = hold({ tool_input: { command: "first" } });
+    clock += 1000;
+    hold({ tool_input: { command: "second" } });
+    const lead = (await build()).sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.decision).toMatchObject({ id: first.id, summary: "first" });
+  });
+
+  it("큐가 연결되면 derive의 permission 결정은 쓰지 않는다", async () => {
+    await seed();
+    const events = new EventStore();
+    events.add({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" } }, T - 100);
+    events.add({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "Q?" }] } }, T - 50);
+    const snap = await build(events);
+    const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.decision).toBeUndefined();
+    expect(lead.state).not.toBe("decision");
+    expect(snap.decisionCount).toBe(0);
+  });
+
+  it("ExitPlanMode 결정은 answerable:false로 나오고 그 구성원이 손을 든다", async () => {
+    await seed();
+    const v = hold({ tool_name: "ExitPlanMode", tool_input: { plan: "1. 파일 만들기" } });
+    const snap = await build();
+    const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.state).toBe("decision");
+    expect(lead.decision).toMatchObject({ kind: "plan", id: v.id, summary: "ExitPlanMode" });
+    expect(snap.decisions[0]).toMatchObject({ kind: "plan", answerable: false, plan: "1. 파일 만들기" });
+    expect(snap.decisionCount).toBe(1);
+  });
+
+  it("질문 결정의 요약은 첫 질문(가린 값)이다", async () => {
+    await seed();
+    hold({ tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "어느 쪽 token=FAKE123 으로?", multiSelect: false, options: [{ label: "a" }] }] } });
+    const lead = (await build()).sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.decision).toMatchObject({ kind: "question", summary: "어느 쪽 token=*** 으로?" });
+  });
+
+  it("decisionCount는 pending 수이고, 끝난 결정은 세지 않는다", async () => {
+    await seed();
+    const a = hold({});
+    hold({ tool_input: { command: "b" } });
+    q.answer(a.id, { action: "allow" });
+    const snap = await build();
+    expect(snap.decisionCount).toBe(1);
+    expect(snap.decisions.map((d) => d.state)).toEqual(["pending", "answered-dashboard"]);
+    expect(snap.sessions.find((s) => s.id === "s1")!.members[0].decision?.summary).toBe("b");
+  });
+
+  it("빌드마다 queue.list()를 불러 30초 지난 끝난 결정이 정리된다(Task 3 리뷰 M4)", async () => {
+    await seed();
+    const a = hold({});
+    q.answer(a.id, { action: "allow" });
+    let calls = 0;
+    const builder = new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, decisions: { list: () => (calls++, q.list()) } });
+    expect((await builder.build(T)).decisions).toHaveLength(1);
+    clock += RESOLVED_KEEP_MS + 1;
+    expect((await builder.build(T)).decisions).toEqual([]);
+    expect(calls).toBe(2);
+  });
+
+  it("끝난(expired·closed-terminal) 결정은 손을 내린다", async () => {
+    await seed();
+    const r = heldRes();
+    q.hold({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "x" } }, r);
+    r.close();
+    const lead = (await build()).sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.decision).toBeUndefined();
+    expect(HOLD_MS).toBe(590_000);
+  });
+
+  it("스냅샷 JSON에 원래 입력이 없다", async () => {
+    await seed();
+    hold({ tool_name: "Write", tool_input: { file_path: "/tmp/a.txt", content: `RAW-SECRET-LIKE-${"x".repeat(200_000)}` } });
+    const text = JSON.stringify(await build());
+    expect(text).not.toContain("RAW-SECRET-LIKE");
+    expect(text.length).toBeLessThan(50_000);
   });
 });

@@ -1,8 +1,9 @@
 import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { FloorStatus, Member, MemberState, SessionView, Snapshot } from "../src/shared/types";
+import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot } from "../src/shared/types";
 import { emptySum } from "../src/shared/tokens";
 import type { OfficeConfig } from "./config";
+import type { DecisionQueue } from "./decisions/queue";
 import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
 import type { EventStore } from "./events/store";
@@ -19,9 +20,19 @@ export interface BuilderOptions {
   isAlive?: (pid: number) => boolean;
   /** hook 이벤트 저장소. 없으면 v1과 같이 파일로만 판정한다 */
   events?: Pick<EventStore, "agents" | "prune">;
+  /** 결정 큐(Phase 2). 연결되면 손들기는 큐의 pending만 본다(Ruling B28·B40) — derive의 decision은 쓰지 않는다 */
+  decisions?: Pick<DecisionQueue, "list">;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
+
+/** 그 구성원의 가장 오래된 pending 결정(list()는 pending을 오래된 것부터 준다) */
+function queuedDecision(list: readonly DecisionView[], sessionId: string, agent: string): Decision | undefined {
+  const v = list.find((d) => d.state === "pending" && d.sessionId === sessionId && d.agent === agent);
+  if (!v) return undefined;
+  const summary = v.detail.command ?? v.detail.filePath ?? v.questions?.[0]?.question ?? v.toolName;
+  return { kind: v.kind, since: v.createdAt, ...(summary ? { summary } : {}), id: v.id, deadline: v.deadline };
+}
 
 export function emptySnapshot(now: number, config: OfficeConfig, error?: string): Snapshot {
   return {
@@ -102,14 +113,18 @@ export class SnapshotBuilder {
       const byName = teamName ? teams.find((t) => t.name === teamName) : undefined;
       return byName ? withTranscriptsFor(byName, projectsDir, sessionId) : undefined;
     };
+    // 빌드마다 부른다 — list()가 30초 지난 끝난 결정을 정리한다(Task 3 리뷰 M4)
+    const decisions = this.opts.decisions?.list();
     const views = await Promise.all(
       ordered.map(async (s) =>
-        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0),
+        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions),
       ),
     );
-    const decisionCount = views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
+    const decisionCount = decisions
+      ? decisions.filter((d) => d.state === "pending").length
+      : views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
 
-    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount };
+    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: decisions ?? [] };
   }
 
   private async sessionView(
@@ -119,14 +134,20 @@ export class SnapshotBuilder {
     isCurrent: boolean,
     stale: boolean,
     floor: number,
+    decisions?: readonly DecisionView[],
   ): Promise<SessionView> {
     const leadFile = this.usage.findFile((p) => basename(p) === `${s.sessionId}.jsonl`);
     const last = leadFile ? this.usage.lastUsage(leadFile) : undefined;
     const status: MemberState = !s.alive ? "offline" : s.status === "busy" ? "working" : "idle";
     const agents = this.opts.events?.agents(s.sessionId);
-    const derived = (name: string) => {
+    const derived = (name: string): Derived | undefined => {
       const list = agents?.get(name);
-      return list ? deriveAgent(list, now) : undefined;
+      const d = list ? deriveAgent(list, now) : undefined;
+      if (!decisions) return d;
+      // 큐가 연결되면 결정은 큐에서만 온다. 진행 중 도구·활동은 이벤트 그대로
+      const { decision: _derived, ...rest } = d ?? { toolRunning: false };
+      const decision = queuedDecision(decisions, s.sessionId, name);
+      return decision ? { ...rest, decision } : rest;
     };
 
     const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, "transcript")) : undefined;
