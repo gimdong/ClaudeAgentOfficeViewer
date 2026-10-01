@@ -281,6 +281,11 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // ④ 포트: 템플릿에 4317을 넣은 결과, 서버의 포트 충돌 문구
     const other = /item\("port", "fail", "포트", `([^`]*)`/.exec(doctor)![1].replace("${d.port}", "4317");
     expect(box("④")).toContain(`❌ 포트: ${other}`);
+    // FB-2: 이전 버전(v1) 판정 줄과 fix, hooks 문구
+    const v1 = /item\("port", "warn", "포트", `(이전 버전\(v1\)[^`]*)`, "([^"]*)"\)/.exec(doctor)!;
+    expect(box("④")).toContain(`⚠️ 포트: ${v1[1].replace("${d.port}", "4317")}\n  → ${v1[2]}`);
+    expect(doctor).toContain('"확인하지 못했습니다(이전 버전 서버)"');
+    expect(html).toContain("<code>확인하지 못했습니다(이전 버전 서버)</code>");
     const inUse = /console\.error\(`(포트 \$\{opts\.port\}번이 이미 사용 중입니다\.[^`]*)`\)/.exec(index)![1].replace("${opts.port}", "4317");
     expect(box("④")).toContain(inUse);
     // ⑤ Node: 런처 문구에 v20.11.0을 넣은 결과

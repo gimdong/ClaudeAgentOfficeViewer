@@ -8,7 +8,8 @@ import type { DoctorItem, DoctorStatus } from "../../src/shared/types";
 export type Status = DoctorStatus;
 export type { DoctorItem }; // 화면과 같이 쓰도록 src/shared/types.ts로 옮겼다
 /** timeout: 연결은 됐는데 답이 없다(멈춘 우리 서버일 수도 있어 "다른 프로그램"과 구분한다) */
-export type PortState = "ours" | "other" | "free" | "timeout";
+/** v1: /api/snapshot은 응답하지만 /api/diagnostics가 없는 이전 버전(v1) 뷰어(FB-2) */
+export type PortState = "ours" | "v1" | "other" | "free" | "timeout";
 export interface DoctorDeps {
   claudeHome: string;
   paths: OfficePaths;
@@ -18,7 +19,7 @@ export interface DoctorDeps {
   env?: NodeJS.ProcessEnv;
   managedPath?: string; // 기본: 플랫폼별 경로
   which?: (cmd: string) => string | null; // 기본: PATH 탐색
-  probePort?: (port: number) => Promise<PortState>; // 기본: GET /api/snapshot
+  probePort?: (port: number) => Promise<PortState>; // 기본: GET /api/snapshot, 그다음 /api/diagnostics
   hooks?: () => Promise<HookStatsView | null>; // 서버 안: stats.view(), CLI: /api/diagnostics 조회
   now?: () => number;
 }
@@ -86,7 +87,12 @@ export async function defaultProbePort(port: number): Promise<PortState> {
   try {
     const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
     const body = (await r.json().catch(() => null)) as { generatedAt?: unknown } | null;
-    return body && typeof body.generatedAt === "string" ? "ours" : "other";
+    if (!body || typeof body.generatedAt !== "string") return "other";
+    // v1도 같은 /api/snapshot을 갖는다. 진단 API가 있어야 이 프로그램(베타 이후)이다.
+    // v1은 이 경로에 404나 화면 HTML(SPA)을 돌려준다
+    const diag = await fetch(`http://127.0.0.1:${port}/api/diagnostics`, { signal: AbortSignal.timeout(3000) });
+    const summary = (await diag.json().catch(() => null)) as { doctor?: unknown } | null;
+    return diag.ok && summary && Array.isArray(summary.doctor) ? "ours" : "v1";
   } catch (e) {
     if ((e as { name?: string }).name === "TimeoutError") return "timeout";
     return (e as { cause?: { code?: string } }).cause?.code === "ECONNREFUSED" ? "free" : "other";
@@ -119,6 +125,7 @@ const checks: Check[] = [
   async (d) => {
     const state = await d.probePort(d.port);
     if (state === "other") return item("port", "fail", "포트", `다른 프로그램이 ${d.port}을 쓰고 있습니다`, `그 프로그램을 끄거나 다른 포트로 켜 주세요. 다른 포트에서는 말풍선·손들기가 보이지 않습니다(플러그인은 ${HOOK_PORT}로 보냄).`);
+    if (state === "v1") return item("port", "warn", "포트", `이전 버전(v1) 서버가 ${d.port}을 쓰고 있습니다 — 끄고 다시 실행해 주세요`, "이전 버전 뷰어를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office 명령으로 다시 켜 주세요.");
     if (state === "timeout") return item("port", "warn", "포트", `${d.port}에서 응답이 없습니다`, "대시보드 창을 닫고 claude-office 명령으로 다시 켜 주세요. 그래도 같으면 컴퓨터를 다시 시작해 주세요.");
     if (state === "free") return item("port", "warn", "포트", `서버가 꺼져 있습니다(${d.port})`, "claude-office 명령으로 대시보드를 켜 주세요.");
     if (d.port !== HOOK_PORT) return item("port", "warn", "포트", `서버가 ${d.port}에서 켜져 있지만 플러그인은 ${HOOK_PORT}로 보냅니다`, `포트 옵션 없이 켜면 ${HOOK_PORT}을 씁니다.`);
@@ -169,6 +176,9 @@ const checks: Check[] = [
   },
   async (d) => {
     const v = await d.hooks().catch(() => null);
+    // 포트에 이전 버전 서버가 있으면 진단 API가 없어 통계를 못 읽는다 — "꺼져 있다"고 하면 port 항목과 모순된다
+    if (!v && (await d.probePort(d.port)) === "v1")
+      return item("hooks", "warn", "실시간 이벤트", "확인하지 못했습니다(이전 버전 서버)", "이전 버전 서버를 끄고 claude-office로 다시 켠 뒤 확인해 주세요.");
     if (!v) return item("hooks", "warn", "실시간 이벤트", "서버가 꺼져 있어 확인하지 못했습니다", "대시보드를 켠 뒤 다시 확인해 주세요.");
     const rejected = Object.values(v.rejected).reduce((a, b) => a + b, 0);
     if (rejected > 0) return item("hooks", "warn", "실시간 이벤트", `거부된 요청 ${rejected}건`, "진단 파일을 만들어 담당자에게 보내 주세요.");
@@ -203,6 +213,13 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
     ...deps,
     platform,
     env,
+  };
+  // port와 hooks가 같은 결과를 보도록 포트 조회는 한 번만 한다
+  const probe = d.probePort;
+  const probed = new Map<number, Promise<PortState>>();
+  d.probePort = (port) => {
+    if (!probed.has(port)) probed.set(port, probe(port));
+    return probed.get(port)!;
   };
   // 한 점검이 던져도 나머지 결과는 낸다
   const items = await Promise.all(

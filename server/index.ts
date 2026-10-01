@@ -184,7 +184,9 @@ async function main(): Promise<void> {
     if (events.add(input, Date.now())) hub.poke();
   };
   const home = homedir();
-  const doctor = () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port, hooks: async () => stats.view() });
+  // 서버 안의 doctor는 자기 자신이 이 포트를 쓴다. 기본 probe는 /api/diagnostics를 부르는데, 그 API가 다시
+  // doctor를 돌리므로 자기 자신을 조회하면 끝없이 되풀이된다(FB-2). 그래서 "ours"로 준다
+  const doctor = () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port, hooks: async () => stats.view(), probePort: async () => "ours" });
   const diagnostics = {
     diagDir: paths.diagDir,
     summary: async () => ({

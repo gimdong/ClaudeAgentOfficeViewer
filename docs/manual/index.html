@@ -404,6 +404,10 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <p>다른 프로그램이 4317을 쓰고 있다면 doctor에 이렇게 나옵니다.</p>
   <pre class="out">❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다</pre>
   <p>그 프로그램을 끄는 것이 가장 좋습니다. 다른 번호로 켤 수도 있지만(<code>--port</code>), 그러면 말풍선과 손들기가 보이지 않습니다.</p>
+  <p>예전에 받은 <strong>이전 버전(v1) 뷰어</strong>가 4317을 쓰고 있다면 doctor에 이렇게 나옵니다. 브라우저에서 화면은 보이지만 진단 칩이 없는 것이 이전 버전입니다.</p>
+  <pre class="out">⚠️ 포트: 이전 버전(v1) 서버가 4317을 쓰고 있습니다 — 끄고 다시 실행해 주세요
+  → 이전 버전 뷰어를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office 명령으로 다시 켜 주세요.</pre>
+  <p>이때 실시간 이벤트 항목은 <code>확인하지 못했습니다(이전 버전 서버)</code>로 나옵니다. 이전 버전을 끄고 다시 켜면 둘 다 정상으로 돌아옵니다.</p>
   <figure class="fig" data-fig="fig-err-port">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 236" role="img" aria-labelledby="fig-err-port-t fig-err-port-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
 <title id="fig-err-port-t">증상: 포트가 이미 사용 중</title>

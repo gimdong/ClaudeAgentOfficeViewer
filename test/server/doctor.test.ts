@@ -100,6 +100,12 @@ describe("runDoctor", () => {
     expect(hung.status).toBe("warn");
     expect(hung.detail).toContain("응답이 없습니다");
     expect(hung.detail).not.toContain("다른 프로그램");
+    // FB-2: /api/snapshot은 응답하는데 /api/diagnostics가 없으면 이전 버전(v1)
+    const old = await item("port", { probePort: async () => "v1" });
+    expect(old.status).toBe("warn");
+    expect(old.detail).toBe("이전 버전(v1) 서버가 4317을 쓰고 있습니다 — 끄고 다시 실행해 주세요");
+    expect(old.fix).toContain("claude-office");
+    expect((await item("port", { port: 4399, probePort: async () => "v1" })).detail).toContain("4399을 쓰고");
     const moved = await item("port", { port: 4399, probePort: async () => "ours" });
     expect(moved.status).toBe("warn");
     expect(moved.detail).toContain("4317");
@@ -174,6 +180,16 @@ describe("runDoctor", () => {
     expect((await item("proxy", { env: { HTTP_PROXY: "http://fakeproxy.corp:8080", no_proxy: "127.0.0.1" } })).status).toBe("ok");
   });
 
+  it("v1이면 hooks도 '서버가 꺼져 있어'가 아니라 이전 버전 서버라고 한다(같은 실행에서 모순 없음)", async () => {
+    let probes = 0;
+    const items = await runDoctor(deps({ probePort: async () => (probes++, "v1"), hooks: async () => null }));
+    expect(items.find((i) => i.id === "port")!.status).toBe("warn");
+    const hooks = items.find((i) => i.id === "hooks")!;
+    expect(hooks).toMatchObject({ status: "warn", detail: "확인하지 못했습니다(이전 버전 서버)" });
+    expect(hooks.detail).not.toContain("서버가 꺼져");
+    expect(probes).toBe(1); // 포트는 한 번만 조회한다
+  });
+
   it("hooks", async () => {
     const off = await item("hooks", { hooks: async () => null });
     expect(off).toMatchObject({ status: "warn", detail: "서버가 꺼져 있어 확인하지 못했습니다" });
@@ -225,6 +241,31 @@ describe("defaultProbePort", () => {
       hang.close();
     }
   }, 5000);
+
+  it("snapshot은 있는데 diagnostics가 없으면 v1, 둘 다 있으면 ours, 다른 응답이면 other", async () => {
+    const { createServer } = await import("node:http");
+    const serve = (routes: Record<string, [number, string, string]>) =>
+      new Promise<{ port: number; close: () => void }>((r) => {
+        const s = createServer((req, res) => {
+          const [status, type, body] = routes[req.url ?? ""] ?? [404, "text/html", "<!doctype html><p>not found"];
+          res.writeHead(status, { "Content-Type": type }).end(body);
+        }).listen(0, "127.0.0.1", () => r({ port: (s.address() as { port: number }).port, close: () => s.close() }));
+      });
+    const snap: [number, string, string] = [200, "application/json", JSON.stringify({ generatedAt: "2026-10-02T00:00:00.000Z", sessions: [] })];
+    const v1 = await serve({ "/api/snapshot": snap });
+    const v2 = await serve({ "/api/snapshot": snap, "/api/diagnostics": [200, "application/json", JSON.stringify({ doctor: [], hooks: {}, errorsLastHour: 0 })] });
+    // v1처럼 SPA가 모든 경로에 index.html(200)을 돌려주는 경우도 v1이다
+    const spa = await serve({ "/api/snapshot": snap, "/api/diagnostics": [200, "text/html", "<!doctype html><div id=root>"] });
+    const other = await serve({ "/api/snapshot": [200, "text/html", "<!doctype html>"] });
+    try {
+      expect(await defaultProbePort(v1.port)).toBe("v1");
+      expect(await defaultProbePort(v2.port)).toBe("ours");
+      expect(await defaultProbePort(spa.port)).toBe("v1");
+      expect(await defaultProbePort(other.port)).toBe("other");
+    } finally {
+      for (const s of [v1, v2, spa, other]) s.close();
+    }
+  });
 
   it("아무도 없으면 free", async () => {
     const { createServer } = await import("node:net");
