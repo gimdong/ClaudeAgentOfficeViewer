@@ -265,9 +265,18 @@
   <li><strong>캐릭터</strong>: Claude(팀장)와, Claude가 함께 일하도록 부른 팀원들입니다.</li>
   <li><strong>말풍선</strong>: 캐릭터가 지금 하는 일입니다(예: <code>저는 지금 「README.md」 파일을 읽고 있습니다</code>).</li>
   <li><strong>손들기와 노란 ?</strong>: Claude가 여러분의 확인(권한 허락, 질문 답변, 계획 승인)을 기다립니다. Claude Code 창으로 가서 답해 주세요.</li>
-  <li><strong>진단 칩</strong>: 위쪽 막대의 "진단" 단추입니다. 최근 1시간 안에 오류가 있었으면 빨간 점이 붙습니다. 누르면 진단 패널이 열립니다(6장).</li>
+  <li><strong>진단 칩</strong>: 위쪽 막대의 "진단" 단추입니다. 최근 1시간 안에 오류가 있었으면 빨간 점이 붙습니다. 누르면 오른쪽에 진단 패널이 열립니다.</li>
 </ol>
-<!-- TODO(T10): 진단 칩·패널 실제 문구 대조 -->
+<h3>진단 패널</h3>
+<p>진단 칩을 누르면 오른쪽에 패널이 열립니다. 위에서부터 이렇게 보입니다.</p>
+<ul>
+  <li><strong>판정 한 줄</strong>: <code>모두 정상입니다</code>(초록), <code>확인할 항목이 2개 있습니다</code>(노랑), <code>문제 1개를 찾았습니다</code>(빨강) 가운데 하나입니다.</li>
+  <li><strong>최근 오류</strong>: <code>최근 1시간 오류 없음</code> 또는 <code>최근 1시간 오류 2건</code>과, 로그가 저장되는 폴더입니다.</li>
+  <li><strong>hook 수신</strong>: Claude Code가 보낸 소식을 얼마나 받았는지입니다(예: <code>최근 10분 5건, 마지막 수신 2분 전, 거부 0건</code>).</li>
+  <li><strong>점검 결과</strong>: 6장의 환경 점검(doctor)과 같은 항목입니다. 문제(빨간 테두리)와 확인 필요(노란 점선 테두리)가 위에 오고, 아래에 <strong>고치는 법</strong>이 붙습니다. 정상 항목은 한 줄로 보입니다.</li>
+  <li><strong>진단 파일</strong>: 문제가 생겼을 때 담당자에게 보낼 파일을 만드는 단추입니다(6장).</li>
+</ul>
+<p>오른쪽 위에 <strong>다시 확인</strong> 단추와 <strong>닫기</strong> 단추가 있습니다. <kbd>Esc</kbd>를 눌러도 닫힙니다.</p>
 <figure class="fig" data-fig="fig-diag-chip-panel">
 <!-- 대조 필요: T10 (진단 패널 구현 뒤 문구·배치 비교. doctor 행은 server/diag/doctor.ts 실제 문구) -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 595" role="img" aria-labelledby="fig-diag-chip-panel-t fig-diag-chip-panel-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
@@ -295,8 +304,17 @@
 
 <h3>진단 파일을 만들어 보내 주세요</h3>
 <p>고쳐지지 않으면 <strong>진단 파일</strong>을 만들어 담당자에게 보내 주세요. 진단 파일은 문제를 찾는 데 필요한 정보만 담은 파일 하나입니다. <strong>대화 내용, 이름, 비밀값은 들어가지 않습니다.</strong> 폴더 이름도 <code>&lt;project-1&gt;</code>처럼 번호로 바뀝니다.</p>
-<p><strong>방법 1. 화면에서</strong>: 위쪽 막대의 <strong>진단</strong> → 패널 아래 <strong>진단 파일 만들기</strong> → <strong>받기</strong>를 누릅니다.</p>
-<!-- TODO(T10): 버튼·완료 상자 실제 문구 대조 --><figure class="fig" data-fig="fig-diag-file">
+<p><strong>방법 1. 화면에서</strong></p>
+<ol class="steps">
+  <li>위쪽 막대의 <strong>진단</strong>을 누릅니다.</li>
+  <li>패널 맨 아래 <strong>진단 파일 만들기</strong>를 누릅니다. 잠시 <strong>만드는 중…</strong>으로 바뀝니다.</li>
+  <li><strong>받기</strong>를 눌러 파일을 내려받습니다.</li>
+</ol>
+<div class="box ok-box">
+  <p><code>진단 파일을 만들었습니다</code> 아래에 파일 위치(예: <code>~/.claude-office/diagnostics/claude-office-diag-20261001-093000.json</code>)와 <strong>받기</strong> 단추가 보입니다.</p>
+</div>
+<p>"진단 파일을 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요. 계속 안 되면 터미널에서 claude-office diag를 실행해 주세요."가 나오면 아래 방법 2를 써 주세요.</p>
+<figure class="fig" data-fig="fig-diag-file">
 <!-- 대조 필요: T10 (패널 버튼·완료 문구). 터미널 줄은 server/index.ts diag 출력 기준 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 362" role="img" aria-labelledby="fig-diag-file-t fig-diag-file-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
 <title id="fig-diag-file-t">진단 파일 만들기</title>

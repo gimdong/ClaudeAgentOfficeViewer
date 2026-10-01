@@ -115,6 +115,25 @@ describe("사용설명서(docs/manual/index.html)", () => {
     for (const title of ["회사 관리자 설정", "프록시", "포트", "실시간 이벤트", "Node.js"]) expect(doctor).toContain(`"${title}"`);
   });
 
+  it("진단 패널 문구가 화면 코드와 같다", () => {
+    const web = ["web/diag/DiagnosticsPanel.tsx", "web/diag/format.ts", "web/diag/DiagnosticsChip.tsx"]
+      .map((f) => readFileSync(join(__dirname, "../..", f), "utf8"))
+      .join("\n");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    for (const s of ["진단 파일 만들기", "만드는 중…", "진단 파일을 만들었습니다", "받기", "모두 정상입니다", "최근 1시간 오류 없음", "점검 결과", "hook 수신", "최근 오류", "다시 확인", "닫기", "진단 파일을 만들지 못했습니다. 잠시 뒤 다시 눌러 주세요. 계속 안 되면 터미널에서 "]) {
+      expect(web, s).toContain(s);
+      expect(prose, s).toContain(s);
+    }
+    // 코드에서 조립하는 문구
+    expect(web).toContain("`확인할 항목이 ${w}개 있습니다`");
+    expect(prose).toContain("확인할 항목이 2개 있습니다");
+    expect(web).toContain("`문제 ${f}개를 찾았습니다`");
+    expect(prose).toContain("문제 1개를 찾았습니다");
+    expect(web).toContain("`최근 10분 ${h.last10min}건, ${");
+    expect(prose).toContain("최근 10분 5건, 마지막 수신 2분 전, 거부 0건");
+    expect(html).not.toContain("TODO(T10)");
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);
