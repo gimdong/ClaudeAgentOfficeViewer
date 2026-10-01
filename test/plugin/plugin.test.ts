@@ -27,10 +27,10 @@ describe("marketplace.json", () => {
 });
 
 describe("plugin.json", () => {
-  it("이름, 버전 2.0.0-beta.1, 설명, MIT 라이선스를 가진다", async () => {
+  it("이름, 버전 2.0.0-beta.2, 설명, MIT 라이선스를 가진다", async () => {
     const p = await readJson<Record<string, unknown>>(join(PLUGIN, ".claude-plugin/plugin.json"));
     expect(p.name).toBe("claude-office");
-    expect(p.version).toBe("2.0.0-beta.1"); // Task 6: 베타 릴리스 버전으로 통일
+    expect(p.version).toBe("2.0.0-beta.2"); // beta.2(FB-1·FB-3): 베타 릴리스 버전으로 통일
     expect(typeof p.description).toBe("string");
     expect(p.license).toBe("MIT");
   });

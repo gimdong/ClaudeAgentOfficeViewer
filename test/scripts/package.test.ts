@@ -106,9 +106,9 @@ function requireBuildOk() {
 }
 
 describe("npm run package:beta", () => {
-  it("버전 네 곳이 2.0.0-beta.1", () => {
+  it("버전 네 곳이 2.0.0-beta.2", () => {
     requireBuildOk();
-    expect(VERSION).toBe("2.0.0-beta.1");
+    expect(VERSION).toBe("2.0.0-beta.2");
     const pluginJson = JSON.parse(readFileSync(join(ROOT, "plugins/claude-office/.claude-plugin/plugin.json"), "utf8"));
     expect(pluginJson.version).toBe(VERSION);
     const marketplace = JSON.parse(readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf8"));
