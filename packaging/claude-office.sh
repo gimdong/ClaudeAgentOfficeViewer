@@ -76,9 +76,23 @@ case "$cmd" in
     for a in "$@"; do [ "$a" = "--yes" ] && UYES=1; done
     ask_u() { [ "$UYES" = 1 ] && return 0; ask "$1"; }
 
+    # SPEC 3장 "동의 필요": 플러그인 제거 전에 따로 묻는다. --yes면 묻지 않고, EOF 등으로 입력을
+    # 못 받으면 ask()가 그대로 "아니오"가 된다(read 실패 시 $a가 비어 y/Y와 안 같음) — 플러그인은
+    # 남겨 두고 지우는 법만 안내한다.
+    plugin_removed=0
+    plugin_kept=0
     if command -v claude >/dev/null 2>&1; then
-      claude plugin uninstall claude-office@claude-office --scope user || true
-      claude plugin marketplace remove claude-office || true
+      if ask_u "Claude Code에서 claude-office 플러그인도 지울까요?"; then
+        # claude 호출 하나가 실패해도(stderr 한 줄 등) 나머지(PATH 정리·파일 삭제)는 계속되고
+        # 두 번째 claude 호출도 각각 따로 시도한다(리뷰어 Important — 한쪽만 실패해도 전체가
+        # 멈추면 안 된다).
+        claude plugin uninstall claude-office@claude-office --scope user || true
+        claude plugin marketplace remove claude-office || true
+        plugin_removed=1
+      else
+        echo "플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user"
+        plugin_kept=1
+      fi
     fi
 
     # rc 파일들에서 표지 줄("# claude-office PATH")과 그 바로 다음 줄(export), 그리고 표지
@@ -111,10 +125,26 @@ case "$cmd" in
     done
 
     rm -rf "$PREFIX/app" "$PREFIX/plugin" "$PREFIX/bin" "$PREFIX/VERSION" "$PREFIX/사용설명서.html"
+    logs_removed=0
     if ask_u "로그와 진단 파일도 지울까요?"; then
       rm -rf "$PREFIX/logs" "$PREFIX/diagnostics"
       rmdir "$PREFIX" 2>/dev/null || true
+      logs_removed=1
     fi
+
+    # SPEC 3장: 제거가 끝나면 무엇을 지웠고 무엇을 남겼는지 알린다(ps1과 글자까지 같은 문구 — B17).
+    removed=""
+    kept=""
+    [ "$plugin_removed" = 1 ] && removed="${removed:+$removed, }플러그인"
+    [ "$plugin_kept" = 1 ] && kept="${kept:+$kept, }플러그인"
+    if [ "$logs_removed" = 1 ]; then
+      removed="${removed:+$removed, }logs, diagnostics"
+    else
+      kept="${kept:+$kept, }logs, diagnostics"
+    fi
+    echo "제거를 마쳤습니다."
+    echo "지움: ${removed:-없음}"
+    echo "남김: ${kept:-없음}"
     ;;
   *)
     port=4317
@@ -129,6 +159,8 @@ case "$cmd" in
     if [ -z "${CLAUDE_OFFICE_NO_OPEN:-}" ]; then
       (sleep 1; open "http://127.0.0.1:$port/" 2>/dev/null || xdg-open "http://127.0.0.1:$port/" 2>/dev/null) &
     fi
+    # SPEC 3장 명령 표: ps1과 글자까지 같은 안내(B17).
+    echo "이 창을 닫으면 대시보드가 꺼집니다."
     exec node "$PREFIX/app/server.mjs" "$@"
     ;;
 esac

@@ -121,6 +121,7 @@ cp "$HERE/claude-office.sh" "$PREFIX/bin/claude-office"; chmod 755 "$PREFIX/bin/
 log copy ok "앱 파일 복사 완료 \"$PREFIX/app\""
 
 # 3. PATH
+PATH_ADDED=0 # SPEC 3장: PATH에 안 들어갔으면 끝에서 전체 경로 실행법을 안내해야 한다
 if [ "$NOPATH" = 0 ]; then
   # macOS(Darwin)에서는 Terminal.app이 로그인 셸을 띄우고, 로그인 bash는 .bashrc가 아니라
   # .bash_profile을 읽는다 — .bashrc에 추가하면 새 터미널에서 적용이 안 된 것처럼 보인다.
@@ -135,9 +136,11 @@ if [ "$NOPATH" = 0 ]; then
   esac
   if grep -q '^# claude-office PATH$' "$RC" 2>/dev/null; then
     log path skip "이미 등록됨 \"$RC\""
+    PATH_ADDED=1
   elif ask "${RC}에 claude-office 명령 경로를 추가할까요?"; then
     printf '\n# claude-office PATH\nexport PATH="%s/bin:$PATH"\n' "$PREFIX" >> "$RC"
     log path ok "PATH 추가 \"$RC\""
+    PATH_ADDED=1
   else
     log path skip "사용자가 거절함"
   fi
@@ -175,3 +178,8 @@ if [ "$NOOPEN" = 0 ] && [ -f "$PREFIX/사용설명서.html" ]; then
 fi
 log done ok "설치 완료"
 echo "설치 완료. 새 터미널에서 claude-office 를 실행하세요."
+if [ "$PATH_ADDED" = 0 ]; then
+  # SPEC 3장 3단계: PATH에 안 들어갔으면(거절했거나 --no-path) 전체 경로 실행법을 안내한다
+  # (ps1과 글자까지 같은 문구 — B17).
+  echo "다음부터는 이렇게 켜세요: $PREFIX/bin/claude-office"
+fi

@@ -611,4 +611,109 @@ describe("packaging/install.sh, claude-office.sh", () => {
       rig.cleanup();
     }
   });
+
+  // #78/B17(SPEC 3장): 서버를 켤 때 창을 닫으면 꺼진다는 안내를 한 줄 낸다.
+  it(
+    "claude-office로 서버를 켜면 \"이 창을 닫으면 대시보드가 꺼집니다.\"를 출력한다",
+    async () => {
+      requireBuildOk();
+      const rig = makeRig();
+      try {
+        const prefix = join(rig.home, ".claude-office");
+        expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+        const port = await getFreePort();
+        const fakeClaudeHome = join(rig.home, "fake-claude-home");
+        mkdirSync(fakeClaudeHome, { recursive: true });
+        const child = spawn(join(prefix, "bin/claude-office"), ["--port", String(port), "--claude-home", fakeClaudeHome], {
+          env: env(rig, { CLAUDE_OFFICE_NO_OPEN: "1" }),
+        });
+        try {
+          let out = "";
+          await new Promise<void>((resolvePromise, reject) => {
+            const onData = (b: Buffer) => {
+              out += b.toString();
+              if (out.includes(`:${port}`)) resolvePromise();
+            };
+            child.stdout?.on("data", onData);
+            child.stderr?.on("data", onData);
+            child.on("exit", (code) => reject(new Error(`서버가 일찍 끝남(code ${code}): ${out}`)));
+            setTimeout(() => reject(new Error("서버 시작 시간초과")), 10_000);
+          });
+          expect(out).toContain("이 창을 닫으면 대시보드가 꺼집니다.");
+        } finally {
+          child.kill();
+        }
+      } finally {
+        rig.cleanup();
+      }
+    },
+    20_000,
+  );
+
+  // #78/B17(SPEC 3장 3단계): PATH 등록을 거절하거나 --no-path면 끝에 전체 경로 실행법을 안내한다.
+  it('PATH를 안 넣으면(--no-path) 끝에 "다음부터는 이렇게 켜세요: <prefix>/bin/claude-office"를 안내한다', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      const realPrefix = realpathSync(prefix);
+      expect(r.stdout).toContain(`다음부터는 이렇게 켜세요: ${realPrefix}/bin/claude-office`);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("PATH 등록이 됐으면(이미 등록 포함) 전체 경로 안내를 하지 않는다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-open"], env(rig)); // --no-path 없음, --yes라 PATH 질문도 y
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).not.toContain("다음부터는 이렇게 켜세요");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  // #78/B17(SPEC 3장 "동의 필요"): uninstall은 플러그인을 지우기 전에 따로 묻는다. 입력이 없으면
+  // (EOF) "아니오"로 처리해 플러그인을 남기고 지우는 명령을 안내한다.
+  it("uninstall을 --yes 없이 EOF로 실행하면 플러그인을 지우지 않고 남겨 둔다는 안내를 한다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(rig.stubLog, "");
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input: "" });
+      expect(r.status, r.stderr).toBe(0);
+
+      const log = readFileSync(rig.stubLog, "utf8");
+      expect(log).not.toContain("plugin uninstall");
+      expect(r.stdout).toContain("플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  // #78/B17(SPEC 3장): uninstall이 끝나면 지운 것·남긴 것을 알린다.
+  it('uninstall --yes는 끝에 "제거를 마쳤습니다."와 지움/남김 목록을 출력한다', () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("제거를 마쳤습니다.");
+      expect(r.stdout).toMatch(/지움: .*플러그인/);
+      expect(r.stdout).toMatch(/지움: .*logs, diagnostics|남김: .*logs, diagnostics/);
+    } finally {
+      rig.cleanup();
+    }
+  });
 });

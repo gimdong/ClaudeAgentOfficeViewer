@@ -69,19 +69,37 @@ if ($major -lt 24) {
 }
 
 function Confirm-Step([string]$Message) {
-  $a = Read-Host "$Message [y/N]"
+  # 입력을 못 받으면(EOF 등) "아니오"로 처리한다 — 대화형이 아닌 실행에서 멈추지 않는다(리뷰어 지시).
+  try {
+    $a = Read-Host "$Message [y/N]"
+  } catch {
+    return $false
+  }
   return ($a -eq "y" -or $a -eq "Y")
 }
 
 # PATH 레지스트리 값을 직접 읽고 쓴다(install.ps1과 같은 이유 — [Environment]의 Get/Set은
-# REG_EXPAND_SZ를 REG_SZ로 깨 버린다. 리뷰어 Important). uninstall은 우리 항목이 PATH에 없어도
-# 이 경로를 그대로 타지만, 값이 실제로 안 바뀌면 쓰지 않는다(Set-UserPathIfChanged가 처리).
+# REG_EXPAND_SZ를 REG_SZ로 깨 버린다. 리뷰어 Important). uninstall의 우리 항목이 PATH에 이미
+# 없을 때처럼 값이 실제로 안 바뀌면 Set-ItemProperty 자체를 안 부른다(Set-UserPathIfChanged가 처리).
 function Get-UserPath() {
   return (Get-Item "HKCU:\Environment").GetValue("Path", "", "DoNotExpandEnvironmentNames")
 }
+function Get-UserPathKind() {
+  try {
+    return (Get-Item "HKCU:\Environment").GetValueKind("Path")
+  } catch {
+    return $null # 값 자체가 없던 경우
+  }
+}
 function Set-UserPathIfChanged([string]$NewValue, [string]$OldValue) {
   if ($NewValue -eq $OldValue) { return }
-  Set-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value $NewValue -Type ExpandString
+  # 원래 종류(REG_SZ/REG_EXPAND_SZ)를 그대로 유지해서 쓴다 — 값이 아예 없던 경우에만 새로
+  # ExpandString으로 만든다(리뷰어 지시 — 흔한 REG_EXPAND_SZ를 REG_SZ로 바꿔 버리면 안 된다).
+  $kind = Get-UserPathKind
+  if (-not $kind) { $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString }
+  Set-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value $NewValue -Type $kind -Confirm:$false
+  # 탐색기 등 이미 열려 있는 프로그램에 환경 변수가 바뀌었다고 알린다 — 더미 사용자 변수를 만들었다
+  # 지우는 것만으로 브로드캐스트가 일어난다(새 레지스트리 값을 직접 거는 공개 API가 없다).
   $dummy = "CLAUDE_OFFICE_REFRESH_$([Guid]::NewGuid().ToString('N'))"
   [Environment]::SetEnvironmentVariable($dummy, "1", "User")
   [Environment]::SetEnvironmentVariable($dummy, $null, "User")
@@ -101,25 +119,32 @@ switch ($cmd) {
     $UYes = $rest -contains "--yes"
     $ask_u = { param($m) if ($UYes) { $true } else { Confirm-Step $m } }
 
-    # claude plugin 호출이 stderr에 한 줄이라도 쓰면(흔하다 — 경고성 메시지), 상위 스코프의
-    # $ErrorActionPreference = "Stop"과 겹쳐 거기서 uninstall 전체가 멈출 수 있다(리뷰어
-    # Important). 이 구간만 EAP를 Continue로 낮추고 try/catch로도 한 번 더 감싼다.
+    # SPEC 3장 "동의 필요": 플러그인 제거 전에 따로 묻는다. --yes면 묻지 않고, EOF 등으로 입력을
+    # 못 받으면(Confirm-Step 자체가 처리) "아니오"로 — 플러그인은 남겨 두고 지우는 법만 안내한다.
+    $pluginRemoved = $false
+    $pluginKept = $false
     if (Get-Command claude -ErrorAction SilentlyContinue) {
-      $prevEAP = $ErrorActionPreference
-      $ErrorActionPreference = "Continue"
-      try {
-        & claude plugin uninstall claude-office@claude-office --scope user 2>$null
-        & claude plugin marketplace remove claude-office 2>$null
-      } catch {
-        # 플러그인 제거 실패는 치명적이지 않다 — 설치 폴더 정리는 계속한다
-      } finally {
+      if (& $ask_u "Claude Code에서 claude-office 플러그인도 지울까요?") {
+        # claude plugin 호출이 stderr에 한 줄이라도 쓰면(흔하다 — 경고성 메시지), 상위 스코프의
+        # $ErrorActionPreference = "Stop"과 겹쳐 거기서 uninstall 전체가 멈출 수 있다(리뷰어
+        # Important). 두 호출을 각각 따로 try/catch로 감싸, 하나가 실패해도 나머지(PATH 정리·
+        # 파일 삭제)는 계속되고 두 번째 claude 호출도 시도된다. 이 구간만 EAP도 Continue로 낮춘다.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try { & claude plugin uninstall claude-office@claude-office --scope user 2>$null } catch {}
+        try { & claude plugin marketplace remove claude-office 2>$null } catch {}
         $ErrorActionPreference = $prevEAP
+        $pluginRemoved = $true
+      } else {
+        Write-Host "플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user"
+        $pluginKept = $true
       }
     }
 
     # 사용자 PATH에서 claude-office의 bin 경로 항목만 지운다(설치 때 "User" 범위에만 추가했다).
     # 기존 값을 통째로 덮어쓰지 않고 우리 항목만 걸러낸다. 대소문자와 끝의 "\" 차이는 같은
-    # 항목으로 본다(Ruling B13).
+    # 항목으로 본다(Ruling B13). 우리 항목이 애초에 없으면(필터링 전후 값이 같으면)
+    # Set-UserPathIfChanged가 아예 쓰지 않는다(리뷰어 지시).
     $binDir = Join-Path $Prefix "bin"
     $normalize = { param($p) $p.TrimEnd('\').ToLowerInvariant() }
     $userPath = Get-UserPath
@@ -128,22 +153,32 @@ switch ($cmd) {
       Set-UserPathIfChanged ($parts -join ";") $userPath
     }
 
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "app")
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "plugin")
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "bin")
-    Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "VERSION")
-    Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "사용설명서.html")
+    Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "app")
+    Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "plugin")
+    Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "bin")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "VERSION")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "사용설명서.html")
 
     $removeLogs = & $ask_u "로그와 진단 파일도 지울까요?"
     if ($removeLogs) {
-      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "logs")
-      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "diagnostics")
+      Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "logs")
+      Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "diagnostics")
     }
     # $Prefix 자체는 비어 있을 때만 지운다 — 비어 있지 않은데 Remove-Item을 부르면(-Recurse 없이)
     # 확인 질문으로 멈출 수 있다(리뷰어 Minor). 지우기 전에 직접 세어 본다.
     if ((Get-ChildItem -Force -LiteralPath $Prefix -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
-      Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $Prefix
+      Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath $Prefix
     }
+
+    # SPEC 3장: 제거가 끝나면 무엇을 지웠고 무엇을 남겼는지 알린다(sh와 글자까지 같은 문구 — B17).
+    $removed = New-Object System.Collections.Generic.List[string]
+    $kept = New-Object System.Collections.Generic.List[string]
+    if ($pluginRemoved) { $removed.Add("플러그인") }
+    if ($pluginKept) { $kept.Add("플러그인") }
+    if ($removeLogs) { $removed.Add("logs"); $removed.Add("diagnostics") } else { $kept.Add("logs"); $kept.Add("diagnostics") }
+    Write-Host "제거를 마쳤습니다."
+    Write-Host "지움: $(if ($removed.Count -gt 0) { $removed -join ', ' } else { '없음' })"
+    Write-Host "남김: $(if ($kept.Count -gt 0) { $kept -join ', ' } else { '없음' })"
   }
   default {
     $port = 4317
@@ -160,6 +195,8 @@ switch ($cmd) {
         try { Start-Process "http://127.0.0.1:$p/" } catch {}
       } -ArgumentList $port | Out-Null
     }
+    # SPEC 3장 명령 표: sh와 글자까지 같은 안내(B17).
+    Write-Host "이 창을 닫으면 대시보드가 꺼집니다."
     & node (Join-Path $Prefix "app\server.mjs") @RestArgs
     exit $LASTEXITCODE
   }

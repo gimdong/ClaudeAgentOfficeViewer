@@ -76,7 +76,7 @@ function Confirm-Step([string]$Message) {
 # 경로 뒤에 설명을 쓰면 진단 파일의 경로 가림이 그 설명까지 함께 삼킨다). 시각의 오프셋 자리수가
 # sh 쪽과 글자 그대로 같을 필요는 없다(qa:analyze가 그대로 받아들인다). Node 검사가 실패할 수도
 # 있으니 logs 폴더는 그보다 먼저 만든다.
-New-Item -ItemType Directory -Force -Path (Join-Path $Prefix "logs") | Out-Null
+New-Item -ItemType Directory -Force -Confirm:$false -Path (Join-Path $Prefix "logs") | Out-Null
 $LogFile = Join-Path $Prefix "logs\install-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 function Write-InstallLog([string]$Step, [string]$Status, [string]$Message) {
   $ts = Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz"
@@ -103,10 +103,10 @@ if ($major -ge 24) {
 }
 
 # 2. 복사 — app·plugin만 교체, logs·diagnostics 유지
-New-Item -ItemType Directory -Force -Path (Join-Path $Prefix "bin") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $Prefix "diagnostics") | Out-Null
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "app")
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "plugin")
+New-Item -ItemType Directory -Force -Confirm:$false -Path (Join-Path $Prefix "bin") | Out-Null
+New-Item -ItemType Directory -Force -Confirm:$false -Path (Join-Path $Prefix "diagnostics") | Out-Null
+Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "app")
+Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "plugin")
 Copy-Item -Recurse -Force (Join-Path $Here "app") (Join-Path $Prefix "app")
 Copy-Item -Recurse -Force (Join-Path $Here "plugin") (Join-Path $Prefix "plugin")
 Copy-Item -Force (Join-Path $Here "VERSION") (Join-Path $Prefix "VERSION")
@@ -120,13 +120,25 @@ Write-InstallLog "copy" "ok" "앱 파일 복사 완료 `"$Prefix\app`""
 # PATH 레지스트리 값을 직접 읽고 쓴다 — [Environment]::GetEnvironmentVariable("Path","User")는
 # %VAR% 참조를 펼친 값을 돌려주고, SetEnvironmentVariable은 항상 REG_SZ로 쓴다. 사용자 PATH가
 # 원래 REG_EXPAND_SZ였다면(흔하다) 그 형식이 깨져 버린다(리뷰어 Important). 레지스트리에서 펼치지
-# 않은 원본 문자열을 읽고, 쓸 때도 같은 타입(ExpandString)으로 되돌려 쓴다.
+# 않은 원본 문자열을 읽는다.
 function Get-UserPath() {
   return (Get-Item "HKCU:\Environment").GetValue("Path", "", "DoNotExpandEnvironmentNames")
 }
+function Get-UserPathKind() {
+  try {
+    return (Get-Item "HKCU:\Environment").GetValueKind("Path")
+  } catch {
+    return $null # 값 자체가 없던 경우
+  }
+}
 function Set-UserPathIfChanged([string]$NewValue, [string]$OldValue) {
+  # 값이 실제로 안 바뀌면 쓰지 않는다 — 이미 등록돼 있던 경우가 그렇다(리뷰어 지시).
   if ($NewValue -eq $OldValue) { return }
-  Set-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value $NewValue -Type ExpandString
+  # 원래 종류(REG_SZ/REG_EXPAND_SZ)를 그대로 유지해서 쓴다 — 값이 아예 없던 경우에만 새로
+  # ExpandString으로 만든다.
+  $kind = Get-UserPathKind
+  if (-not $kind) { $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString }
+  Set-ItemProperty -Path "HKCU:\Environment" -Name "Path" -Value $NewValue -Type $kind -Confirm:$false
   # 탐색기 등 이미 열려 있는 프로그램에 환경 변수가 바뀌었다고 알린다 — 더미 사용자 변수를 만들었다
   # 지우는 것만으로 브로드캐스트가 일어난다(새 레지스트리 값을 직접 거는 공개 API가 없다).
   $dummy = "CLAUDE_OFFICE_REFRESH_$([Guid]::NewGuid().ToString('N'))"
@@ -136,6 +148,7 @@ function Set-UserPathIfChanged([string]$NewValue, [string]$OldValue) {
 
 # 3. PATH(사용자 범위("User")만 — Machine 범위는 관리자 권한이 필요하고 다른 사용자에게도 영향을
 # 주므로 건드리지 않는다. 이미 있으면 추가하지 않는다)
+$pathAdded = $false # SPEC 3장: PATH에 안 들어갔으면 끝에서 전체 경로 실행법을 안내해야 한다
 if (-not $NoPath) {
   $binDir = Join-Path $Prefix "bin"
   # 대소문자와 끝의 "\" 차이는 같은 항목으로 본다(Ruling B13).
@@ -144,10 +157,12 @@ if (-not $NoPath) {
   $already = $userPath -and (($userPath -split ";") | Where-Object { (& $normalize $_) -eq (& $normalize $binDir) })
   if ($already) {
     Write-InstallLog "path" "skip" "이미 등록됨 `"$binDir`""
+    $pathAdded = $true
   } elseif (Confirm-Step "사용자 PATH에 claude-office 명령 경로를 추가할까요?") {
     $newPath = if ([string]::IsNullOrEmpty($userPath)) { $binDir } else { "$userPath;$binDir" }
     Set-UserPathIfChanged $newPath $userPath
     Write-InstallLog "path" "ok" "PATH 추가 `"$binDir`""
+    $pathAdded = $true
   } else {
     Write-InstallLog "path" "skip" "사용자가 거절함"
   }
@@ -193,3 +208,8 @@ if (-not $NoOpen -and (Test-Path -LiteralPath (Join-Path $Prefix "사용설명�
 }
 Write-InstallLog "done" "ok" "설치 완료"
 Write-Host "설치 완료. 새 터미널에서 claude-office 를 실행하세요."
+if (-not $pathAdded) {
+  # SPEC 3장 3단계: PATH에 안 들어갔으면(거절했거나 -NoPath) 전체 경로 실행법을 안내한다
+  # (sh와 글자까지 같은 문구 — B17, Windows는 .cmd까지 적는다).
+  Write-Host "다음부터는 이렇게 켜세요: $Prefix\bin\claude-office.cmd"
+}

@@ -36,13 +36,15 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
   // #76 Important: [Environment]::Get/SetEnvironmentVariable("Path","User")는 %VAR% 참조를
   // 펼친 값을 돌려주고 쓸 때도 항상 REG_SZ로 써서, 원래 REG_EXPAND_SZ였던 사용자 PATH의 형식을
   // 깨 버린다. 레지스트리(HKCU:\Environment)를 직접 Get-Item/Set-ItemProperty로 다뤄야 한다.
-  it("PATH는 레지스트리(HKCU:\\Environment)를 ExpandString으로 다루고, Machine은 건드리지 않는다", () => {
+  it("PATH는 레지스트리(HKCU:\\Environment)를 원래 종류로 다루고, Machine은 건드리지 않는다", () => {
     for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
       const text = readFileSync(f, "utf8");
       expect(text, f).toContain('Get-Item "HKCU:\\Environment"');
       expect(text, f).toContain("DoNotExpandEnvironmentNames");
       expect(text, f).toContain('Set-ItemProperty -Path "HKCU:\\Environment" -Name "Path"');
-      expect(text, f).toContain("-Type ExpandString");
+      // #77: 값의 종류(REG_SZ/REG_EXPAND_SZ)를 유지해서 쓴다 — 리터럴 "-Type ExpandString"이
+      // 아니라 GetValueKind로 구한 $kind를 그대로 넘긴다(값이 없던 경우에만 ExpandString 기본값).
+      expect(text, f).toContain("-Type $kind");
       expect(text, f).not.toContain('"Machine"');
     }
   });
@@ -247,6 +249,74 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
   it("설치 로그는 Add-Content -Encoding UTF8로 쓴다(Minor)", () => {
     const text = readFileSync(INSTALL_PS1, "utf8");
     expect(text).toMatch(/Add-Content[^\n]*-Encoding UTF8/);
+  });
+
+  // #77 Important: 값이 실제로 안 바뀌면(설치에서 이미 등록된 경우, 제거에서 우리 항목이 PATH에
+  // 없던 경우) PATH를 다시 쓰지 않는다. 쓸 때는 원래 종류(GetValueKind)를 유지하고, 값이 아예
+  // 없던 경우에만 ExpandString으로 만든다.
+  it("PATH는 변경이 없으면 다시 쓰지 않고, 쓸 때는 원래 레지스트리 종류(GetValueKind)를 유지한다(#77)", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      expect(text, f).toContain("GetValueKind");
+      expect(text, f).toMatch(/if\s*\(\$NewValue\s+-eq\s+\$OldValue\)\s*\{\s*return\s*\}/);
+      expect(text, f).toContain("[Microsoft.Win32.RegistryValueKind]::ExpandString");
+    }
+  });
+
+  // #77 Important: claude plugin 호출 두 줄은 각각 따로 오류를 처리해야 한다 — 하나가 실패해도
+  // 나머지(두 번째 호출, PATH 정리, 파일 삭제)는 계속돼야 한다. 하나의 try로 둘 다 묶으면 첫
+  // 호출이 던질 때 두 번째 호출이 아예 시도되지 않는다.
+  it("uninstall의 claude plugin 호출 두 줄은 각각 따로 try로 감싼다(#77)", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    const uninstallLine = text.split("\n").find((l) => l.includes("plugin uninstall claude-office@claude-office"));
+    const removeLine = text.split("\n").find((l) => l.includes("plugin marketplace remove claude-office"));
+    expect(uninstallLine, text).toMatch(/^\s*try\s*\{.*\}\s*catch/);
+    expect(removeLine, text).toMatch(/^\s*try\s*\{.*\}\s*catch/);
+  });
+
+  // #77 Minor: 확인 질문으로 멈출 수 있는 모든 변경 cmdlet에 -Confirm:$false를 둔다.
+  it("Remove-Item·Set-ItemProperty·New-Item은 모두 -Confirm:$false를 쓴다(#77)", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      const lines = text.split("\n").filter((l) => !l.trim().startsWith("#"));
+      for (const line of lines) {
+        if (/\b(Remove-Item|Set-ItemProperty|New-Item)\b/.test(line)) {
+          expect(line, `${f}: ${line}`).toContain("-Confirm:$false");
+        }
+      }
+    }
+  });
+
+  // #78/B17(SPEC 3장): sh와 ps1의 문구는 글자까지 같아야 한다(경로 표기만 OS에 맞게 다름).
+  it("SPEC 3장 안내 문구가 install.sh/claude-office.sh와 글자까지 같다(B17)", () => {
+    const installSh = readFileSync(join(ROOT, "packaging/install.sh"), "utf8");
+    const launcherSh = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8");
+    const installPs1 = readFileSync(INSTALL_PS1, "utf8");
+    const launcherPs1 = readFileSync(LAUNCHER_PS1, "utf8");
+
+    const serverMsg = "이 창을 닫으면 대시보드가 꺼집니다.";
+    expect(launcherSh).toContain(serverMsg);
+    expect(launcherPs1).toContain(serverMsg);
+
+    const pathHint = "다음부터는 이렇게 켜세요: ";
+    expect(installSh).toContain(pathHint);
+    expect(installPs1).toContain(pathHint);
+
+    const consentQ = "Claude Code에서 claude-office 플러그인도 지울까요?";
+    expect(launcherSh).toContain(consentQ);
+    expect(launcherPs1).toContain(consentQ);
+
+    const keptMsg = "플러그인은 남겨 두었습니다. 지우려면: claude plugin uninstall claude-office@claude-office --scope user";
+    expect(launcherSh).toContain(keptMsg);
+    expect(launcherPs1).toContain(keptMsg);
+
+    const doneMsg = "제거를 마쳤습니다.";
+    expect(launcherSh).toContain(doneMsg);
+    expect(launcherPs1).toContain(doneMsg);
+    expect(launcherSh).toContain("지움:");
+    expect(launcherPs1).toContain("지움:");
+    expect(launcherSh).toContain("남김:");
+    expect(launcherPs1).toContain("남김:");
   });
 
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {

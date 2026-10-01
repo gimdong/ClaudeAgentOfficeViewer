@@ -222,6 +222,24 @@ describe("npm run package:beta", () => {
     }
   });
 
+  // #77: 저장소 원본뿐 아니라 tar.gz 안의 .ps1도 BOM이 있어야 한다(team-lead Ruling B16 — BOM이
+  // 가장 먼저). tar.gz는 CRLF 변환을 안 거치지만(.sh용 LF 그대로 보존), 그래도 원본 그대로 BOM이
+  // 보존되는지 직접 확인한다.
+  it.skipIf(!existsSync(join(ROOT, "packaging/install.ps1")))("tar.gz 안의 .ps1 두 개도 UTF-8 BOM을 유지한다", () => {
+    requireBuildOk();
+    const extracted = mkdtempSync(join(tmpdir(), "claude-office-pkgtest-tar-bom-"));
+    try {
+      execFileSync("tar", ["-xzf", TAR, "-C", extracted]);
+      const base = join(extracted, `claude-office-${VERSION}`);
+      for (const rel of ["install.ps1", "claude-office.ps1"]) {
+        const buf = readFileSync(join(base, rel));
+        expect([...buf.subarray(0, 3)], rel).toEqual([0xef, 0xbb, 0xbf]);
+      }
+    } finally {
+      rmSync(extracted, { recursive: true, force: true });
+    }
+  });
+
   it("tar.gz 안에 .map·.test.·.env 파일이 없다", () => {
     requireBuildOk();
     const out = execFileSync("tar", ["-tzf", TAR]).toString();
