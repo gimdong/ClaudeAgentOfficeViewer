@@ -27,12 +27,21 @@ describe("marketplace.json", () => {
 });
 
 describe("plugin.json", () => {
-  it("이름, 버전 2.0.0-beta.2, 설명, MIT 라이선스를 가진다", async () => {
+  it("이름, 설명, MIT 라이선스를 가진다. 설명은 대시보드 답을 돌려준다고 말한다(Phase 2)", async () => {
     const p = await readJson<Record<string, unknown>>(join(PLUGIN, ".claude-plugin/plugin.json"));
     expect(p.name).toBe("claude-office");
-    expect(p.version).toBe("2.0.0-beta.2"); // beta.2(FB-1·FB-3): 베타 릴리스 버전으로 통일
-    expect(typeof p.description).toBe("string");
+    expect(p.description).toContain("대시보드에서 답한 결정을 돌려줍니다");
+    expect(p.description).not.toContain("결정은 돌려주지 않습니다");
     expect(p.license).toBe("MIT");
+  });
+
+  it("버전은 2.1.0-dev로 네 곳이 같다", async () => {
+    const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
+    const lock = await readJson<{ version: string; packages: Record<string, { version?: string }> }>(join(ROOT, "package-lock.json"));
+    const plugin = await readJson<{ version: string }>(join(PLUGIN, ".claude-plugin/plugin.json"));
+    const m = await readJson<{ plugins: Array<{ name: string; version: string }> }>(join(ROOT, ".claude-plugin/marketplace.json"));
+    expect(pkg.version).toBe("2.1.0-dev");
+    expect([lock.version, lock.packages[""].version, plugin.version, m.plugins.find((x) => x.name === "claude-office")?.version]).toEqual(Array(4).fill(pkg.version));
   });
 
   it("저장소 LICENSE는 MIT이고 package.json도 MIT다 (Ruling P5)", async () => {
@@ -49,15 +58,21 @@ describe("hooks.json", () => {
     expect(Object.keys(f.hooks).sort()).toEqual([...EVENTS].sort());
   });
 
-  it("모든 hook은 http 타입, 같은 URL, timeout 5 이하다", async () => {
+  it("모든 hook은 http 타입, 같은 URL이다", async () => {
     const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
     const hooks = allHooks(f);
     expect(hooks).toHaveLength(EVENTS.length);
     for (const h of hooks) {
       expect(h.type).toBe("http");
       expect(h.url).toBe("http://127.0.0.1:4317/hooks/event");
-      expect(h.timeout).toBeLessThanOrEqual(5);
     }
+  });
+
+  it("PermissionRequest만 timeout 600, 나머지 12개는 5", async () => {
+    const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
+    // 대시보드 답을 기다린다(스펙 3.1). 서버는 590초에 놓아준다
+    expect(f.hooks.PermissionRequest.flatMap((g) => g.hooks.map((h) => h.timeout))).toEqual([600]);
+    for (const e of EVENTS.filter((x) => x !== "PermissionRequest")) expect(f.hooks[e].flatMap((g) => g.hooks.map((h) => h.timeout))).toEqual([5]);
   });
 
   it("도구 이벤트는 matcher '*'를 쓴다", async () => {
@@ -82,6 +97,14 @@ describe("make-dev-plugin", () => {
     const devText = await readFile(join(out, "hooks/hooks.json"), "utf8");
     expect(devText.replaceAll(":4318/", ":4317/")).toBe(origText);
     expect(await readFile(join(out, ".claude-plugin/plugin.json"), "utf8")).toBe(await readFile(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
+  });
+
+  it("make-dev-plugin 사본도 PermissionRequest timeout 600을 유지한다", async () => {
+    const out = join(tmp, "dev");
+    execFileSync("node", [join(ROOT, "scripts/make-dev-plugin.mjs"), "--port", "4319", "--out", out], { stdio: "pipe" });
+    const dev = await readJson<HookFile>(join(out, "hooks/hooks.json"));
+    expect(dev.hooks.PermissionRequest[0].hooks[0].timeout).toBe(600);
+    expect(dev.hooks.PreToolUse[0].hooks[0].timeout).toBe(5);
   });
 
   it("포트가 잘못되면 종료 코드 1", () => {

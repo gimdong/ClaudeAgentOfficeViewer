@@ -4,6 +4,7 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
+const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
 
 /** 인라인 그림 하나의 <text> 내용을 줄마다 모은다 */
 function figureText(id: string): string {
@@ -58,7 +59,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     for (const s of ["확인되지 않은 개발자", "데이터 없음", "검증하지 못했습니다", "allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"]) expect(html).toContain(s);
     expect(html).toContain("doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다");
     // Windows 실행 정책·내려받은 파일 차단(T8 리뷰, Ruling B16): 두 명령 모두 복사 상자로
-    expect(html).toContain("<code>Get-ChildItem -Recurse $HOME\\Downloads\\claude-office-2.0.0-beta.2 | Unblock-File</code></pre><button class=\"copy\"");
+    expect(html).toContain(`<code>Get-ChildItem -Recurse $HOME\\Downloads\\claude-office-${version} | Unblock-File</code></pre><button class="copy"`);
     expect(html).toContain("<code>powershell -ExecutionPolicy Bypass -File install.ps1</code></pre><button class=\"copy\"");
     expect(html).toContain("코드 서명이 없습니다.");
     expect(html).toContain("Windows에서는 실행 정책에 막힐 수 있습니다");
@@ -311,8 +312,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
   });
 
   it("설명서의 버전 표기가 package.json version과 같다", () => {
-    const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
-    const found = [...html.matchAll(/\d+\.\d+\.\d+-beta\.\d+/g)].map((m) => m[0]);
+    const found = [...html.matchAll(/\d+\.\d+\.\d+-(?:beta\.\d+|dev)/g)].map((m) => m[0]);
     expect(found.length).toBeGreaterThan(5); // 파일 이름·폴더 이름·상단 표기
     expect(new Set(found)).toEqual(new Set([version]));
     expect(html).toContain(`베타 버전 ${version}`);

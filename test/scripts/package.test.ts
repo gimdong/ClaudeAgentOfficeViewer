@@ -122,9 +122,9 @@ function requireBuildOk() {
 }
 
 describe("npm run package:beta", () => {
-  it("버전 네 곳이 2.0.0-beta.2", () => {
+  it("버전 네 곳이 package.json version과 같다", () => {
     requireBuildOk();
-    expect(VERSION).toBe("2.0.0-beta.2");
+    expect(VERSION).toMatch(/^\d+\.\d+\.\d+-(?:beta\.\d+|dev)$/); // VERSION은 package.json에서 읽는다. 나머지 세 곳이 같은지 본다
     const pluginJson = JSON.parse(readFileSync(join(ROOT, "plugins/claude-office/.claude-plugin/plugin.json"), "utf8"));
     expect(pluginJson.version).toBe(VERSION);
     const marketplace = JSON.parse(readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf8"));
