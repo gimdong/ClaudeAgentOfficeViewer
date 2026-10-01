@@ -208,11 +208,20 @@ function sleepSync(ms) {
  * 생길 수 있다(Task 7에서 실제로 재현·확인). mkdir은 POSIX에서 원자적이라 이 락으로 직렬화한다.
  * 락을 기다렸다 얻은 두 번째 실행도 다시 한 번 전체를 빌드한다(몇 초 낭비되지만 항상 최신 상태를
  * 보장하는 쪽이 "이미 최신이면 건너뛰기" 같은 캐시 로직보다 단순하고 안전하다).
+ *
+ * main() 안에는 process.exit(1)을 직접 부르는 곳이 세 군데 있다(version 없음, 버전 불일치, 의존성
+ * 해석 실패) — try/finally로 감싸면 process.exit()가 finally를 건너뛰어 락이 남는다(T6 재리뷰
+ * 지적). 대신 락을 얻은 직후 "exit" 이벤트에 정리를 건다 — 이 이벤트는 process.exit() 호출이든
+ * 이벤트 루프가 자연히 다 돌아 끝나는 정상 종료든 모든 경로에서 반드시 한 번 불린다. SIGINT·SIGTERM은
+ * 기본 동작이 바로 죽는 것이라 "exit" 이벤트가 안 거쳐질 수 있어, 둘 다 process.exit()로 바꿔서
+ * 같은 정리 경로를 타게 한다(server/index.ts의 종료 처리와 같은 방식).
  */
 function withLock(fn) {
   mkdirSync(r("release"), { recursive: true }); // release/ 자체는 여러 프로세스가 같이 만들어도 안전(멱등)하다
   const lockDir = r("release", ".package-beta.lock");
-  const deadline = Date.now() + 110_000;
+  // execFileSync(npm run build 등)의 timeout(110초)보다 먼저 이 오류가 나와야 "그 쪽이 멈췄다"는
+  // 진짜 원인이 "너무 오래 걸림"이라는 틀린 안내에 가려지지 않는다.
+  const deadline = Date.now() + 90_000;
   for (;;) {
     try {
       // recursive를 안 쓴다 — recursive: true는 이미 있어도 조용히 성공해 락 구실을 못 한다.
@@ -221,15 +230,19 @@ function withLock(fn) {
       break;
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
-      if (Date.now() > deadline) throw new Error("[package-beta] 락을 얻지 못했습니다(다른 package:beta 실행이 너무 오래 걸림)");
+      if (Date.now() > deadline) {
+        throw new Error(
+          `[package-beta] 락을 얻지 못했습니다(다른 package:beta 실행이 너무 오래 걸림). ` +
+            `다른 실행이 없는데도 이 오류가 나면 ${lockDir} 폴더를 지우고 다시 실행해 주세요.`,
+        );
+      }
       sleepSync(300);
     }
   }
-  try {
-    return fn();
-  } finally {
-    rmSync(lockDir, { recursive: true, force: true });
-  }
+  process.on("exit", () => rmSync(lockDir, { recursive: true, force: true }));
+  process.on("SIGINT", () => process.exit(130));
+  process.on("SIGTERM", () => process.exit(143));
+  return fn();
 }
 
 // 이 파일을 `node scripts/package-beta.mjs`로 직접 실행할 때만 파이프라인을 돌린다 — 다른 모듈이

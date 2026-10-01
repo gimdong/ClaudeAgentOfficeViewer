@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { execFileSync, spawnSync, spawn } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -34,6 +34,32 @@ describe("resolveDepPath / pkgChain (스코프 패키지, Task 6 fix round 1)", 
 
   it("못 찾으면 undefined(호출부가 오류로 처리)", () => {
     expect(resolveDepPath({}, "node_modules/express", "@scope/missing")).toBeUndefined();
+  });
+});
+
+// T6 fix round 3: main() 안의 process.exit(1) 경로(버전 불일치 등)가 withLock의 try/finally를
+// 건너뛰어 락 폴더가 남지 않는지 확인한다. 저장소 파일은 안 바꾸고, 임시 폴더에 스크립트 복사본과
+// 최소한의 package.json/plugin.json/marketplace.json만 만들어 그 경로에서 돌린다(느린 전체 빌드가
+// 전혀 필요 없다 — 버전 비교에서 바로 exit(1)로 끝난다).
+describe("package-beta.mjs의 락이 process.exit(1) 경로에서도 안 남는다(T6 fix round 3)", () => {
+  it("버전 불일치로 종료해도 .package-beta.lock이 남지 않는다", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "claude-office-pkgbeta-lock-"));
+    try {
+      mkdirSync(join(tmp, "scripts"), { recursive: true });
+      mkdirSync(join(tmp, "plugins/claude-office/.claude-plugin"), { recursive: true });
+      mkdirSync(join(tmp, ".claude-plugin"), { recursive: true });
+      copyFileSync(fileURLToPath(new URL("../../scripts/package-beta.mjs", import.meta.url)), join(tmp, "scripts/package-beta.mjs"));
+      writeFileSync(join(tmp, "package.json"), JSON.stringify({ version: "9.9.9" }));
+      writeFileSync(join(tmp, "plugins/claude-office/.claude-plugin/plugin.json"), JSON.stringify({ version: "0.0.1" })); // 일부러 다르게
+      writeFileSync(join(tmp, ".claude-plugin/marketplace.json"), JSON.stringify({ plugins: [{ name: "claude-office", version: "0.0.1" }] }));
+
+      const r = spawnSync(process.execPath, [join(tmp, "scripts/package-beta.mjs")], { encoding: "utf8" });
+      expect(r.status, r.stdout + r.stderr).toBe(1);
+      expect(r.stderr).toContain("버전 불일치");
+      expect(existsSync(join(tmp, "release/.package-beta.lock"))).toBe(false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
