@@ -300,7 +300,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(box("④")).toContain(`⚠️ 포트: ${v1[1].replace("${d.port}", "4317")}\n  → ${v1[2]}`);
     expect(doctor).toContain('"확인하지 못했습니다(이전 버전 서버)"');
     expect(html).toContain("<code>확인하지 못했습니다(이전 버전 서버)</code>");
-    const inUse = /console\.error\(`(포트 \$\{opts\.port\}번이 이미 사용 중입니다\.[^`]*)`\)/.exec(index)![1].replace("${opts.port}", "4317");
+    const inUse = /`(포트 \$\{port\}번이 이미 사용 중입니다\.[^`]*)`/.exec(index)![1].replace("${port}", "4317"); // B64: portInUseOutcome
     expect(box("④")).toContain(inUse);
     // ⑤ Node: 런처 문구에 v20.11.0을 넣은 결과
     const node = /Node\.js 24 이상이 필요합니다\(지금 \$\(node -v\)\)\./.exec(launcher)![0].replace("$(node -v)", "v20.11.0");
@@ -428,8 +428,12 @@ describe("사용설명서(docs/manual/index.html)", () => {
       const lines = ["브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: ", "이 주소는 열쇠입니다. 남에게 보내지 마세요."];
       for (const f of ["packaging/claude-office.sh", "packaging/claude-office.ps1"]) for (const l of lines) expect(read(f), `${f}: ${l}`).toContain(l);
       expect(prose).toContain(`${lines[0]}http://127.0.0.1:4317/?k=…\n${lines[1]}`);
-      expect(read("server/index.ts")).toContain('"이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다."');
-      expect(prose).toContain("이 창을 닫으면 대시보드가 꺼집니다.\n이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+      // B64: 설치본의 문구(새 버전이 이미 켜져 있음)와 이전 버전이 켜져 있을 때의 문구
+      const onNew = "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다.";
+      const onOld = "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요.";
+      for (const t of [onNew, onOld]) expect(read("server/index.ts"), t).toContain(`"${t}"`);
+      expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onNew}`);
+      expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onOld}`);
       // 7장: 제거가 token·state.json도 지운다
       expect(read("packaging/claude-office.sh")).toMatch(/rm -rf [^\n]*"\$PREFIX\/token" "\$PREFIX\/state\.json"/);
       expect(prose).toContain("접속 열쇠 파일(<code>token</code>)과 층별 예산 설정(<code>state.json</code>)");
