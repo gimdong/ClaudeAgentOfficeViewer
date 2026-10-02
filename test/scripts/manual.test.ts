@@ -357,13 +357,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(read("packaging/install.ps1")).toMatch(/\[switch\]\$Yes/);
   });
 
-  it("PowerShell ISE에서는 질문에 답할 수 없다는 안내가 3장과 6장에 있다(B67)", () => {
-    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
-    // B65 뒤로 두 ps1 모두 Read-Host가 아니라 콘솔에서 직접 읽는다(ISE에는 콘솔 입력이 없음)
-    for (const f of ["packaging/install.ps1", "packaging/claude-office.ps1"]) {
-      expect(read(f), f).toContain("[Console]::In.ReadLine()");
-      expect(read(f), f).not.toMatch(/=\s*Read-Host/);
-    }
+  it("PowerShell ISE가 아니라 PowerShell 창에서 실행하라는 안내가 3장과 6장에 있다(B67)", () => {
+    // B68로 ISE에서도 입력 창으로 묻게 되더라도 이 안내는 유지한다(입력 방식은 단언하지 않음)
     const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
     const line = "<strong>PowerShell ISE</strong>가 아니라 PowerShell 창(또는 Windows Terminal)에서 실행해 주세요.";
     const win = prose.slice(prose.indexOf('data-os="win"'), prose.indexOf('<h3>설치 중 질문</h3>'));
@@ -371,6 +366,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const s6 = prose.slice(prose.indexOf('<h2 id="s6">'), prose.indexOf('<h2 id="s7">'));
     const sec = s6.slice(s6.indexOf('<h3 id="ise">'), s6.indexOf("<h3", s6.indexOf('<h3 id="ise">') + 1));
     expect(sec).toContain("질문이 안 뜨고 설치가 안 돼요(Windows)");
+    expect(sec).toContain("질문에 답하지 못한 채 설치(또는 제거)가 끝났거나 멈췄다면");
     expect(sec).toContain("PowerShell ISE");
     expect(sec).toContain("<code>powershell -ExecutionPolicy Bypass -File .\\install.ps1 -Yes</code>");
     expect(sec).toContain("<code>claude-office uninstall --yes</code>");

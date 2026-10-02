@@ -181,7 +181,7 @@
 <div class="os-panel" data-os="win"><p class="os-name">Windows</p>
   <ol class="steps">
     <li>받은 파일 <code>claude-office-2.1.0-dev.zip</code>을 <strong>다운로드</strong> 폴더에 둡니다(압축은 아래 명령이 풉니다).</li>
-    <li>시작 메뉴에서 <strong>PowerShell</strong>을 엽니다. <strong>PowerShell ISE</strong>가 아니라 PowerShell 창(또는 Windows Terminal)에서 실행해 주세요. ISE에서는 설치 중 질문에 답할 수 없습니다.</li>
+    <li>시작 메뉴에서 <strong>PowerShell</strong>을 엽니다. <strong>PowerShell ISE</strong>가 아니라 PowerShell 창(또는 Windows Terminal)에서 실행해 주세요.</li>
     <li>아래 명령으로 파일을 풀고 설치 스크립트를 실행합니다. <code>-ExecutionPolicy Bypass</code>는 "이번 한 번만 이 스크립트 실행을 허용"한다는 뜻이고, 컴퓨터 설정은 바꾸지 않습니다.
       <div class="cmd"><pre><code>cd $HOME\Downloads; Expand-Archive claude-office-2.1.0-dev.zip -DestinationPath . -Force; cd claude-office-2.1.0-dev; powershell -ExecutionPolicy Bypass -File .\install.ps1</code></pre><button class="copy" type="button">복사</button></div>
       <p>(Windows 화면은 베타에서 확인 전입니다)</p>
@@ -532,7 +532,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <div class="cmd"><pre><code>claude-office uninstall --yes</code></pre><button class="copy" type="button">복사</button></div>
 
 <h3 id="ise">질문이 안 뜨고 설치가 안 돼요(Windows)</h3>
-<p>질문에 답하지 못한 채 설치(또는 제거)가 끝났다면, <strong>PowerShell ISE</strong>에서 실행했을 수 있습니다. 이름이 비슷하지만 ISE에서는 설치 중 질문에 답할 수 없습니다.</p>
+<p>질문에 답하지 못한 채 설치(또는 제거)가 끝났거나 멈췄다면, <strong>PowerShell ISE</strong>에서 실행했을 수 있습니다. 이름이 비슷하지만 ISE에서는 질문에 제대로 답하지 못할 수 있습니다.</p>
 <ol class="steps">
   <li>ISE를 닫고, 시작 메뉴에서 <strong>PowerShell</strong>(또는 Windows Terminal)을 엽니다.</li>
   <li>압축 푼 폴더로 가서 설치 명령을 다시 실행하고 질문에 답합니다.</li>
