@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseCliArgs, tokenUrlLine } from "../../server/index";
+import { parseCliArgs, portInUseOutcome, tokenUrlLine } from "../../server/index";
 
 describe("parseCliArgs", () => {
   it("옵션 > 환경변수 > 기본값 순서", () => {
@@ -37,6 +37,13 @@ describe("parseCliArgs", () => {
 
   it("단독 ~도 homedir()로 확장된다", () => {
     expect(parseCliArgs(["--claude-home", "~"], {})).toMatchObject({ claudeHome: homedir() });
+  });
+
+  it("포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64)", () => {
+    expect(portInUseOutcome("phase2", "installed", 4317)).toEqual({ code: 0, out: "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다." });
+    expect(portInUseOutcome("phase2", "dev", 4319)).toEqual({ code: 0, out: "이미 켜져 있습니다." });
+    expect(portInUseOutcome("beta", "installed", 4317)).toEqual({ code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요." });
+    expect(portInUseOutcome("other", "dev", 4319)).toEqual({ code: 1, err: "포트 4319번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요." });
   });
 
   it("토큰 주소 줄은 개발 모드에서만 만든다(Ruling B33)", () => {
@@ -253,12 +260,37 @@ describe("CLI", () => {
       const r = await run(["--port", String(s.port), "--claude-home", s.home, "--log-dir", logDir], s.env);
       rmSync(logDir, { recursive: true, force: true });
       expect(r.code).toBe(0);
-      expect(r.stdout).toContain("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+      // 설치본(임시 PREFIX) 문구(Ruling B64): 런처의 "이 창을 닫으면 대시보드가 꺼집니다."를 바로잡는다
+      expect(r.stdout.trim().split("\n").at(-1)).toBe("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다.");
       expect(r.stderr).not.toContain("이미 사용 중입니다");
     } finally {
       await s.stop();
     }
   }, 40_000);
+
+  it("인증 없는 옛 베타 서버가 포트를 쓰면 \"이전 버전\" 안내와 종료 코드 1(Ruling B64)", async () => {
+    const { createServer: createHttp } = await import("node:http");
+    // 베타(beta.1·2) 서버 흉내: 토큰 없이도 /api/snapshot 200, 진단 API 있음
+    const beta = createHttp((req, res) => {
+      const body = req.url === "/api/snapshot" ? { generatedAt: "2026-10-02T00:00:00.000Z", sessions: [] } : req.url === "/api/diagnostics" ? { doctor: [] } : null;
+      if (!body) return void res.writeHead(404).end();
+      res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+    }).listen(0, "127.0.0.1");
+    await new Promise((r) => beta.once("listening", r));
+    const port = (beta.address() as { port: number }).port;
+    const prefix = mkdtempSync(join(tmpdir(), "office-b64-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-b64-home-"));
+    const logDir = mkdtempSync(join(tmpdir(), "office-b64-log-"));
+    try {
+      const r = await run(["--port", String(port), "--claude-home", home, "--log-dir", logDir], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요.");
+      expect(r.stdout).not.toContain("이미 켜져 있습니다");
+    } finally {
+      beta.close();
+      for (const d of [prefix, home, logDir]) rmSync(d, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it("다른 프로그램(http)이 포트를 쓰면 기존 안내와 종료 코드 1", async () => {
     const { createServer: createHttp } = await import("node:http");

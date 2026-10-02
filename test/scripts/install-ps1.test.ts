@@ -395,7 +395,8 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     const text = readFileSync(INSTALL_PS1, "utf8");
     expect(text).toContain("[System.Security.Cryptography.RandomNumberGenerator]");
     expect(text).toMatch(/New-Object byte\[\] 32/);
-    expect(text).toMatch(/if \(Test-Path -LiteralPath \$tokenFile\)/);
+    // 비어 있는 토큰 파일은 다시 만든다(sh의 -s와 같게, Ruling B64)
+    expect(text).toMatch(/if \(\(Test-Path -LiteralPath \$tokenFile\) -and \(Get-Item -LiteralPath \$tokenFile\)\.Length -gt 0\)/);
     expect(text).toContain('Write-InstallLog "token" "skip" "이미 있음"');
     expect(text).toContain('Write-InstallLog "token" "ok" "토큰 파일 준비"');
     // BOM 없는 ASCII로 쓴다

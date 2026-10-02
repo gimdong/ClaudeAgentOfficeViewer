@@ -132,7 +132,8 @@ Write-InstallLog "copy" "ok" "앱 파일 복사 완료 `"$Prefix\app`""
 # 2-1. 대시보드 토큰(Phase 2 스펙 7.1): 없으면 무작위 32바이트(hex)를 BOM 없는 ASCII로 만들고, 있으면 그대로 둔다
 # (install.sh와 같은 로그 문구). 값은 화면·설치 로그 어디에도 쓰지 않는다. 사용자 프로필 아래라 권한은 상속된다
 $tokenFile = Join-Path $Prefix "token"
-if (Test-Path -LiteralPath $tokenFile) {
+# 비어 있는 파일은 없는 것과 같이 다시 만든다(install.sh의 [ -s ]와 같게, Ruling B64)
+if ((Test-Path -LiteralPath $tokenFile) -and (Get-Item -LiteralPath $tokenFile).Length -gt 0) {
   Write-InstallLog "token" "skip" "이미 있음"
 } else {
   $bytes = New-Object byte[] 32

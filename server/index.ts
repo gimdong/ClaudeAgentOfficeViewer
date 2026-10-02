@@ -61,6 +61,33 @@ export function tokenUrlLine(mode: OfficePaths["mode"], port: number, token: str
   return mode === "dev" ? `대시보드 열기(개발): http://127.0.0.1:${port}/?k=${token}` : null;
 }
 
+/** 포트에 이미 무엇이 있는가: Phase 2 인증 서버(토큰 없이 401 + app 표시), 인증 없는 옛 베타 서버, 그 밖 */
+export type RunningKind = "phase2" | "beta" | "other";
+
+/** 포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64). 런처가 앞에 낸 "이 창을 닫으면…"을 설치본에서는 바로잡는다 */
+export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], port: number): { code: 0; out: string } | { code: 1; err: string } {
+  if (kind === "phase2") {
+    return { code: 0, out: mode === "installed" ? "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다." : "이미 켜져 있습니다." };
+  }
+  if (kind === "beta") return { code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요." };
+  return { code: 1, err: `포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.` };
+}
+
+/**
+ * doctor의 "ours"에는 인증 없는 베타 서버도 들어간다. 토큰 없이 물어 401 + app "claude-office"면 Phase 2 서버다(토큰은 보내지 않는다, B52).
+ * 그 밖에 doctor 판정이 ours면 옛 베타 서버
+ */
+async function probeRunning(port: number): Promise<RunningKind> {
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
+    const body = (await r.json().catch(() => null)) as { app?: unknown } | null;
+    if (r.status === 401 && body?.app === "claude-office") return "phase2";
+  } catch {
+    /* 아래 doctor 판정으로 */
+  }
+  return (await defaultProbePort(port)) === "ours" ? "beta" : "other";
+}
+
 /** Node가 24 미만이면 쉬운 말 안내를, 아니면 null을 돌려준다(스펙 5장 1번) */
 export function checkNode(version: string): string | null {
   const major = Number(/^v(\d+)/.exec(version)?.[1] ?? 0);
@@ -252,16 +279,18 @@ async function main(): Promise<void> {
     if (e.code === "EADDRINUSE") {
       // 이미 이 프로그램이 켜져 있으면(Ruling B42) 오류가 아니다 — 런처가 토큰 주소로 브라우저를 이미 다시 열었다.
       // 판별은 doctor의 포트 판정을 그대로 쓴다(토큰을 보내지 않는다, B52). v1·다른 프로그램은 기존 안내와 종료 코드 1
-      void defaultProbePort(opts.port).then((state) => {
+      // 인증 없는 옛 베타 서버(B64)는 0으로 끝내지 않는다 — 브라우저에 옛 화면이 뜨고 결정·예산이 조용히 동작하지 않기 때문
+      void probeRunning(opts.port).then((kind) => {
         hub.stop();
-        if (state === "ours") {
-          console.log("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+        const o = portInUseOutcome(kind, paths.mode, opts.port);
+        if (o.code === 0) {
+          console.log(o.out);
           log.info("server", "already running", { port: opts.port });
-          process.exit(0);
+        } else {
+          console.error(o.err);
+          log.error("server", kind === "beta" ? "older version running" : "port in use", { port: opts.port });
         }
-        console.error(`포트 ${opts.port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
-        log.error("server", "port in use", { port: opts.port });
-        process.exit(1);
+        process.exit(o.code);
       });
       return;
     } else {
