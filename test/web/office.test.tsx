@@ -93,10 +93,20 @@ describe("Desk", () => {
     expect(desk.querySelector(".qmark")).not.toBeNull();
   });
 
-  it("남은 시간이 60초 이하이면 급함(urgent) 표시", () => {
+  it("남은 시간이 60초 이하이면 급함(urgent) 표시이고 ?가 분홍 팔레트다", () => {
     const soon = new Date(Date.now() + 30_000).toISOString();
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: soon } })} />);
-    expect(screen.getByTestId("desk-developer").className).toContain("urgent");
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.className).toContain("urgent");
+    const fills = new Set([...desk.querySelectorAll(".qmark rect")].map((r) => r.getAttribute("fill")));
+    expect(fills).toEqual(new Set([NEON.pink, NEON.pinkDeep]));
+  });
+
+  it("급하지 않으면 ?는 노랑 팔레트다", () => {
+    const later = new Date(Date.now() + 300_000).toISOString();
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: later } })} />);
+    const fills = new Set([...screen.getByTestId("desk-developer").querySelectorAll(".qmark rect")].map((r) => r.getAttribute("fill")));
+    expect(fills).toEqual(new Set([NEON.yellow, NEON.yellowDeep]));
   });
 
   it("손든 캐릭터는 BODY_UP이다: 8번째 열 0행(손)이 피부색", () => {

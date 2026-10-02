@@ -2,6 +2,20 @@ import type { DecisionKind, DecisionState, DecisionView } from "../../src/shared
 
 /** 결정 보고서 문구(디자인 phase2 §2·§3·§9). 값은 표의 글자 그대로다 */
 
+/** 사용자가 보는 글자(그래핌) 단위. 서버가 거부 이유·기타 답을 이 단위로 센다(server/events/summarize toGraphemes) */
+export const graphemes: (s: string) => string[] = (() => {
+  try {
+    const seg = new Intl.Segmenter("ko", { granularity: "grapheme" });
+    return (s: string) => Array.from(seg.segment(s), (x) => x.segment);
+  } catch {
+    return (s: string) => Array.from(s);
+  }
+})();
+export const cutGraphemes = (s: string, max: number): string => {
+  const g = graphemes(s);
+  return g.length > max ? g.slice(0, max).join("") : s;
+};
+
 export const KIND_CHIP: Record<DecisionKind, string> = {
   permission: "권한 요청",
   question: "질문",

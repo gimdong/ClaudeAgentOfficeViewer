@@ -24,6 +24,9 @@ export function useDecisions(snapshot: Snapshot | null) {
   const opener = useRef<HTMLElement | null>(null);
   const lastView = useRef<DecisionView | null>(null);
   const lastAnswer = useRef<DecisionAnswer | null>(null);
+  /** 지금 열린 결정. 응답이 늦게 와도 다른 결정에 붙지 않게 send가 확인한다(Task 8 리뷰) */
+  const openRef = useRef<string | null>(null);
+  openRef.current = openId;
 
   const all = snapshot?.decisions ?? [];
   const pending = useMemo(() => all.filter((v) => v.state === "pending").sort(byCreated), [all]);
@@ -36,6 +39,7 @@ export function useDecisions(snapshot: Snapshot | null) {
 
   const open = useCallback((id: string, el?: HTMLElement | null) => {
     if (el !== undefined) opener.current = el;
+    openRef.current = id;
     setOpenId(id);
     setSendState({ state: "idle" });
     lastAnswer.current = null;
@@ -52,6 +56,7 @@ export function useDecisions(snapshot: Snapshot | null) {
   const close = useCallback(
     (restoreFocus = true) => {
       const sessionId = view?.sessionId;
+      openRef.current = null;
       setOpenId(null);
       setSendState({ state: "idle" });
       if (!restoreFocus) return;
@@ -78,17 +83,23 @@ export function useDecisions(snapshot: Snapshot | null) {
       const id = view.id;
       lastAnswer.current = a;
       setSendState({ state: "sending" });
+      // 보내는 동안 다른 결정을 열었으면 그 결정의 상태를 바꾸지 않는다
+      const still = () => openRef.current === id;
       fetch(`/api/decisions/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) })
         .then(async (r) => {
+          if (r.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+          if (!still()) return;
           if (r.ok) return setSendState({ state: "sent", outcome: a.action });
           if (r.status === 409) {
             const body = (await r.json().catch(() => null)) as { state?: DecisionState } | null;
-            return setSendState({ state: "conflict", conflictState: body?.state });
+            if (still()) setSendState({ state: "conflict", conflictState: body?.state });
+            return;
           }
-          if (r.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
           setSendState({ state: "failed" });
         })
-        .catch(() => setSendState({ state: "failed" }));
+        .catch(() => {
+          if (still()) setSendState({ state: "failed" });
+        });
     },
     [view],
   );

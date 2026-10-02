@@ -12,7 +12,7 @@ import { metaLine } from "../../web/office/activityText";
 import { budgetLabel, remaining, resultLine, whyLine } from "../../web/report/text";
 
 const T0 = Date.UTC(2026, 9, 2, 3, 0, 0);
-const NBSP = " ";
+const NBSP = "\u00A0";
 
 function dv(p: Partial<DecisionView> = {}): DecisionView {
   const created = p.createdAt ?? new Date(T0).toISOString();
@@ -179,11 +179,65 @@ describe("답 보내기", () => {
     render(<App />);
     open();
     const input = screen.getByLabelText("거부 이유 (선택, Claude에게 전달됩니다)") as HTMLInputElement;
-    expect(input.maxLength).toBe(200);
     fireEvent.change(input, { target: { value: "테스트 폴더만 써 주세요" } });
     expect(screen.getByRole("dialog").textContent).toContain("13/200");
     fireEvent.click(screen.getByRole("button", { name: "거부" }));
     expect(JSON.parse(posts()[0][1].body)).toEqual({ action: "deny", reason: "테스트 폴더만 써 주세요" });
+    await flush();
+  });
+
+  it("거부 이유는 서버와 같이 글자(그래핌)로 센다: 이모지가 섞인 200자가 들어가고 카운터가 200", async () => {
+    show(snap([dv()]));
+    render(<App />);
+    open();
+    const input = screen.getByLabelText("거부 이유 (선택, Claude에게 전달됩니다)") as HTMLInputElement;
+    const text = "😀".repeat(100) + "가".repeat(100);
+    fireEvent.change(input, { target: { value: text } });
+    expect(input.value).toBe(text);
+    expect(screen.getByRole("dialog").textContent).toContain("200/200");
+    fireEvent.change(input, { target: { value: text + "👍🏽나" } });
+    expect(input.value).toBe(text); // 201번째 글자부터는 들어가지 않는다
+    fireEvent.click(screen.getByRole("button", { name: "거부" }));
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ action: "deny", reason: text });
+    await flush();
+  });
+
+  it("보내는 중에 다른 결정을 열면 늦게 온 응답을 새 결정에 붙이지 않는다", async () => {
+    let resolve!: (v: unknown) => void;
+    reply = () => new Promise((r) => (resolve = r));
+    show(snap([dv({ id: "d1" }), dv({ id: "d2", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() })]));
+    render(<App />);
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "허용" }));
+    fireEvent.click(screen.getByRole("button", { name: "다음 결정" }));
+    expect(screen.getByRole("dialog").textContent).toContain("3F claude_project · reviewer");
+    resolve(okResponse(200, { state: "answered-dashboard" }));
+    await flush();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("3F claude_project · reviewer");
+    expect(dialog.textContent).not.toContain("대시보드에서 허용함");
+    expect(dialog.querySelector(".rp-banner")).toBeNull();
+    expect(screen.getByRole("button", { name: "허용" }).getAttribute("aria-disabled")).toBeNull();
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("dialog").textContent).toContain("3F claude_project · reviewer"); // 건너뛰지 않는다
+    expect(posts().map((c) => c[0])).toEqual(["/api/decisions/d1"]);
+  });
+
+  it("자동으로 다음 결정이 열린 뒤 0.5초 동안은 답 입력을 무시한다", async () => {
+    show(snap([dv({ id: "a" }), dv({ id: "b", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() })]));
+    render(<App />);
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "허용" }));
+    await flush();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByRole("dialog").textContent).toContain("3F claude_project · reviewer");
+    fireEvent.click(screen.getByRole("button", { name: "거부" }));
+    fireEvent.keyDown(screen.getByLabelText("거부 이유 (선택, Claude에게 전달됩니다)"), { key: "Enter" });
+    expect(posts()).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(500));
+    fireEvent.click(screen.getByRole("button", { name: "거부" }));
+    expect(posts()).toHaveLength(2);
+    expect(posts()[1][0]).toBe("/api/decisions/b");
     await flush();
   });
 
@@ -422,6 +476,18 @@ describe("종류별 보고서", () => {
     expect(within(dialog).queryByRole("button", { name: /허용|거부|계속|중단|승인/ })).toBeNull();
     expect(within(dialog).queryByRole("timer")).toBeNull();
     expect(document.activeElement?.id).toBe("rp-title");
+    expect(dialog.textContent).not.toContain("도구 SendMessage"); // 팀원 요청에는 도구 줄이 없다(명세 §1.4)
+  });
+
+  it("아바타 셔츠는 책상과 같은 색(구성원 color)", () => {
+    const v = dv({ agent: "quill" });
+    const s = snap([v]);
+    s.sessions[0].members.push({ ...s.sessions[0].members[1], name: "quill", role: "quill", color: "orange", state: "decision", decision: { kind: "permission", since: v.createdAt, id: v.id, deadline: v.deadline } });
+    show(s);
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /quill, 결정 필요/ }));
+    const fills = [...screen.getByRole("dialog").querySelectorAll(".rp-avatar rect")].map((r) => r.getAttribute("fill"));
+    expect(fills).toContain("#ffb86b");
   });
 
   it("계획은 보고서만(Ruling B40): 미리보기와 \"터미널에서 답해 주세요\", 버튼 없음", () => {
@@ -458,6 +524,7 @@ describe("종류별 보고서", () => {
     await flush();
     expect(screen.getByRole("dialog").textContent).toContain("대시보드에서 계속함");
     act(() => vi.advanceTimersByTime(3000));
+    act(() => vi.advanceTimersByTime(500)); // 자동으로 넘어간 직후 0.5초는 답 입력을 무시한다
     fireEvent.click(screen.getByRole("button", { name: "중단" }));
     expect(JSON.parse(posts()[1][1].body)).toEqual({ action: "stop" });
     await flush();

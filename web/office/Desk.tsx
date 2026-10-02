@@ -48,7 +48,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
           {/* 누를 수 있는 결정(id가 있음)만 호버·포커스일 때 점선 링을 보인다(디자인 4.4, 6장 "Phase 2 이후") */}
           {openable && <PixelSprite rects={spriteRects(QRING, { y: NEON.yellow })} x={1} y={-2} className="q-ring" />}
           <g className="qmark">
-            <PixelSprite rects={spriteRects(QMARK, { y: NEON.yellow, Y: NEON.yellowDeep })} x={3} y={0} />
+            <PixelSprite rects={spriteRects(QMARK, urgent ? { y: NEON.pink, Y: NEON.pinkDeep } : { y: NEON.yellow, Y: NEON.yellowDeep })} x={3} y={0} />
           </g>
         </>
       ) : (

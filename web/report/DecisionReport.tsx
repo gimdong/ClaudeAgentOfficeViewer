@@ -5,13 +5,15 @@ import { NEON, roleOf, shirtColor } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
 import { characterRows, spriteRects } from "../pixel/sprites";
 import {
-  EXPIRED, KIND_CHIP, SEND_FAILED, VANISHED, budgetLabel, conflictLine, outcomeLine, remaining, remainingSeconds, resultLine, summaryOf, titleOf, usageLabel, whyLine,
+  EXPIRED, KIND_CHIP, SEND_FAILED, VANISHED, budgetLabel, cutGraphemes, graphemes, conflictLine, outcomeLine, remaining, remainingSeconds, resultLine, summaryOf, titleOf, usageLabel, whyLine,
 } from "./text";
 import { QuestionForm } from "./QuestionForm";
 import type { Decisions } from "./useDecisions";
 
 /** 답한 뒤 다음 결정으로 넘어가거나 닫기까지(디자인 phase2 §3) */
 export const ADVANCE_MS = 3000;
+/** 자동으로 다음 결정이 열린 직후 답 입력을 무시하는 시간. Enter를 누르고 있어 다음 결정이 거부되는 것을 막는다 */
+export const ADVANCE_GUARD_MS = 500;
 const HOLD_S = 590;
 const REASON_MAX = 200;
 
@@ -23,9 +25,10 @@ const hhmm = (iso: string) => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, color }: { name: string; color?: string }) {
   const role = roleOf(name);
-  const colors = { h: NEON.hair, s: NEON.skin, e: NEON.eye, c: shirtColor(role), p: NEON.pants, g: NEON.glasses, t: NEON.pink };
+  // 셔츠 색은 책상과 같다(구성원 color, Desk의 shirtColor)
+  const colors = { h: NEON.hair, s: NEON.skin, e: NEON.eye, c: shirtColor(role, color), p: NEON.pants, g: NEON.glasses, t: NEON.pink };
   return (
     <span className="rp-avatar" aria-hidden="true">
       <svg viewBox="0 0 8 7" shapeRendering="crispEdges">
@@ -121,6 +124,12 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
   const root = useRef<HTMLElement>(null);
   /** ‹ ›로 넘길 때는 포커스를 누른 버튼에 둔다(§4). 그 밖의 열기·넘어가기는 거부 버튼이나 제목으로 */
   const navFocus = useRef<"keep" | "title" | null>(null);
+  const guardUntil = useRef(0);
+  /** 답 보내기는 모두 여기를 거친다(자동 넘김 직후 0.5초는 무시) */
+  const send = (a: Parameters<Decisions["send"]>[0]) => {
+    if (Date.now() < guardUntil.current) return;
+    d.send(a);
+  };
 
   const pending = v?.state === "pending" && !d.vanished;
   const timed = !!v && v.answerable && pending;
@@ -178,6 +187,7 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
       if (a && root.current?.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) return;
       const nextV = d.pending.find((x) => x.id !== v.id);
       if (nextV) {
+        guardUntil.current = Date.now() + ADVANCE_GUARD_MS;
         d.open(nextV.id);
         const sess = sessions.find((x) => x.id === nextV.sessionId);
         announce(`다음 결정: ${sess ? `${sess.name} ${nextV.agent}` : nextV.agent}, ${KIND_CHIP[nextV.kind]}`);
@@ -207,7 +217,7 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
   const act = (fn: () => void) => () => {
     if (!busy) fn();
   };
-  const sendDeny = () => d.send({ action: "deny", ...(reason.trim() ? { reason: reason.trim() } : {}) });
+  const sendDeny = () => send({ action: "deny", ...(reason.trim() ? { reason: reason.trim() } : {}) });
   const onReasonKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -223,11 +233,12 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
       <div className={`rp-answer${busy ? " locked" : ""}`}>
         <div className="rp-reason">
           <label htmlFor="rp-reason-input">{plan ? "고칠 점 (선택, Claude에게 전달됩니다)" : "거부 이유 (선택, Claude에게 전달됩니다)"}</label>
-          <input id="rp-reason-input" type="text" maxLength={REASON_MAX} value={reason} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))} onKeyDown={onReasonKey} />
-          <span className="rp-count" aria-hidden="true">{`${[...reason].length}/${REASON_MAX}`}</span>
+          {/* maxLength(UTF-16)는 이모지를 둘로 세므로 쓰지 않고, 서버와 같은 글자 단위로 자른다 */}
+          <input id="rp-reason-input" type="text" value={reason} onChange={(e) => setReason(cutGraphemes(e.target.value, REASON_MAX))} onKeyDown={onReasonKey} />
+          <span className="rp-count" aria-hidden="true">{`${graphemes(reason).length}/${REASON_MAX}`}</span>
         </div>
         <div className="rp-buttons">
-          <button type="button" {...lockedProps("pbtn--primary")} onClick={act(() => d.send({ action: "allow" }))}>
+          <button type="button" {...lockedProps("pbtn--primary")} onClick={act(() => send({ action: "allow" }))}>
             {plan ? "승인" : "허용"}
           </button>
           <button ref={deny} type="button" {...lockedProps("pbtn--deny")} onClick={act(sendDeny)}>
@@ -245,10 +256,10 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
           예산만큼 더 쓰면 다시 묻습니다
         </p>
         <div className="rp-buttons">
-          <button type="button" {...lockedProps("pbtn--primary")} onClick={act(() => d.send({ action: "continue" }))}>
+          <button type="button" {...lockedProps("pbtn--primary")} onClick={act(() => send({ action: "continue" }))}>
             계속
           </button>
-          <button ref={deny} type="button" {...lockedProps("pbtn--deny")} onClick={act(() => d.send({ action: "stop" }))}>
+          <button ref={deny} type="button" {...lockedProps("pbtn--deny")} onClick={act(() => send({ action: "stop" }))}>
             중단
           </button>
         </div>
@@ -257,7 +268,7 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
   } else if (v.kind === "question") {
     // key로 결정마다 고른 상태를 새로 시작한다. 답은 인덱스로만 보낸다(Ruling B30)
     answer = answerable
-      ? (children ?? <QuestionForm key={v.id} questions={v.questions ?? []} disabled={busy} onSubmit={(answers) => d.send({ action: "answer", answers })} />)
+      ? (children ?? <QuestionForm key={v.id} questions={v.questions ?? []} disabled={busy} onSubmit={(answers) => send({ action: "answer", answers })} />)
       : null;
   }
   if (!v.answerable) {
@@ -287,7 +298,7 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
         </div>
       )}
       <header className="rp-head">
-        <Avatar name={v.agent} />
+        <Avatar name={v.agent} color={session?.members.find((m) => m.name === v.agent)?.color} />
         <div className="rp-headtext">
           <p className="rp-who">{who}</p>
           <h2 ref={title} id="rp-title" className="rp-title" tabIndex={-1}>
@@ -337,7 +348,8 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
       <div className="rp-scroll">
         <section className="rp-sec" id="rp-what" aria-labelledby="rp-what-h">
           <h3 id="rp-what-h">하려는 일</h3>
-          <p className="rp-tool">{`도구 ${v.toolName}`}</p>
+          {/* 팀원 요청은 도구 호출이 아니므로 도구 줄을 그리지 않는다(명세 §1.4) */}
+          {v.kind !== "team" && <p className="rp-tool">{`도구 ${v.toolName}`}</p>}
           <What v={v} />
         </section>
         <section className="rp-sec" aria-labelledby="rp-why-h">
