@@ -159,7 +159,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const ps1 = read("packaging/install.ps1");
     const pairs: Array<[string, string]> = [
       [install, "에 claude-office 명령 경로를 추가할까요?"],
-      [install, "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다."],
+      [install, "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다."],
+      [read("packaging/install.ps1"), "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다."], // Windows 설치 질문도 같은 문구(B63)
       [install, "설치 완료. 새 터미널에서 claude-office 를 실행하세요."],
       [install, "이미 다른 파일이 있는 폴더입니다. 빈 폴더나 새 폴더 이름을 지정해 주세요."],
       [install, "사용설명서 6장(문제가 생겼을 때)"],
