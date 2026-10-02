@@ -174,6 +174,8 @@ describe("결정 절(Phase 2)", () => {
     expect(s).toContain("| answered-dashboard | 3 |");
     expect(s).toContain("| expired | 1 |");
     expect(s).toContain("합계 6건");
+    // 로그의 resolved kind는 끝날 때 종류(demoteBudget, B35)라 byKind와 다를 수 있다(항목 8에서 확인)
+    expect(s).toContain("- 종류별 건수는 요청이 들어올 때의 종류입니다. 예산 요청이 '계속' 뒤 권한 요청으로 바뀐 경우 로그의 끝난 종류와 수가 다를 수 있습니다");
   });
 
   it("decisions 필드가 없는 옛 진단 파일도 읽는다", async () => {

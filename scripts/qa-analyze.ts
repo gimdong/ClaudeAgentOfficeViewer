@@ -105,7 +105,7 @@ export function analyze(b: DiagBundle): string {
   else {
     const total = Object.values(dec.byKind).reduce((a, n) => a + n, 0);
     const rows = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `| ${cell(k)} | ${n} |`);
-    out.push(`- 합계 ${total}건`, "", "| 종류 | 건수 |", "|---|---|", ...rows(dec.byKind), "", "| 결과 | 건수 |", "|---|---|", ...rows(dec.byState), "");
+    out.push(`- 합계 ${total}건`, "- 종류별 건수는 요청이 들어올 때의 종류입니다. 예산 요청이 '계속' 뒤 권한 요청으로 바뀐 경우 로그의 끝난 종류와 수가 다를 수 있습니다", "", "| 종류 | 건수 |", "|---|---|", ...rows(dec.byKind), "", "| 결과 | 건수 |", "|---|---|", ...rows(dec.byState), "");
   }
 
   // 초안: 사람이 다듬어 director에게 보낸다. 형식은 팀 규칙 [QA 인폼] 증상 / 재현 조건 / 근거 / 추정 원인 / 제안
