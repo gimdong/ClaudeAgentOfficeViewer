@@ -523,6 +523,17 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(prose).toContain(`다른 hook의 timeout은 ${[...others][0]}초입니다.`);
     });
 
+    it("터미널에서 먼저 답해도 대시보드 요청이 잠깐 남고, 그때 누른 답은 적용되지 않는다(B70·B71, #190)", () => {
+      const text = read("web/report/text.ts");
+      for (const t of ['allow: "대시보드에서 허용함"', 'deny: "대시보드에서 거부함"']) expect(text).toContain(t);
+      const report = prose.slice(prose.indexOf('<h3 id="report">'), prose.indexOf('<h3 id="budget">'));
+      expect(report).toContain("<li>Claude Code 창에서 먼저 답해도 대시보드에 그 요청이 잠깐 남아 있을 수 있습니다. 창에서 허용했다면 보통 그 작업이 끝날 때까지 남고, 드물게 더 오래 남습니다. 그 사이 대시보드에서 누른 답은 <code>대시보드에서 허용함</code>·<code>대시보드에서 거부함</code>으로 보여도 <strong>적용되지 않습니다</strong>. Claude Code 창의 답이 이미 적용되었습니다.</li>");
+      const s6 = prose.slice(prose.indexOf('<h3 id="already-answered">'), prose.indexOf('<h3 id="no-key">'));
+      expect(s6).toContain("<p>Claude Code 창에서 허용한 경우에는 그 작업이 끝날 때까지(드물게 더 오래) 대시보드에 요청이 남아 있을 수 있습니다. 그 사이에 대시보드에서 누르면 이 안내 대신 <code>대시보드에서 허용함</code>·<code>대시보드에서 거부함</code>이 보일 수 있지만, 이때도 대시보드의 답은 <strong>적용되지 않습니다</strong>. 실제로 적용된 답은 Claude Code 창의 답입니다.</p>");
+      const b = prose.slice(prose.indexOf('<h2 id="s9">'));
+      expect(b).toContain("Claude Code 창에서 먼저 답해도 대시보드에 요청이 잠깐 남을 수 있고, 그때 대시보드에서 누른 답은 화면에 어떻게 보이든 적용되지 않습니다.");
+    });
+
     it("열쇠 값 모양(64자 hex)이 없다", () => {
       expect(html).not.toMatch(/[0-9a-f]{64}/i);
     });

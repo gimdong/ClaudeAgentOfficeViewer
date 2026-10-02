@@ -337,6 +337,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <ul>
     <li><strong>허용은 되돌릴 수 없습니다.</strong> 보고서의 요약(명령, 파일)을 꼭 읽고 눌러 주세요.</li>
     <li>같은 질문이 Claude Code 창에도 떠 있고, <strong>먼저 답한 쪽이 적용됩니다.</strong></li>
+    <li>Claude Code 창에서 먼저 답해도 대시보드에 그 요청이 잠깐 남아 있을 수 있습니다. 창에서 허용했다면 보통 그 작업이 끝날 때까지 남고, 드물게 더 오래 남습니다. 그 사이 대시보드에서 누른 답은 <code>대시보드에서 허용함</code>·<code>대시보드에서 거부함</code>으로 보여도 <strong>적용되지 않습니다</strong>. Claude Code 창의 답이 이미 적용되었습니다.</li>
     <li>대시보드에서 10분 안에(화면에서는 9:50부터 셉니다) 답하지 않으면 <code>시간이 지나 터미널로 넘어감</code>으로 닫히고, Claude Code 창에서 답하면 됩니다.</li>
     <li>대시보드가 꺼져 있으면 지금처럼 Claude Code 창에서만 묻습니다.</li>
   </ul>
@@ -454,6 +455,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 
 <h3 id="already-answered">결정 버튼을 눌렀는데 "이미 터미널에서 답했습니다"가 떠요</h3>
 <p>같은 질문이 Claude Code 창에도 떠 있고, <strong>먼저 답한 쪽이 적용됩니다.</strong> 이 안내는 Claude Code 창에서 먼저 답한 뒤 대시보드에서 눌렀을 때 나옵니다. 대시보드에서 누른 답은 적용되지 않았고, 아무 문제도 생기지 않았습니다. 비슷한 안내로 <code>다른 창에서 이미 답했습니다</code>(대시보드를 연 다른 브라우저 창에서 먼저 답함)와 <code>시간이 지나 터미널로 넘어감</code>(10분이 지남)이 있습니다. Claude Code 창에 남은 질문이 있으면 그 창에서 답해 주세요.</p>
+<p>Claude Code 창에서 허용한 경우에는 그 작업이 끝날 때까지(드물게 더 오래) 대시보드에 요청이 남아 있을 수 있습니다. 그 사이에 대시보드에서 누르면 이 안내 대신 <code>대시보드에서 허용함</code>·<code>대시보드에서 거부함</code>이 보일 수 있지만, 이때도 대시보드의 답은 <strong>적용되지 않습니다</strong>. 실제로 적용된 답은 Claude Code 창의 답입니다.</p>
 <figure class="fig" data-fig="fig-err-already-answered">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 547" role="img" aria-labelledby="fig-err-already-answered-t fig-err-already-answered-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
 <title id="fig-err-already-answered-t">증상: 이미 터미널에서 답했습니다</title>
@@ -689,7 +691,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li><strong>PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음).</strong> 화면에는 "데이터 없음"으로 보입니다.</li>
   <li><strong>코드 서명이 없습니다.</strong> 그래서 macOS에서는 드물게 "확인되지 않은 개발자" 경고가 나올 수 있고, Windows에서는 실행 정책에 막힐 수 있습니다. 대처법은 <a href="#s3">3장</a>과 <a href="#s6">6장</a>에 있습니다.</li>
   <li><strong>회사 관리자 정책</strong>(<code>allowManagedHooksOnly</code> 등)이 켜져 있으면, 관리자가 <a href="#s8">부록 A</a>대로 설정하기 전까지 말풍선과 손들기가 보이지 않고 대시보드에서 답할 수도 없습니다. 빌딩, 층, 토큰 숫자는 그대로 보입니다.</li>
-  <li><strong>대시보드에서 답하기의 한계</strong>: 대시보드가 꺼져 있으면 Claude Code 창에서만 묻습니다. 권한 모드가 auto인 창은 일반 권한 요청이 대시보드에 드물게 뜹니다(예산 도달은 모드와 관계없이 뜸). 계획 승인과 팀원의 <code>[결정 필요]</code>는 대시보드에서 보기만 하고 Claude Code 창에서 답합니다. 대시보드의 결정은 10분(화면은 9:50부터) 뒤 Claude Code 창으로 넘어갑니다. 허용은 되돌릴 수 없습니다.</li>
+  <li><strong>대시보드에서 답하기의 한계</strong>: 대시보드가 꺼져 있으면 Claude Code 창에서만 묻습니다. 권한 모드가 auto인 창은 일반 권한 요청이 대시보드에 드물게 뜹니다(예산 도달은 모드와 관계없이 뜸). 계획 승인과 팀원의 <code>[결정 필요]</code>는 대시보드에서 보기만 하고 Claude Code 창에서 답합니다. 대시보드의 결정은 10분(화면은 9:50부터) 뒤 Claude Code 창으로 넘어갑니다. 허용은 되돌릴 수 없습니다. Claude Code 창에서 먼저 답해도 대시보드에 요청이 잠깐 남을 수 있고, 그때 대시보드에서 누른 답은 화면에 어떻게 보이든 적용되지 않습니다.</li>
   <li><strong>대시보드는 4317번 포트에서만 말풍선과 손들기가 동작합니다.</strong> 다른 번호로 켜면 빌딩과 숫자만 보입니다.</li>
   <li><strong>로그인할 때 저절로 켜지지 않습니다.</strong> 볼 때마다 <code>claude-office</code>로 켜 주세요.</li>
   <li><strong>로그와 진단 파일은 자동으로 보내지 않습니다.</strong> 여러분이 직접 만든 진단 파일만 담당자에게 전달됩니다. 실행 로그는 7일이 지나면 저절로 지워집니다(설치 기록은 남습니다).</li>
