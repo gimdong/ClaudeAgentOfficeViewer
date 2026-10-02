@@ -82,18 +82,30 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
   });
 
-  it("designer 그림 11개가 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
+  it("designer 그림(베타 11개 + Phase 2 10개)이 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
     const ids = [...html.matchAll(/<figure class="fig" data-fig="([\w-]+)">\s*(?:<!--[\s\S]*?-->\s*)?<svg /g)].map((m) => m[1]).sort();
-    expect(ids).toEqual(["fig-diag-chip-panel", "fig-diag-file", "fig-err-managed", "fig-err-nobubble", "fig-err-node", "fig-err-offline", "fig-err-port", "fig-first-screen", "fig-install-ok", "fig-overview", "fig-screen-guide"]);
-    expect(html).not.toMatch(/<!-- FIG\(fig-/);
+    expect(ids).toEqual(
+      [
+        "fig-budget-alarm", "fig-budget-bar", "fig-budget-settings", "fig-decision-report", "fig-decision-result", "fig-diag-chip-panel", "fig-diag-file",
+        "fig-err-401", "fig-err-already-answered", "fig-err-managed", "fig-err-no-browser", "fig-err-nobubble", "fig-err-node", "fig-err-offline", "fig-err-port",
+        "fig-first-screen", "fig-install-ok", "fig-overview", "fig-plan-report", "fig-question-answer", "fig-screen-guide",
+      ],
+    );
+    expect(html).not.toMatch(/<!-- FIG2?\(fig-/);
     expect(html).not.toContain('class="fig-slot"');
     const dup = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]).filter((id, i, all) => all.indexOf(id) !== i);
     expect(dup).toEqual([]);
   });
 
-  it("그림 11개가 designer 원본 SVG와 같다", () => {
-    const dir = join(__dirname, "../../docs/design/beta/manual-figures");
-    for (const f of readdirSync(dir).filter((n) => n.endsWith(".svg"))) expect(html, f).toContain(readFileSync(join(dir, f), "utf8").trim());
+  it("그림이 designer 원본 SVG와 같다(같은 이름이면 Phase 2판이 우선)", () => {
+    const pick = new Map<string, string>();
+    for (const d of ["beta", "phase2"]) {
+      const dir = join(__dirname, `../../docs/design/${d}/manual-figures`);
+      for (const f of readdirSync(dir).filter((n) => n.endsWith(".svg"))) pick.set(f, join(dir, f));
+    }
+    for (const [f, path] of pick) expect(html, f).toContain(readFileSync(path, "utf8").trim());
+    // 1장 그림은 Phase 2판(대시보드에서 누른 답 화살표)이다
+    expect(figureText("fig-overview")).toContain("대시보드에서 누른 답");
   });
 
   it("설치 직후 노란 줄: 본문과 그림(fig-install-ok)이 같은 두 줄(포트, 실시간 이벤트)", () => {
@@ -171,7 +183,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
     }
     // install.sh가 가리키는 6장이 "문제가 생겼을 때"다
     expect(html).toContain('<h2 id="s6">6. 문제가 생겼을 때</h2>');
-    expect(html).not.toMatch(/TODO\(/);
+    // Phase 2: Task 11(설치·런처) 출력이 나오기 전까지 TODO(T11) 표시만 남긴다. 채운 뒤에는 다시 0개여야 한다
+    expect([...html.matchAll(/TODO\((\w+)\)/g)].map((m) => m[1]).filter((t) => t !== "T11")).toEqual([]);
     expect(html).toContain("지움: 프로그램 파일, PATH 설정, 플러그인, logs, diagnostics");
     expect(html).toContain("지움: 프로그램 파일, PATH 설정\n남김: 플러그인, logs, diagnostics");
     expect(html).not.toContain("지움: 없음");
@@ -205,7 +218,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const box = install.slice(install.indexOf('<div class="box ok-box">\n  <pre class="out">✅ Node.js'));
     const pre = box.slice(box.indexOf("<pre"), box.indexOf("</pre>")).replace(/<[^>]+>/g, "");
     const lines = pre.split("\n").filter((l) => /^(✅|⚠️|❌) |^ {2}→ /.test(l));
-    expect(lines.length).toBe(12);
+    expect(lines.length).toBe(14); // Phase 2: 대시보드 열쇠, 결정 대기 시간
     for (const l of lines) {
       const fix = /^ {2}→ (.*)$/.exec(l);
       if (fix) {
@@ -315,7 +328,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const found = [...html.matchAll(/\d+\.\d+\.\d+-(?:beta\.\d+|dev)/g)].map((m) => m[0]);
     expect(found.length).toBeGreaterThan(5); // 파일 이름·폴더 이름·상단 표기
     expect(new Set(found)).toEqual(new Set([version]));
-    expect(html).toContain(`베타 버전 ${version}`);
+    expect(html).toContain(`개발 버전 ${version}`);
     expect(html).toContain(`claude-office-${version}.tar.gz`);
     expect(html).toContain(`claude-office-${version}.zip`);
   });
@@ -342,6 +355,84 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // Windows 설치에는 --yes가 아니라 -Yes
     expect(prose).not.toMatch(/install\.ps1[^<]*--yes/);
     expect(read("packaging/install.ps1")).toMatch(/\[switch\]\$Yes/);
+  });
+
+  describe("Phase 2 결정 보고서·예산·401 문구가 코드와 같다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    // 코드 파일에 있는 문자열이 설명서에도 그대로 있는지(파일, 문구 목록)
+    const same = (file: string, texts: string[]) => {
+      const src = read(file);
+      for (const t of texts) {
+        expect(src, `${file}: ${t}`).toContain(t);
+        expect(prose, `manual: ${t}`).toContain(t);
+      }
+    };
+
+    it("보고서 결과와 409 문구(web/report/text.ts)", () => {
+      same("web/report/text.ts", [
+        "이 명령을 실행해도 될까요?",
+        "질문에 답해 주세요",
+        "예산에 도달했습니다. 계속할까요?",
+        "대시보드에서 허용함",
+        '"터미널에서 이미 답함"',
+        '"시간이 지나 터미널로 넘어감"',
+        '"이미 터미널에서 답했습니다"',
+        '"다른 창에서 이미 답했습니다"',
+      ].map((t) => t.replace(/^"|"$/g, "")));
+    });
+
+    it("보고서 화면 문구(DecisionReport, QuestionForm)", () => {
+      same("web/report/DecisionReport.tsx", [
+        "거부 이유 (선택, Claude에게 전달됩니다)",
+        "남음 · 지나면 터미널에서 묻습니다",
+        "계속을 누르면 이 도구 실행도 함께 허용됩니다",
+        "예산만큼 더 쓰면 다시 묻습니다",
+        "터미널에서 답해 주세요",
+        "터미널(리드 세션)에서 답해 주세요",
+      ]);
+      same("web/report/QuestionForm.tsx", ["기타 (직접 입력)", "이 답 보내기"]);
+    });
+
+    it("서버가 Claude에게 보내는 문구(protocol.ts)와 9:50", () => {
+      const protocol = read("server/decisions/protocol.ts");
+      for (const name of ["DENY_DEFAULT", "BUDGET_STOP"]) {
+        const v = new RegExp(`export const ${name} = "([^"]+)"`).exec(protocol)![1];
+        expect(prose, name).toContain(v);
+      }
+      // budgetReason 템플릿에 500,000을 넣은 결과
+      const tpl = /return `(예산\(\$\{budgetTokens\.toLocaleString\("en-US"\)\}토큰\)[^`]*)`/.exec(protocol)![1];
+      expect(prose).toContain(tpl.replace('${budgetTokens.toLocaleString("en-US")}', (500_000).toLocaleString("en-US")));
+      // 화면은 590초(9:50)부터 센다
+      expect(protocol).toContain("export const HOLD_MS = 590_000;");
+      expect(prose).toContain("9:50 남음 · 지나면 터미널에서 묻습니다");
+    });
+
+    it("예산 설정 창과 알림(web/budget)", () => {
+      same("web/budget/BudgetDialog.tsx", ["비워 두면 예산 없음. 1,000 ~ 1,000,000,000", "앞으로 새로 생기는 층에 적용됩니다. 지금 있는 층은 바뀌지 않습니다."]);
+      same("web/budget/useBudgetAlarm.ts", ["예산에 도달했습니다"]);
+    });
+
+    it("401 화면(web/App.tsx)", () => {
+      const app = read("web/App.tsx").replace(/<\/?code>/g, "");
+      expect(app).toContain("터미널에서 claude-office로 열어 주세요");
+      expect(prose).toContain("터미널에서 claude-office로 열어 주세요");
+    });
+
+    it("doctor 새 두 줄(server/diag/doctor.ts)", () => {
+      same("server/diag/doctor.ts", ["대시보드 열쇠", "결정 대기 시간", "claude-office를 다시 켜면 만들어집니다", "대시보드에서 답하려면 플러그인을 업데이트해 주세요"]);
+      expect(prose).toContain("⚠️ 결정 대기 시간: 5초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요");
+    });
+
+    it("Phase 2로 사실이 바뀐 옛 문장이 남아 있지 않다(B41)", () => {
+      for (const old of ["설정을 읽기만 합니다", "<strong>보기만</strong> 하고 Claude의 동작을 바꾸지 않습니다", "hook에 어떤 결정도 돌려주지 않습니다", "읽기 전용 대시보드", "Claude Code 창으로 가서 답해 주세요", "브라우저 주소 창에 <code>http://127.0.0.1:4317</code>을 입력합니다"]) {
+        expect(prose, old).not.toContain(old);
+      }
+    });
+
+    it("열쇠 값 모양(64자 hex)이 없다", () => {
+      expect(html).not.toMatch(/[0-9a-f]{64}/i);
+    });
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
