@@ -107,6 +107,13 @@ describe("층 머리의 예산 막대(§6.1)", () => {
     expect(m.getAttribute("aria-valuenow")).toBe("0");
   });
 
+  it("예산이 0 이하로 와도 남은 양은 0이다(NaN이 아님)", () => {
+    renderFloor(floor({ budget: budget({ budgetTokens: 0, usedTokens: 0, nextGateAt: 0 }) })); // 0/0
+    const m = screen.getByRole("meter", { name: "예산 남은 양" });
+    expect(m.getAttribute("aria-valuenow")).toBe("0");
+    expect(m.textContent).not.toContain("NaN");
+  });
+
   it("종료 층에는 막대를 두지 않는다", () => {
     renderFloor(floor({ floorStatus: "ended", alive: false, budget: budget() }));
     expect(screen.queryByRole("button", { name: "claude_project 예산 설정" })).toBeNull();
@@ -146,6 +153,21 @@ describe("경광등(§7)", () => {
     expect(led("1층 a")).toContain("led--budget");
     expect(led("2층 b")).toContain("led--decision");
     expect(led("3층 c")).not.toContain("led--budget");
+  });
+
+  it("층 바로가기 이름에 예산 도달을 적는다(결정과 함께면 결정 대기, 예산 도달)", () => {
+    render(
+      <Elevator
+        sessions={[
+          floor({ id: "a", floor: 1, name: "a", budget: budget({ reached: true }) }),
+          floor({ id: "b", floor: 2, name: "b", budget: budget({ reached: true }), members: [makeMember({ name: "dev", state: "decision", decision: { kind: "permission", since: "t" } })] }),
+          floor({ id: "c", floor: 3, name: "c", budget: budget() }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "1층 a, 예산 도달" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "2층 b, 결정 대기, 예산 도달" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "3층 c" })).toBeTruthy();
   });
 
   it("닿지 않은 층에는 경광등이 없다", () => {
@@ -194,6 +216,22 @@ describe("설정 창(§6.2)", () => {
     fireEvent.click(screen.getByRole("button", { name: "저장" }));
     await flush();
     expect(puts().map((c) => JSON.parse(c[1].body))).toEqual([{ budgetTokens: 50_000 }]);
+  });
+
+  it("입력 칸에서 Enter로 저장한다(같은 검증, 이중 제출 없음)", async () => {
+    renderFloor(floor());
+    openSettings();
+    const own = screen.getByLabelText("이 층의 예산");
+    fireEvent.change(own, { target: { value: "999" } });
+    fireEvent.submit(own.closest("form")!);
+    expect(puts()).toHaveLength(0);
+    expect(own.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(own, { target: { value: "5000" } });
+    fireEvent.submit(own.closest("form")!);
+    fireEvent.submit(own.closest("form")!);
+    await flush();
+    expect(puts()).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("범위 밖·소수·글자는 저장하지 않고 안내한다", () => {
@@ -248,6 +286,23 @@ describe("설정 창(§6.2)", () => {
     }
     expect(puts()).toHaveLength(2);
     expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["requestPermission이 Promise를 돌려주지 않아도(옛 콜백형)", () => undefined],
+    ["requestPermission이 동기로 던져도", () => {
+      throw new Error("boom");
+    }],
+  ])("%s 저장되고 창이 닫힌다", async (_label, impl) => {
+    FakeNotification.requestPermission.mockImplementationOnce(impl as never);
+    renderFloor(floor());
+    openSettings();
+    fireEvent.change(screen.getByLabelText("이 층의 예산"), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    await flush();
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+    expect(puts()).toHaveLength(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("Notification이 없어도 저장된다", async () => {

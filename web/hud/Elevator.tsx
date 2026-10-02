@@ -10,10 +10,17 @@ export function Elevator({ sessions }: { sessions: SessionView[] }) {
       <span className="lbl">층 바로가기</span>
       {floors.map((s) => {
         const d = s.members.some((m) => m.state === "decision");
+        const alarm = !!s.budget?.reached && s.floorStatus !== "ended";
         return (
-          <button key={s.id} type="button" className="el-btn" onClick={() => goToFloor(s.id)} aria-label={`${s.floor}층 ${s.name}${d ? ", 결정 대기" : ""}`}>
+          <button
+            key={s.id}
+            type="button"
+            className="el-btn"
+            onClick={() => goToFloor(s.id)}
+            aria-label={`${s.floor}층 ${s.name}${d ? ", 결정 대기" : ""}${alarm ? ", 예산 도달" : ""}`}
+          >
             {/* 예산 도달(phase2 §7)은 분홍. 결정 대기가 함께 있으면 Phase 1처럼 결정(노랑)이 먼저 */}
-            <span className={`led led--${d ? "decision" : s.budget?.reached && s.floorStatus !== "ended" ? "budget" : s.floorStatus}`} />
+            <span className={`led led--${d ? "decision" : alarm ? "budget" : s.floorStatus}`} />
             {s.floor}F
           </button>
         );

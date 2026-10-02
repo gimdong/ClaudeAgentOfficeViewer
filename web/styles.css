@@ -363,7 +363,8 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .siren .siren-on { animation: frameA .5s steps(1) infinite; filter: drop-shadow(0 0 4px var(--pink)); }
 .siren .siren-off { opacity: 0; animation: frameB .5s steps(1) infinite; }
 .floor--alarm .shaft { animation: alarm-wash .5s steps(1) infinite; }
-@keyframes alarm-wash { 0% { background: var(--shaft); } 50% { background: var(--alarm-wash); } }
+/* 경광등 켜짐 프레임(frameA 0%)과 같은 박자로 물든다 */
+@keyframes alarm-wash { 0% { background: var(--alarm-wash); } 50% { background: var(--shaft); } }
 .dlg { width: min(420px, calc(100vw - 32px)); box-sizing: border-box; background: var(--panel); color: var(--ink); border: 4px solid var(--desk); box-shadow: 0 6px 0 var(--slab); padding: 18px 20px; font-family: var(--font-pixel); font-size: 12px; }
 .dlg::backdrop { background: rgba(11,10,23,.7); }
 .dlg-title { margin: 0 0 14px; font-family: var(--font-text); font-size: 17px; font-weight: 700; }

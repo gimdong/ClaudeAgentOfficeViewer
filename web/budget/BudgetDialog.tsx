@@ -1,4 +1,4 @@
-import { createContext, useEffect, useId, useRef, useState, type SyntheticEvent } from "react";
+import { createContext, useEffect, useId, useRef, useState, type FormEvent, type SyntheticEvent } from "react";
 import type { SessionView } from "../../src/shared/types";
 import { usageLabel } from "../report/text";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
@@ -42,7 +42,13 @@ function askNotificationOnce(): void {
     /* 저장소가 막혀 있으면 이번만 묻는다 */
   }
   if (asked || !N?.requestPermission || N.permission !== "default") return;
-  void N.requestPermission().catch(() => {});
+  // 옛 Safari는 콜백형이라 Promise를 돌려주지 않고(undefined), 어떤 환경은 동기로 던진다 — 어느 쪽이든 저장을 막지 않는다
+  try {
+    const p = N.requestPermission() as Promise<unknown> | undefined;
+    p?.catch?.(() => {});
+  } catch {
+    /* 권한을 묻지 못해도 경광등은 켜진다 */
+  }
 }
 
 async function put(body: object): Promise<boolean> {
@@ -62,6 +68,8 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
   const [defText, setDefText] = useState(startDef);
   const [invalid, setInvalid] = useState<{ own: boolean; def: boolean }>({ own: false, def: false });
   const [saving, setSaving] = useState(false);
+  /** 같은 순간의 두 번째 제출(Enter 두 번, Enter + 클릭)을 막는다. state는 다음 렌더에야 바뀐다 */
+  const savingRef = useRef(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -80,8 +88,9 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
     close();
   };
 
-  const save = () => {
-    if (saving) return;
+  const save = (e?: FormEvent) => {
+    e?.preventDefault();
+    if (savingRef.current) return;
     const o = parseBudget(ownText);
     const d = parseBudget(defText);
     setInvalid({ own: o === undefined, def: d === undefined });
@@ -92,6 +101,7 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
     if (d !== (parseBudget(startDef) ?? null)) sends.push({ budgetTokens: d });
     if (sends.length === 0) return close();
     if (sends.some((b) => (b as { budgetTokens: number | null }).budgetTokens !== null)) askNotificationOnce();
+    savingRef.current = true;
     setSaving(true);
     setFailed(false);
     (async () => {
@@ -102,6 +112,7 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
         close();
       })
       .catch(() => {
+        savingRef.current = false;
         setSaving(false);
         setFailed(true);
       });
@@ -110,6 +121,8 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
   const err = (key: "own" | "def") => (invalid[key] ? `${id}-${key}-err` : "");
   return (
     <dialog ref={ref} className="dlg budget-dlg" aria-labelledby={`${id}-title`} onCancel={onCancel}>
+      {/* 입력 칸에서 Enter로도 저장한다(저장 버튼과 같은 경로·검증) */}
+      <form onSubmit={save} noValidate>
       <h2 id={`${id}-title`} className="dlg-title">{`${session.name} 예산`}</h2>
       <div className="dlg-field">
         <label htmlFor={`${id}-own`}>이 층의 예산</label>
@@ -176,10 +189,11 @@ export function BudgetDialog({ session, defaultTokens, announce, onClose }: { se
         <button type="button" className="pbtn" onClick={close}>
           취소
         </button>
-        <button type="button" className="pbtn pbtn--primary" onClick={save} disabled={saving}>
+        <button type="submit" className="pbtn pbtn--primary" disabled={saving}>
           {saving ? "저장하는 중…" : "저장"}
         </button>
       </div>
+      </form>
     </dialog>
   );
 }

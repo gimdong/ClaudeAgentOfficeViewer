@@ -31,7 +31,7 @@ export function Siren() {
 
 /** 남은 양 %(§6.1): (nextGateAt − 사용량) / 예산 × 100을 0–100으로 자르고 반올림 */
 export function budgetRemaining(b: BudgetView): number {
-  if (b.reached) return 0;
+  if (b.reached || !(b.budgetTokens > 0)) return 0; // 0 이하 예산은 0/0 = NaN이 되지 않게
   return Math.round(Math.min(100, Math.max(0, ((b.nextGateAt - b.usedTokens) / b.budgetTokens) * 100)));
 }
 
