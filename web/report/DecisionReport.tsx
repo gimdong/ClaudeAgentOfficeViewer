@@ -7,6 +7,7 @@ import { characterRows, spriteRects } from "../pixel/sprites";
 import {
   EXPIRED, KIND_CHIP, SEND_FAILED, VANISHED, budgetLabel, conflictLine, outcomeLine, remaining, remainingSeconds, resultLine, summaryOf, titleOf, usageLabel, whyLine,
 } from "./text";
+import { QuestionForm } from "./QuestionForm";
 import type { Decisions } from "./useDecisions";
 
 /** 답한 뒤 다음 결정으로 넘어가거나 닫기까지(디자인 phase2 §3) */
@@ -254,7 +255,10 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
       </div>
     ) : null;
   } else if (v.kind === "question") {
-    answer = answerable ? children : null;
+    // key로 결정마다 고른 상태를 새로 시작한다. 답은 인덱스로만 보낸다(Ruling B30)
+    answer = answerable
+      ? (children ?? <QuestionForm key={v.id} questions={v.questions ?? []} disabled={busy} onSubmit={(answers) => d.send({ action: "answer", answers })} />)
+      : null;
   }
   if (!v.answerable) {
     answer = (
