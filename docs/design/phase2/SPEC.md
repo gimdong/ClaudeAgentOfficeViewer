@@ -59,7 +59,8 @@ siren:    ["..xxx..", ".xaxxx.", ".xaxxx.", ".xxxxx.", ".xxxxx.", "bbbbbbb", "bb
 - 서랍: 폭 440px, 배경 `--panel`, 왼쪽 테두리 4px `--yellow`, 그림자, 열기 애니메이션 `slide-in` 0.16초 steps(4)
 - 아바타: 48×48, `BODY_UP` 0–6행
 - 섹션 제목: 11px `--muted`, 섹션 사이 1px 점선
-- 코드 상자와 버튼(높이 36px, 여백 `0 16px`, 13px)
+- 버튼(높이 36px, 여백 `0 16px`, 13px)
+- 코드 상자는 Phase 1 8.1 모양이되, 안쪽 여백만 **Phase 2 구현 값 `6px 8px`**입니다(Ruling B57)
 - 720px 이하에서는 아래 시트(`top: 8vh`, 위 테두리 4px `--yellow`)로 바뀝니다.
 
 ### 1.2 머리
@@ -77,7 +78,7 @@ siren:    ["..xxx..", ".xaxxx.", ".xaxxx.", ".xxxxx.", ".xxxxx.", "bbbbbbb", "bb
 ### 1.3 남은 시간
 
 - **답할 수 있는 결정(`answerable: true`이고 `deadline`이 있는 결정)에만** 막대와 남은 시간을 보여 줍니다. 팀원 요청, 보고서만인 계획, 예산 대체 방식(B39가 "대체"일 때)에는 막대가 없습니다. 그 자리에는 §2의 안내 문장을 씁니다.
-- 기준은 `deadline`(= `createdAt + 590초`, Ruling B29)입니다. 막대 폭은 `남은 초 / 590 × 100%`입니다. 그래서 처음 열면 `9:50 남음`부터 시작합니다.
+- 기준은 `deadline`(= `createdAt + 590초`, Ruling B29)입니다. 막대는 높이 6px이고, 바탕은 **Phase 2 구현 값 `--slab`**입니다(Phase 1 8.1의 `--desk-dark` 대신, Ruling B57). 막대 폭은 `남은 초 / 590 × 100%`입니다. 그래서 처음 열면 `9:50 남음`부터 시작합니다.
 - 문구: `{m:ss} 남음 · 지나면 터미널에서 묻습니다`(11px `--muted`). 남은 시간이 0이 되면 §3의 "시간이 지나 터미널로 넘어감"으로 바뀝니다.
 - **60초 이하**: 막대와 문구를 `--pink`로 바꾸고, 막대는 1초 주기로 깜빡입니다(steps(1)). 손든 캐릭터의 ?도 급함 팔레트로 바뀝니다(Phase 1 6장). 움직임 줄이기 설정이면 깜빡이지 않고 색만 바꿉니다.
 - 매초 바뀌는 숫자는 `aria-live="off"`입니다. 60초와 10초가 남았을 때만 live region에 알립니다(§9).
@@ -86,7 +87,7 @@ siren:    ["..xxx..", ".xaxxx.", ".xaxxx.", ".xxxxx.", ".xxxxx.", "bbbbbbb", "bb
 
 | 절 | 내용 |
 |---|---|
-| 하려는 일 | 첫 줄 `도구 {toolName}`(12px `--font-pixel`). 그 아래 **요약 코드 상자** 하나와 키/값 목록 |
+| 하려는 일 | 첫 줄 `도구 {toolName}`(12px `--font-pixel`). 그 아래 **요약 코드 상자** 하나와 키/값 목록. **팀원 요청은 도구 줄을 두지 않습니다**(Ruling B57). 사용자에게 의미 없는 `SendMessage`가 보이기 때문입니다 |
 | 이유 | `whyLine`의 한 줄(§2 표). `--font-text` 14px |
 | 답하기 | §2 |
 
@@ -351,7 +352,7 @@ Phase 1 9장 대화상자 모양(`<dialog>.showModal()`, 폭 `min(420px, 100vw �
 | 요소 | 값 |
 |---|---|
 | 배치 | `.app` 안에서 가운데 정렬, 최대 폭 480px, 위 여백 15vh. `<main aria-labelledby="auth-title">` |
-| 셔터 그림 | 160×88 상자. Phase 1 셔터 무늬(`--shutter`/`--shutter-gap` 6px/2px)에 아래 6px `--shutter-bar`를 둡니다. 가운데에 Phase 1 휴업 팻말 모양(노랑 채움, `rotate(-3deg)`, 걸이 줄 두 개)으로 `열쇠 필요`(Galmuri14 14px)를 씁니다. `aria-hidden="true"`. 내려오는 애니메이션은 없습니다 |
+| 셔터 그림 | 160×88 상자. Phase 1 셔터 무늬(`--shutter`/`--shutter-gap` 6px/2px)에 아래 6px `--shutter-bar`를 둡니다. 가운데에 Phase 1 휴업 팻말 모양(노랑 채움, `rotate(-3deg)`)으로 `열쇠 필요`(Galmuri14 14px)를 씁니다. 걸이 줄 두 개는 **Phase 2 구현 값 `--yellow-deep` 2×10px**입니다(Phase 1 5.3의 `--muted` 2×14 대신, Ruling B57). `aria-hidden="true"`. 내려오는 애니메이션은 없습니다 |
 | 제목 | `터미널에서 claude-office로 열어 주세요`. Galmuri14 18px `--ink`, `claude-office`만 `<code>`(monospace, `--green`). `id="auth-title"` |
 | 본문 | `--font-text` 14px `--muted`, 줄 간격 1.6, 두 문단. 1: `이 화면은 접속 열쇠가 있어야 볼 수 있습니다. 터미널에서 claude-office를 실행하면 열쇠가 담긴 주소로 브라우저가 열립니다.` 2: `북마크로 열었는데 이 화면이 보이면, 터미널에서 한 번만 다시 열어 주세요. 그 뒤로는 북마크로 열립니다.` |
 | 명령 상자 | `$ claude-office`. 배경 `--slab`, 2px `--desk`, monospace 13px, 여백 8px 12px |
