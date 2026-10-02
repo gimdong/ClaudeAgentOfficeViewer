@@ -448,15 +448,72 @@ describe("DecisionQueue.onEvent(B70)", () => {
     expect(stateOf(lead.id)).toBe("closed-terminal");
   });
 
-  it("SessionEnd와 리드의 UserPromptSubmit은 그 세션 전체를 닫는다", () => {
+  it("리드의 UserPromptSubmit은 리드(합치지 않은) 것만, SessionEnd는 그 세션 전체를 닫는다(Ruling B71 (c))", () => {
     q = new DecisionQueue();
     const a = q.hold(req("Bash", { command: "a" }), fakeRes())!;
-    const b = q.hold(req("Bash", { command: "b" }, "s1", { agent_id: "aworker-1", agent_type: "worker" }), fakeRes())!;
+    // P3: 팀원 developer의 결정은 리드의 새 프롬프트로 닫히면 안 된다
+    const b = q.hold(req("Bash", { command: "b" }, "s1", { agent_id: "adeveloper-1", agent_type: "developer" }), fakeRes())!;
+    const sub = q.hold(req("Bash", { command: "s" }, "s1", { agent_id: "a1111111111111111", agent_type: "Explore" }), fakeRes())!;
     const c = q.hold(req("Bash", { command: "c" }, "s2"), fakeRes())!;
     q.onEvent(ev("UserPromptSubmit", { prompt: "next" }));
-    expect([stateOf(a.id), stateOf(b.id), stateOf(c.id)]).toEqual(["closed-terminal", "closed-terminal", "pending"]);
+    expect([stateOf(a.id), stateOf(b.id), stateOf(sub.id), stateOf(c.id)]).toEqual(["closed-terminal", "pending", "pending", "pending"]);
+    q.onEvent(ev("SessionEnd"));
+    expect([stateOf(b.id), stateOf(sub.id), stateOf(c.id)]).toEqual(["closed-terminal", "closed-terminal", "pending"]);
     q.onEvent({ hook_event_name: "SessionEnd", session_id: "s2" });
     expect(stateOf(c.id)).toBe("closed-terminal");
+  });
+
+  it("P1: 권한 결정은 해시가 맞아야만 닫는다 — 자동 허용된 같은 도구의 병렬 호출 완료로는 닫지 않는다(Ruling B71 (a))", () => {
+    q = new DecisionQueue();
+    const b = q.hold(req("Read", { file_path: "/outside/b" }), fakeRes())!;
+    q.onEvent(ev("PostToolUse", { tool_name: "Read", tool_input: { file_path: "/proj/a" } }));
+    expect(stateOf(b.id)).toBe("pending");
+    const budget = q.hold(req("Bash", { command: "x" }), fakeRes(), { kind: "budget", budget: { budgetTokens: 1, usedTokens: 1 } })!;
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "y" } }));
+    expect(stateOf(budget.id)).toBe("pending");
+    q.onEvent(ev("PostToolUse", { tool_name: "Read", tool_input: { file_path: "/outside/b" } }));
+    expect(stateOf(b.id)).toBe("closed-terminal");
+  });
+
+  it("P2: 서브에이전트 결정은 같은 agent_id의 Post·SubagentStop만 닫는다. 다른 서브에이전트·리드의 Stop으로는 닫지 않는다(Ruling B71 (b))", () => {
+    q = new DecisionQueue();
+    const Y = { agent_id: "a1111111111111111", agent_type: "Explore" };
+    const X = { agent_id: "a9999999999999999", agent_type: "Explore" };
+    const y1 = q.hold(req("Bash", { command: "y1" }, "s1", Y), fakeRes())!;
+    const y2 = q.hold(req("Bash", { command: "y2" }, "s1", Y), fakeRes())!;
+    q.onEvent(ev("SubagentStop", X));
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "y1" }, ...X }));
+    q.onEvent(ev("Stop"));
+    expect([stateOf(y1.id), stateOf(y2.id)]).toEqual(["pending", "pending"]);
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "y1" }, ...Y }));
+    expect([stateOf(y1.id), stateOf(y2.id)]).toEqual(["closed-terminal", "pending"]);
+    q.onEvent(ev("SubagentStop", Y));
+    expect(stateOf(y2.id)).toBe("closed-terminal");
+  });
+
+  it("질문은 서브에이전트여도 같은 agent_id에서 유일하면 해시 없이 닫는다", () => {
+    q = new DecisionQueue();
+    const Y = { agent_id: "a1111111111111111", agent_type: "Explore" };
+    const v = q.hold(req("AskUserQuestion", questionInput(), "s1", Y), fakeRes())!;
+    q.onEvent(ev("PostToolUse", { tool_name: "AskUserQuestion", tool_input: { answers: {} }, agent_id: "a9999999999999999", agent_type: "Explore" }));
+    expect(stateOf(v.id)).toBe("pending");
+    q.onEvent(ev("PostToolUse", { tool_name: "AskUserQuestion", tool_input: { answers: {} }, ...Y }));
+    expect(stateOf(v.id)).toBe("closed-terminal");
+  });
+
+  it("보관한 agent_id 원문은 list()와 로그에 나오지 않는다", () => {
+    const dir = mkdtempSync(join(tmpdir(), "co-queue-b71-"));
+    try {
+      setLogger(new Logger({ dir }));
+      q = new DecisionQueue();
+      q.hold(req("Bash", { command: "x" }, "s1", { agent_id: "a1234abcd5678ef90", agent_type: "Explore" }), fakeRes());
+      q.onEvent(ev("SubagentStop", { agent_id: "a1234abcd5678ef90", agent_type: "Explore" }));
+      const text = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("");
+      expect(text).toContain("closed-terminal");
+      expect(text + JSON.stringify(q.list())).not.toContain("a1234abcd5678ef90");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("계획(answerable:false)과 예산 결정도 같은 규칙으로 닫히고, 590초 타이머가 정리된다", () => {

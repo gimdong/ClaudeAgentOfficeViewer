@@ -27,6 +27,8 @@ interface Entry {
   resolvedMs?: number;
   /** 합친 서브에이전트의 결정인가(턴 끝 범위, B70) */
   sub: boolean;
+  /** 합친 서브에이전트의 agent_id(메모리에만. 로그·view에 넣지 않는다). 같은 서브에이전트의 이벤트만 닫는다(B71) */
+  agentId?: string;
   /** tool_input 정규 해시(원문 아님). 터미널이 답한 뒤 오는 Post 계열과 짝을 맞춘다(B70) */
   hash?: string;
 }
@@ -142,6 +144,7 @@ export class DecisionQueue {
     this.byKind[kind] = (this.byKind[kind] ?? 0) + 1;
 
     const e: Entry = { view, raw: input.tool_input, res, startedAt: t, sub: !!ref?.sub, hash: safeHash(input.tool_input) };
+    if (ref?.sub && typeof input.agent_id === "string") e.agentId = input.agent_id;
     e.timer = setTimeout(() => {
       this.resolve(e, "expired");
       try {
@@ -177,9 +180,10 @@ export class DecisionQueue {
   }
 
   /**
-   * 터미널이 먼저 답한 결정을 hook 이벤트로 닫는다(Ruling B70). 터미널에서 거부(Esc)하면 연결이 끊기지만, 허용하면 연결이 열린 채
-   * 남아 손이 계속 들려 있었다(Task 14 항목 3). Post 계열은 같은 세션·에이전트·도구 중 입력 해시가 같은 결정을, 맞는 것이 없으면
-   * 그 범위의 pending이 하나뿐일 때 그것을 닫는다. 턴 끝 이벤트는 그 에이전트(SessionEnd·리드의 UserPromptSubmit은 세션 전체)를 닫는다
+   * 터미널이 먼저 답한 결정을 hook 이벤트로 닫는다(Ruling B70, 범위는 B71). 터미널에서 거부(Esc)하면 연결이 끊기지만, 허용하면 연결이
+   * 열린 채 남아 손이 계속 들려 있었다(Task 14 항목 3). Post 계열은 같은 세션·에이전트(서브에이전트는 agent_id까지)·도구 중 입력 해시가
+   * 같은 결정을, 맞는 것이 없으면 질문·계획에 한해 그 범위의 pending이 하나뿐일 때 그것을 닫는다. 턴 끝 이벤트와 리드의
+   * UserPromptSubmit은 그 에이전트 것만, SessionEnd는 세션 전체를 닫는다
    */
   onEvent(input: Record<string, unknown>): void {
     try {
@@ -189,19 +193,22 @@ export class DecisionQueue {
       const ref = agentOf(input);
       const pending = [...this.entries.values()].filter((e) => e.view.state === "pending" && e.view.sessionId === sessionId);
       if (pending.length === 0) return;
+      // 같은 에이전트(서브에이전트는 같은 agent_id까지)의 것만(Ruling B71 (b))
+      const mine = (e: Entry) => !!ref && e.view.agent === ref.name && e.sub === ref.sub && (!ref.sub || e.agentId === input.agent_id);
       let targets: Entry[] = [];
-      if (CLOSES_TOOL.has(event)) {
-        if (!ref) return;
+      if (event === "SessionEnd") {
+        targets = pending;
+      } else if (CLOSES_TOOL.has(event)) {
         const tool = typeof input.tool_name === "string" ? input.tool_name : "";
-        const same = pending.filter((e) => e.view.agent === ref.name && e.sub === ref.sub && e.view.toolName === tool);
+        const same = pending.filter((e) => mine(e) && e.view.toolName === tool);
         const hash = safeHash(input.tool_input);
         const byHash = hash ? same.filter((e) => e.hash === hash) : [];
-        targets = byHash.length > 0 ? [byHash[0]] : same.length === 1 ? same : [];
-      } else if (event === "SessionEnd" || (event === "UserPromptSubmit" && ref?.name === "team-lead" && !ref.sub)) {
-        targets = pending;
-      } else if (TURN_END_AGENT.has(event) && ref) {
-        // 합친 서브에이전트가 끝나면 그 서브에이전트 것만, 리드·팀원이 끝나면 그 에이전트 것 전부
-        targets = pending.filter((e) => e.view.agent === ref.name && (!ref.sub || e.sub));
+        // 해시 없는 대체는 Post 입력이 달라지는 질문·계획만. 권한·예산은 자동 허용된 병렬 호출과 섞이므로 해시가 맞아야 한다(B71 (a))
+        const fallback = same.length === 1 && (same[0].view.kind === "question" || same[0].view.kind === "plan");
+        targets = byHash.length > 0 ? [byHash[0]] : fallback ? same : [];
+      } else if ((event === "UserPromptSubmit" && ref?.name === "team-lead" && !ref.sub) || TURN_END_AGENT.has(event)) {
+        // 리드의 새 프롬프트·턴 끝은 리드 것만, 팀원·서브에이전트의 턴 끝은 그 에이전트 것만(B71 (b)(c))
+        targets = pending.filter(mine);
       }
       for (const e of targets) {
         const res = e.res;
