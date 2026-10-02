@@ -546,8 +546,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(q).toMatch(/if \(event === "SessionEnd"\)/);
       expect(read("server/budget/gate.ts")).toMatch(/c\.toolUseId === toolUseId\)\) this\.continue\(sessionId\)/);
       const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
-      expect(a).toContain("같은 PC의 다른 프로그램이 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>어느 경우에도 허용이나 거부를 대신 만들어 내지는 못합니다.");
+      expect(a).toContain("같은 PC의 다른 프로그램(이 PC에 로그인한 다른 사용자의 프로그램도 포함, 127.0.0.1에 닿을 수 있는 모든 프로그램)이 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>어느 경우에도 도구 허용을 만들어 내지는 못하고, Claude Code 창의 권한 창은 그대로 뜹니다. 여러 사람이 함께 쓰는 PC나 서버에 설치할 때는 이 점을 고려해 주세요. 막으려면 hook 요청 인증이 필요한데, 이번 버전에는 없습니다.");
       expect(a).not.toContain("가짜 hook을 보내면 화면에 가짜 요청이 뜰 수 있지만");
+      expect(a).not.toContain("허용이나 거부를 대신 만들어 내지는 못합니다"); // B73: 맺음은 "도구 허용…권한 창은 그대로"
     });
 
     it("열쇠 값 모양(64자 hex)이 없다", () => {
