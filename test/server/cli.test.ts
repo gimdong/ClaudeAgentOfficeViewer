@@ -40,9 +40,9 @@ describe("parseCliArgs", () => {
   });
 
   it("포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64)", () => {
-    expect(portInUseOutcome("phase2", "installed", 4317)).toEqual({ code: 0, out: "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다." });
+    expect(portInUseOutcome("phase2", "installed", 4317)).toEqual({ code: 0, out: "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다." });
     expect(portInUseOutcome("phase2", "dev", 4319)).toEqual({ code: 0, out: "이미 켜져 있습니다." });
-    expect(portInUseOutcome("beta", "installed", 4317)).toEqual({ code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요." });
+    expect(portInUseOutcome("beta", "installed", 4317)).toEqual({ code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요." });
     expect(portInUseOutcome("other", "dev", 4319)).toEqual({ code: 1, err: "포트 4319번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요." });
   });
 
@@ -261,7 +261,7 @@ describe("CLI", () => {
       rmSync(logDir, { recursive: true, force: true });
       expect(r.code).toBe(0);
       // 설치본(임시 PREFIX) 문구(Ruling B64): 런처의 "이 창을 닫으면 대시보드가 꺼집니다."를 바로잡는다
-      expect(r.stdout.trim().split("\n").at(-1)).toBe("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다.");
+      expect(r.stdout.trim().split("\n").at(-1)).toBe("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다.");
       expect(r.stderr).not.toContain("이미 사용 중입니다");
     } finally {
       await s.stop();
@@ -284,7 +284,7 @@ describe("CLI", () => {
     try {
       const r = await run(["--port", String(port), "--claude-home", home, "--log-dir", logDir], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
       expect(r.code).toBe(1);
-      expect(r.stderr).toContain("이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요.");
+      expect(r.stderr).toContain("이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.");
       expect(r.stdout).not.toContain("이미 켜져 있습니다");
     } finally {
       beta.close();

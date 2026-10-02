@@ -64,12 +64,12 @@ export function tokenUrlLine(mode: OfficePaths["mode"], port: number, token: str
 /** 포트에 이미 무엇이 있는가: Phase 2 인증 서버(토큰 없이 401 + app 표시), 인증 없는 옛 베타 서버, 그 밖 */
 export type RunningKind = "phase2" | "beta" | "other";
 
-/** 포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64). 런처가 앞에 낸 "이 창을 닫으면…"을 설치본에서는 바로잡는다 */
+/** 포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64, 문구 B66). 런처가 앞에 낸 "이 창을 닫으면…"을 설치본에서는 바로잡는다 */
 export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], port: number): { code: 0; out: string } | { code: 1; err: string } {
   if (kind === "phase2") {
-    return { code: 0, out: mode === "installed" ? "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다." : "이미 켜져 있습니다." };
+    return { code: 0, out: mode === "installed" ? "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다." : "이미 켜져 있습니다." };
   }
-  if (kind === "beta") return { code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요." };
+  if (kind === "beta") return { code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요." };
   return { code: 1, err: `포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.` };
 }
 
