@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import type { BudgetView, DecisionView } from "../../src/shared/types";
-import { budgetReason, preToolAsk } from "../decisions/protocol";
+import { budgetReason, inputHash as hashOf, preToolAsk } from "../decisions/protocol";
 import type { BudgetStore } from "./store";
 
 /** PermissionRequest가 관문 호출을 찾을 수 있는 시간(Ruling B48) */
@@ -25,9 +24,6 @@ interface GateCall {
   claimed: boolean;
 }
 
-const canonical = (v: unknown): unknown =>
-  Array.isArray(v) ? v.map(canonical) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])])) : v;
-const hashOf = (input: unknown): string => createHash("sha256").update(JSON.stringify(canonical(input)) ?? "").digest("hex");
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
 /**

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BudgetGate, GATE_KEEP_MS } from "../../server/budget/gate";
 import { BudgetStore } from "../../server/budget/store";
+import { DecisionQueue, type HeldResponse } from "../../server/decisions/queue";
 import { budgetReason, preToolAsk } from "../../server/decisions/protocol";
 import { Logger, setLogger } from "../../server/log";
 import { SnapshotBuilder } from "../../server/snapshot";
@@ -233,5 +234,27 @@ describe("스냅샷의 층 예산", () => {
     } finally {
       await h.cleanup();
     }
+  });
+});
+
+describe("터미널 허용 뒤 결정 닫기와 계속 판정의 순서(B70·B35)", () => {
+  const res = (): HeldResponse => ({ writableEnded: false, on: () => undefined, status: () => ({ json: () => undefined, end: () => undefined }) });
+  it.each([
+    ["관문 → 큐", ["gate", "queue"]],
+    ["큐 → 관문", ["queue", "gate"]],
+  ] as const)("PostToolUse를 %s 순서로 받아도 nextGateAt은 한 번만 오르고 결정은 closed-terminal", (_l, order) => {
+    let queue!: DecisionQueue;
+    const g = new BudgetGate(store, { now: () => clock, demote: (id) => queue.demoteBudget(id) });
+    queue = new DecisionQueue({ now: () => clock, onResolve: (v) => g.resolved(v) });
+    store.setBudget("s1", 1000, 0);
+    g.setUsage("s1", 1000);
+    expect(g.preToolUse(pre())).toEqual(ASK);
+    const claim = g.claim(perm())!;
+    const v = queue.hold(perm(), res(), { kind: "budget", budget: claim })!;
+    const post = { hook_event_name: "PostToolUse", session_id: "s1", tool_name: "Bash", tool_input: { command: "echo fake", description: "d" }, tool_use_id: "tu-1" };
+    for (const who of order) (who === "gate" ? g.onEvent(post) : queue.onEvent(post));
+    expect(store.get("s1")!.nextGateAt).toBe(2000);
+    expect(queue.list().find((x) => x.id === v.id)!.state).toBe("closed-terminal");
+    queue.stop();
   });
 });

@@ -75,7 +75,7 @@ export function createApp(
     /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
     auth?: { token: string };
     /** 결정 큐(스펙 3.2). 없으면 PermissionRequest도 즉시 빈 200(Phase 1 동작) */
-    decisions?: Pick<DecisionQueue, "hold" | "answer">;
+    decisions?: Pick<DecisionQueue, "hold" | "answer" | "onEvent">;
     gate?: BudgetGateHooks;
     /** PUT /api/budget(스펙 5.4). sessionId가 없으면 새 층 기본값. 값 검사는 라우트가 한다 */
     budget?: { set(sessionId: string | undefined, budgetTokens: number | null): void };
@@ -130,6 +130,12 @@ export function createApp(
       } catch (e) {
         // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
         getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
+      }
+      try {
+        // 터미널이 먼저 답한 결정을 닫는다(Ruling B70). 예산의 "터미널 허용 = 계속"은 위 onHookEvent의 관문이 먼저 판정한다
+        opts.decisions?.onEvent(input);
+      } catch (e) {
+        getLogger().error("hooks", "decision event failed", { error: errInfo(e) });
       }
       try {
         if (input.hook_event_name === "PreToolUse") {

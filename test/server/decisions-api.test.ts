@@ -19,7 +19,7 @@ let server: Server;
 let port: number;
 let queue: DecisionQueue;
 let gate: Gate;
-let decisions: Pick<DecisionQueue, "hold" | "answer">;
+let decisions: Pick<DecisionQueue, "hold" | "answer" | "onEvent">;
 let tmp: string;
 let store: BudgetStore;
 let realGate: BudgetGate;
@@ -42,7 +42,7 @@ beforeEach(async () => {
     {
       auth: { token: TOKEN },
       // 테스트마다 바꿀 수 있게 위임한다
-      decisions: { hold: (...a) => decisions.hold(...a), answer: (...a) => decisions.answer(...a) },
+      decisions: { hold: (...a) => decisions.hold(...a), answer: (...a) => decisions.answer(...a), onEvent: (i) => decisions.onEvent(i) },
       gate: { preToolUse: (i) => gate.preToolUse(i), claim: (i) => gate.claim(i) },
       budget: {
         set: (id, tokens) => {
@@ -122,6 +122,23 @@ describe("hook 응답 분기", () => {
     expect(JSON.parse(a.body)).toEqual({ state: "closed-terminal" });
   });
 
+  it("터미널에서 허용해 같은 입력의 PostToolUse가 오면 붙잡은 hook이 빈 200으로 끝나고 결정이 closed-terminal(B70)", async () => {
+    const h = hook(perm({ tool_input: { command: "echo fake", description: "d" } }));
+    const id = await pendingId();
+    const post = await hook({ hook_event_name: "PostToolUse", session_id: "s1", tool_name: "Bash", tool_input: { description: "d", command: "echo fake" }, tool_use_id: "tu" }).done;
+    expect(post).toEqual({ status: 200, body: "" });
+    expect(await h.done).toEqual({ status: 200, body: "" }); // 결정 없이 놓아줌 — 터미널이 이미 결정했다
+    expect(queue.list().find((v) => v.id === id)!.state).toBe("closed-terminal");
+    const a = await answer(id, { action: "allow" });
+    expect(a.status).toBe(409);
+    expect(JSON.parse(a.body)).toEqual({ state: "closed-terminal" });
+  });
+
+  it("onEvent가 던져도 hook은 빈 200", async () => {
+    decisions = { hold: (...a) => queue.hold(...a), answer: (...a) => queue.answer(...a), onEvent: () => { throw new Error("boom"); } };
+    expect(await hook({ hook_event_name: "Stop", session_id: "s1" }).done).toEqual({ status: 200, body: "" });
+  });
+
   it("PreToolUse·PostToolUse 등은 여전히 즉시 빈 200", async () => {
     for (const ev of ["PreToolUse", "PostToolUse", "Stop", "Notification"]) {
       const r = await hook({ hook_event_name: ev, session_id: "s1", tool_name: "Bash", tool_input: { command: "x" } }).done;
@@ -143,7 +160,7 @@ describe("hook 응답 분기", () => {
   });
 
   it("hold가 던져도 hook은 빈 200을 받는다", async () => {
-    decisions = { hold: () => { throw new Error("boom"); }, answer: () => ({ ok: false, status: 404 }) };
+    decisions = { hold: () => { throw new Error("boom"); }, answer: () => ({ ok: false, status: 404 }), onEvent: () => { throw new Error("boom"); } };
     expect(await hook(perm()).done).toEqual({ status: 200, body: "" });
     gate.preToolUse = () => { throw new Error("boom"); };
     expect(await hook({ hook_event_name: "PreToolUse", session_id: "s1" }).done).toEqual({ status: 200, body: "" });

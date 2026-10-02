@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DecisionAnswer, DecisionDetail, DecisionKind, DecisionState, DecisionView, QuestionView } from "../../src/shared/types";
 import { MAX_FIELD, agentOf, redact, summarize, toGraphemes } from "../events/summarize";
 import { errInfo, getLogger } from "../log";
-import { BUDGET_STOP, DENY_DEFAULT, HOLD_MS, PLAN_MAX, REASON_MAX, buildAnswers, permissionResponse } from "./protocol";
+import { BUDGET_STOP, DENY_DEFAULT, HOLD_MS, PLAN_MAX, REASON_MAX, buildAnswers, inputHash, permissionResponse } from "./protocol";
 
 /** 붙잡는 결정의 상한. 가짜 hook이 폭주해도 메모리와 화면이 버티게 한다(Review Focus 1) */
 export const MAX_PENDING = 50;
@@ -25,7 +25,23 @@ interface Entry {
   timer?: NodeJS.Timeout;
   startedAt: number;
   resolvedMs?: number;
+  /** 합친 서브에이전트의 결정인가(턴 끝 범위, B70) */
+  sub: boolean;
+  /** tool_input 정규 해시(원문 아님). 터미널이 답한 뒤 오는 Post 계열과 짝을 맞춘다(B70) */
+  hash?: string;
 }
+
+/** 이 도구 호출이 끝났다는 이벤트(터미널에서 허용·거부한 뒤에도 온다) */
+const CLOSES_TOOL = new Set(["PostToolUse", "PostToolUseFailure", "PermissionDenied"]);
+/** 그 에이전트의 턴이 끝났다는 이벤트. 권한을 기다리는 동안에는 턴이 끝날 수 없으므로 남은 결정을 닫는다(derive.ts TURN_END와 같은 뜻) */
+const TURN_END_AGENT = new Set(["Stop", "SubagentStop", "TeammateIdle"]);
+const safeHash = (input: unknown): string | undefined => {
+  try {
+    return inputHash(input);
+  } catch {
+    return undefined; // BigInt 등 직렬화할 수 없는 입력
+  }
+};
 
 const cut = (s: unknown, max = MAX_FIELD): string | undefined => (typeof s === "string" ? toGraphemes(redact(s)).slice(0, max).join("") : undefined);
 
@@ -104,12 +120,13 @@ export class DecisionQueue {
     }
     const tool = typeof input.tool_name === "string" ? input.tool_name : "";
     const sessionId = String(input.session_id);
+    const ref = agentOf(input);
     const kind: DecisionKind = tool === "AskUserQuestion" ? "question" : tool === "ExitPlanMode" ? "plan" : o.kind === "budget" ? "budget" : "permission";
     const t = this.now();
     const view: DecisionView = {
       id: randomUUID(),
       sessionId,
-      agent: agentOf(input)?.name ?? "team-lead",
+      agent: ref?.name ?? "team-lead",
       kind,
       toolName: tool,
       state: "pending",
@@ -124,7 +141,7 @@ export class DecisionQueue {
     if (!this.sessionNo.has(sessionId)) this.sessionNo.set(sessionId, this.sessionNo.size + 1);
     this.byKind[kind] = (this.byKind[kind] ?? 0) + 1;
 
-    const e: Entry = { view, raw: input.tool_input, res, startedAt: t };
+    const e: Entry = { view, raw: input.tool_input, res, startedAt: t, sub: !!ref?.sub, hash: safeHash(input.tool_input) };
     e.timer = setTimeout(() => {
       this.resolve(e, "expired");
       try {
@@ -157,6 +174,47 @@ export class DecisionQueue {
       /* 쓰는 순간 끊긴 연결. 터미널 창이 결정한다 */
     }
     return { ok: true, state: "answered-dashboard" };
+  }
+
+  /**
+   * 터미널이 먼저 답한 결정을 hook 이벤트로 닫는다(Ruling B70). 터미널에서 거부(Esc)하면 연결이 끊기지만, 허용하면 연결이 열린 채
+   * 남아 손이 계속 들려 있었다(Task 14 항목 3). Post 계열은 같은 세션·에이전트·도구 중 입력 해시가 같은 결정을, 맞는 것이 없으면
+   * 그 범위의 pending이 하나뿐일 때 그것을 닫는다. 턴 끝 이벤트는 그 에이전트(SessionEnd·리드의 UserPromptSubmit은 세션 전체)를 닫는다
+   */
+  onEvent(input: Record<string, unknown>): void {
+    try {
+      const event = input.hook_event_name;
+      const sessionId = input.session_id;
+      if (typeof event !== "string" || typeof sessionId !== "string") return;
+      const ref = agentOf(input);
+      const pending = [...this.entries.values()].filter((e) => e.view.state === "pending" && e.view.sessionId === sessionId);
+      if (pending.length === 0) return;
+      let targets: Entry[] = [];
+      if (CLOSES_TOOL.has(event)) {
+        if (!ref) return;
+        const tool = typeof input.tool_name === "string" ? input.tool_name : "";
+        const same = pending.filter((e) => e.view.agent === ref.name && e.sub === ref.sub && e.view.toolName === tool);
+        const hash = safeHash(input.tool_input);
+        const byHash = hash ? same.filter((e) => e.hash === hash) : [];
+        targets = byHash.length > 0 ? [byHash[0]] : same.length === 1 ? same : [];
+      } else if (event === "SessionEnd" || (event === "UserPromptSubmit" && ref?.name === "team-lead" && !ref.sub)) {
+        targets = pending;
+      } else if (TURN_END_AGENT.has(event) && ref) {
+        // 합친 서브에이전트가 끝나면 그 서브에이전트 것만, 리드·팀원이 끝나면 그 에이전트 것 전부
+        targets = pending.filter((e) => e.view.agent === ref.name && (!ref.sub || e.sub));
+      }
+      for (const e of targets) {
+        const res = e.res;
+        this.resolve(e, "closed-terminal");
+        try {
+          res?.status(200).end(); // 결정 없이 놓아준다 — 터미널이 이미 결정했다
+        } catch {
+          /* 이미 끊긴 연결 */
+        }
+      }
+    } catch (e) {
+      getLogger().error("decisions", "event handling failed", { error: errInfo(e) });
+    }
   }
 
   /** 같은 세션의 pending budget 결정을 permission으로 바꾼다(Ruling B35) */

@@ -3,7 +3,16 @@
  * 연구 프리뷰라 버전마다 바뀔 수 있다(스펙 12장).
  */
 import type { DecisionAnswer } from "../../src/shared/types";
+import { createHash } from "node:crypto";
 import { toGraphemes } from "../events/summarize";
+
+/**
+ * tool_input의 정규 직렬화(키를 재귀적으로 정렬) sha256. 원문은 보관하지 않고 이 값만 비교한다.
+ * PreToolUse·PermissionRequest·PostToolUse의 같은 호출은 같은 값이다(스파이크 S4d). 예산 관문(B48)과 큐의 터미널 판정(B70)이 함께 쓴다
+ */
+const canonical = (v: unknown): unknown =>
+  Array.isArray(v) ? v.map(canonical) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])])) : v;
+export const inputHash = (input: unknown): string => createHash("sha256").update(JSON.stringify(canonical(input)) ?? "").digest("hex");
 
 /** 서버가 붙잡은 응답을 빈 200으로 놓아주는 시간. hooks.json의 PermissionRequest timeout(600초)보다 짧다 */
 export const HOLD_MS = 590_000;

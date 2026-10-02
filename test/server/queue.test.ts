@@ -380,3 +380,125 @@ describe("DecisionQueue", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+// ───────── Ruling B70: 터미널에서 허용하면 hook 연결이 닫히지 않는다(Task 14 항목 3) → hook 이벤트로 closed-terminal ─────────
+describe("DecisionQueue.onEvent(B70)", () => {
+  const ev = (event: string, o: Record<string, unknown> = {}) => ({ hook_event_name: event, session_id: "s1", ...o });
+  const stateOf = (id: string) => q.list().find((v) => v.id === id)!.state;
+
+  it("같은 세션·에이전트·도구·입력 해시의 PostToolUse가 오면 closed-terminal로 닫고 hook에는 빈 200을 한 번 쓴다", () => {
+    q = new DecisionQueue();
+    const res = fakeRes();
+    const v = q.hold(req("Bash", { command: "echo a", description: "d" }), res)!;
+    // 키 순서가 달라도 같은 입력(정규 직렬화 해시)
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { description: "d", command: "echo a" }, tool_use_id: "tu" }));
+    expect(stateOf(v.id)).toBe("closed-terminal");
+    expect(res.calls).toEqual([{ code: 200 }]);
+    expect(q.answer(v.id, { action: "allow" })).toEqual({ ok: false, status: 409, state: "closed-terminal" });
+    res.close();
+    expect(res.calls).toHaveLength(1);
+    expect(q.rawCount()).toBe(0);
+  });
+
+  it.each(["PostToolUseFailure", "PermissionDenied"])("%s도 같은 규칙으로 닫는다", (event) => {
+    q = new DecisionQueue();
+    const v = q.hold(req("Bash", { command: "x" }), fakeRes())!;
+    q.onEvent(ev(event, { tool_name: "Bash", tool_input: { command: "x" } }));
+    expect(stateOf(v.id)).toBe("closed-terminal");
+  });
+
+  it("같은 도구의 다른 입력은 닫지 않는다(pending이 둘 이상이고 해시가 안 맞으면 그대로)", () => {
+    q = new DecisionQueue();
+    const a = q.hold(req("Bash", { command: "a" }), fakeRes())!;
+    const b = q.hold(req("Bash", { command: "b" }), fakeRes())!;
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "c" } }));
+    expect([stateOf(a.id), stateOf(b.id)]).toEqual(["pending", "pending"]);
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "b" } }));
+    expect([stateOf(a.id), stateOf(b.id)]).toEqual(["pending", "closed-terminal"]);
+  });
+
+  it("해시가 달라도 그 세션·에이전트·도구의 pending이 하나뿐이면 닫는다(AskUserQuestion처럼 Post 입력이 달라지는 경우)", () => {
+    q = new DecisionQueue();
+    const v = q.hold(req("AskUserQuestion", { questions: [{ question: "Q?", multiSelect: false, options: [{ label: "a" }] }] }), fakeRes())!;
+    q.onEvent(ev("PostToolUse", { tool_name: "AskUserQuestion", tool_input: { questions: [], answers: { "Q?": "a" } } }));
+    expect(stateOf(v.id)).toBe("closed-terminal");
+  });
+
+  it("다른 세션·다른 에이전트·다른 도구는 그대로", () => {
+    q = new DecisionQueue();
+    const lead = q.hold(req("Bash", { command: "x" }), fakeRes())!;
+    const mate = q.hold(req("Bash", { command: "x" }, "s1", { agent_id: "aworker-1", agent_type: "worker" }), fakeRes())!;
+    const other = q.hold(req("Bash", { command: "x" }, "s2"), fakeRes())!;
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "x" }, agent_id: "aworker-1", agent_type: "worker" }));
+    expect([stateOf(lead.id), stateOf(mate.id), stateOf(other.id)]).toEqual(["pending", "closed-terminal", "pending"]);
+    q.onEvent(ev("PostToolUse", { tool_name: "Write", tool_input: { command: "x" } }));
+    expect(stateOf(lead.id)).toBe("pending");
+  });
+
+  it("Stop은 그 에이전트 것만, 합친 서브에이전트의 SubagentStop은 그 서브에이전트 것만 닫는다", () => {
+    q = new DecisionQueue();
+    const lead = q.hold(req("Bash", { command: "l" }), fakeRes())!;
+    const sub = q.hold(req("Bash", { command: "s" }, "s1", { agent_id: "a0123456789abcdef", agent_type: "Explore" }), fakeRes())!;
+    const mate = q.hold(req("Bash", { command: "m" }, "s1", { agent_id: "aworker-1", agent_type: "worker" }), fakeRes())!;
+    q.onEvent(ev("SubagentStop", { agent_id: "a0123456789abcdef", agent_type: "Explore" }));
+    expect([stateOf(lead.id), stateOf(sub.id), stateOf(mate.id)]).toEqual(["pending", "closed-terminal", "pending"]);
+    q.onEvent(ev("TeammateIdle", { teammate_name: "worker" }));
+    expect(stateOf(mate.id)).toBe("closed-terminal");
+    q.onEvent(ev("Stop"));
+    expect(stateOf(lead.id)).toBe("closed-terminal");
+  });
+
+  it("SessionEnd와 리드의 UserPromptSubmit은 그 세션 전체를 닫는다", () => {
+    q = new DecisionQueue();
+    const a = q.hold(req("Bash", { command: "a" }), fakeRes())!;
+    const b = q.hold(req("Bash", { command: "b" }, "s1", { agent_id: "aworker-1", agent_type: "worker" }), fakeRes())!;
+    const c = q.hold(req("Bash", { command: "c" }, "s2"), fakeRes())!;
+    q.onEvent(ev("UserPromptSubmit", { prompt: "next" }));
+    expect([stateOf(a.id), stateOf(b.id), stateOf(c.id)]).toEqual(["closed-terminal", "closed-terminal", "pending"]);
+    q.onEvent({ hook_event_name: "SessionEnd", session_id: "s2" });
+    expect(stateOf(c.id)).toBe("closed-terminal");
+  });
+
+  it("계획(answerable:false)과 예산 결정도 같은 규칙으로 닫히고, 590초 타이머가 정리된다", () => {
+    q = new DecisionQueue();
+    const r1 = fakeRes();
+    const plan = q.hold(req("ExitPlanMode", { plan: "p" }), r1)!;
+    const budget = q.hold(req("Bash", { command: "x" }), fakeRes(), { kind: "budget", budget: { budgetTokens: 1, usedTokens: 1 } })!;
+    q.onEvent(ev("PostToolUse", { tool_name: "ExitPlanMode", tool_input: { plan: "p", planFilePath: "/x" } }));
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "x" } }));
+    expect([stateOf(plan.id), stateOf(budget.id)]).toEqual(["closed-terminal", "closed-terminal"]);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(r1.calls).toEqual([{ code: 200 }]); // 닫을 때 한 번만
+  });
+
+  it("끝난 결정과 붙잡지 않은 이벤트에는 아무것도 하지 않고, 이상한 입력에도 던지지 않는다", () => {
+    q = new DecisionQueue();
+    const res = fakeRes();
+    const v = q.hold(req("Bash", { command: "x" }), res)!;
+    q.answer(v.id, { action: "allow" });
+    q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "x" } }));
+    expect(stateOf(v.id)).toBe("answered-dashboard");
+    expect(res.calls).toHaveLength(1);
+    for (const bad of [{}, { hook_event_name: "Stop" }, { hook_event_name: "PostToolUse", session_id: 5 }, ev("PostToolUse", { tool_input: { a: 10n } })] as Array<Record<string, unknown>>) {
+      expect(() => q.onEvent(bad)).not.toThrow();
+    }
+  });
+
+  it("로그는 기존 형식(kind·state·ms·session)이고 원문이 없다", () => {
+    const dir = mkdtempSync(join(tmpdir(), "co-queue-b70-"));
+    try {
+      setLogger(new Logger({ dir }));
+      q = new DecisionQueue();
+      q.hold(req("Bash", { command: "COMMAND-FAKE-B70" }), fakeRes());
+      q.onEvent(ev("PostToolUse", { tool_name: "Bash", tool_input: { command: "COMMAND-FAKE-B70" } }));
+      const text = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("");
+      expect(text).not.toContain("COMMAND-FAKE-B70");
+      const line = JSON.parse(text.trim().split("\n").at(-1)!) as { data: Record<string, unknown> };
+      expect(Object.keys(line.data).sort()).toEqual(["kind", "ms", "session", "state"]);
+      expect(line.data.state).toBe("closed-terminal");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
