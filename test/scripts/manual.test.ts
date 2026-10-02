@@ -482,6 +482,10 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(a).toContain("<code>PermissionRequest</code> 외에 결정을 돌려주는 hook은 이것 하나입니다.");
       expect(idx).toMatch(/Authorization: `Bearer \$\{token\}`/);
       expect(a).toContain("<code>Authorization</code> 헤더로 보냅니다");
+      // #182 보충: doctor의 "ours"에는 인증 없는 베타 서버도 들어간다. 4317을 먼저 차지한 프로그램은 흉내 낼 수 있다
+      expect(a).toContain("이 프로그램(이전 버전 포함)의 서버로 확인된 경우에만 보냅니다.");
+      expect(a).not.toContain("이 대시보드로 확인된 서버에만");
+      expect(a).toContain("같은 PC에서 4317을 먼저 차지한 프로그램은 그 확인 표시를 흉내 낼 수 있습니다.");
     });
 
     it("본문의 숫자가 코드와 같다(B69: 200자, 3초, 1년, 50%·20%, 600초·5초)", () => {
