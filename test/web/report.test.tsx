@@ -202,20 +202,26 @@ describe("답 보내기", () => {
     await flush();
   });
 
-  it("보내는 중에 다른 결정을 열면 늦게 온 응답을 새 결정에 붙이지 않는다", async () => {
+  it.each([
+    ["200", (res: (v: unknown) => void) => res(okResponse(200, { state: "answered-dashboard" }))],
+    ["409", (res: (v: unknown) => void) => res(okResponse(409, { state: "closed-terminal" }))],
+    ["네트워크 실패", (_res: (v: unknown) => void, rej: (e: unknown) => void) => rej(new Error("network"))],
+  ] as const)("보내는 중에 다른 결정을 열면 늦게 온 응답(%s)을 새 결정에 붙이지 않는다", async (_label, settle) => {
     let resolve!: (v: unknown) => void;
-    reply = () => new Promise((r) => (resolve = r));
+    let reject!: (e: unknown) => void;
+    reply = () => new Promise((r, j) => ((resolve = r), (reject = j)));
     show(snap([dv({ id: "d1" }), dv({ id: "d2", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() })]));
     render(<App />);
     open();
     fireEvent.click(screen.getByRole("button", { name: "허용" }));
     fireEvent.click(screen.getByRole("button", { name: "다음 결정" }));
     expect(screen.getByRole("dialog").textContent).toContain("3F claude_project · reviewer");
-    resolve(okResponse(200, { state: "answered-dashboard" }));
+    settle(resolve, reject);
     await flush();
     const dialog = screen.getByRole("dialog");
     expect(dialog.textContent).toContain("3F claude_project · reviewer");
     expect(dialog.textContent).not.toContain("대시보드에서 허용함");
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(dialog.querySelector(".rp-banner")).toBeNull();
     expect(screen.getByRole("button", { name: "허용" }).getAttribute("aria-disabled")).toBeNull();
     act(() => vi.advanceTimersByTime(5000));
