@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DecisionView, Member, Snapshot } from "../../src/shared/types";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
@@ -578,12 +578,16 @@ describe("문구 함수", () => {
 describe("자동 넘김 직후 Esc(#180)", () => {
   it("다음 결정이 그려진 바로 그 순간에 Esc를 눌러도 포커스는 연 책상으로(포커스 이동이 늦게 실행되지 않는다)", async () => {
     vi.useRealTimers();
-    show(snap([dv({ id: "a" }), dv({ id: "b", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() })]));
+    // 실제 시계를 쓰므로 결정 시각도 지금 기준으로 만든다(고정 시각이면 이미 만료돼 만료 잠금 경로로 넘어간다)
+    const now = Date.now();
+    show(snap([dv({ id: "a", createdAt: new Date(now).toISOString() }), dv({ id: "b", agent: "reviewer", createdAt: new Date(now + 1000).toISOString() })]));
     render(<App />);
     const desk = screen.getByRole("button", { name: /developer, 결정 필요/ });
     desk.focus();
     fireEvent.click(desk);
     fireEvent.click(screen.getByRole("button", { name: "허용" }));
+    await waitFor(() => expect(screen.getByRole("dialog").textContent).toContain("대시보드에서 허용함"));
+    expect(posts()).toHaveLength(1);
     // 3초 자동 넘김으로 다음 결정(reviewer)이 DOM에 붙는 커밋 직후에 Esc를 누른다. 늦게 도는 포커스 effect가 남아 있으면 여기서 드러난다
     const drawn = new Promise<void>((resolve) => {
       const mo = new MutationObserver(() => {
