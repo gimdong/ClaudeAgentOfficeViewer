@@ -129,6 +129,21 @@ Copy-Item -Force (Join-Path $Here "claude-office.ps1") (Join-Path $Prefix "bin\c
 Copy-Item -Force (Join-Path $Here "claude-office.cmd") (Join-Path $Prefix "bin\claude-office.cmd")
 Write-InstallLog "copy" "ok" "앱 파일 복사 완료 `"$Prefix\app`""
 
+# 2-1. 대시보드 토큰(Phase 2 스펙 7.1): 없으면 무작위 32바이트(hex)를 BOM 없는 ASCII로 만들고, 있으면 그대로 둔다
+# (install.sh와 같은 로그 문구). 값은 화면·설치 로그 어디에도 쓰지 않는다. 사용자 프로필 아래라 권한은 상속된다
+$tokenFile = Join-Path $Prefix "token"
+if (Test-Path -LiteralPath $tokenFile) {
+  Write-InstallLog "token" "skip" "이미 있음"
+} else {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
+  $rng.Dispose()
+  $hex = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+  [System.IO.File]::WriteAllText($tokenFile, $hex, [System.Text.Encoding]::ASCII)
+  Write-InstallLog "token" "ok" "토큰 파일 준비"
+}
+
 # PATH 레지스트리 값을 직접 읽고 쓴다 — [Environment]::GetEnvironmentVariable("Path","User")는
 # %VAR% 참조를 펼친 값을 돌려주고, SetEnvironmentVariable은 항상 REG_SZ로 쓴다. 사용자 PATH가
 # 원래 REG_EXPAND_SZ였다면(흔하다) 그 형식이 깨져 버린다(리뷰어 Important). 레지스트리에서 펼치지
@@ -185,7 +200,7 @@ if (-not $NoPath) {
 # 4. 플러그인
 $claude = Get-Command claude -ErrorAction SilentlyContinue
 if ($claude) {
-  if (Confirm-Step "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다.") {
+  if (Confirm-Step "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다.") {
     $pluginOk = $true
     & claude plugin marketplace add (Join-Path $Prefix "plugin")
     if ($LASTEXITCODE -ne 0) { Write-Host "마켓플레이스 등록 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."; $pluginOk = $false }

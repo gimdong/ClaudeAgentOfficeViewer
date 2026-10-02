@@ -127,7 +127,7 @@ function installLogLines(prefix: string): string[] {
  */
 function expectValidInstallLog(lines: string[], tempMarker: string) {
   // 시각은 로컬+오프셋(%z, 예: +0900)으로 바뀌어 자릿수가 고정이 아니다(director 지시 #52.h) — \S+로 느슨하게 받는다.
-  const re = /^\S+ (node|copy|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
+  const re = /^\S+ (node|copy|token|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
   for (const line of lines) {
     expect(line, line).toMatch(re);
     if (!line.includes("/")) continue;
@@ -851,6 +851,218 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout).not.toContain("입력을 받을 수 없어");
+    } finally {
+      rig.cleanup();
+    }
+  });
+});
+
+// ───────── Phase 2 Task 11: 대시보드 토큰(설치·런처) ─────────
+// 토큰 값은 단언의 인자로 넘기지 않는다(실패 메시지에 값이 찍히지 않게) — 포함 여부는 boolean으로만 본다.
+
+/** 런처가 쓰는 명령만 링크한 폴더(open·xdg-open 없음). "브라우저 열기 명령이 없다" 시나리오용 */
+function toolsWithoutOpen(): string {
+  const dir = mkdtempSync(join(tmpdir(), "claude-office-installtest-tools-"));
+  for (const t of ["dirname", "readlink", "sed", "sleep", "cat", "tr", "rm", "awk", "grep", "mkdir"]) {
+    const src = ["/usr/bin", "/bin"].map((d) => join(d, t)).find((f) => existsSync(f));
+    if (src) symlinkSync(src, join(dir, t));
+  }
+  return dir;
+}
+
+/** 서버 대신 쓰는 가짜 node: -v에는 v24를 답하고, 그 밖에는 몇 초 기다리다 끝난다(포트·토큰 파일을 쓰지 않는다) */
+function fakeNode(rig: Rig) {
+  writeFileSync(join(rig.stubBin, "node"), '#!/bin/sh\nif [ "$1" = "-v" ]; then echo v24.0.0; exit 0; fi\nsleep 4\n');
+  chmodSync(join(rig.stubBin, "node"), 0o755);
+}
+
+/** 런처를 켜고 끝날 때까지(가짜 node는 4초) 출력을 모은다 */
+function runLauncher(prefix: string, e: NodeJS.ProcessEnv, args: string[] = ["--port", "5999"]) {
+  return spawnSync(join(prefix, "bin/claude-office"), args, { env: e, encoding: "utf8", timeout: 15_000 });
+}
+
+describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
+  it("install.sh: 토큰 파일을 64자 hex, 권한 600으로 만든다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      const token = readFileSync(join(prefix, "token"), "utf8");
+      expect(/^[0-9a-f]{64}$/.test(token)).toBe(true);
+      expect(statSync(join(prefix, "token")).mode & 0o777).toBe(0o600);
+      const steps = installLogLines(prefix).map((l) => l.split(" ").slice(1, 3).join(" "));
+      expect(steps).toContain("token ok");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("install.sh: 다시 설치해도 토큰이 바뀌지 않는다(내용과 mtime)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      const before = readFileSync(join(prefix, "token"), "utf8");
+      const mtime = statSync(join(prefix, "token")).mtimeMs;
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      expect(readFileSync(join(prefix, "token"), "utf8") === before).toBe(true);
+      expect(statSync(join(prefix, "token")).mtimeMs).toBe(mtime);
+      expect(installLogLines(prefix).some((l) => / token skip 이미 있음$/.test(l))).toBe(true);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("설치 로그와 설치 출력에 토큰 값이 없다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      const token = readFileSync(join(prefix, "token"), "utf8");
+      const logs = readdirSync(join(prefix, "logs")).map((f) => readFileSync(join(prefix, "logs", f), "utf8")).join("");
+      expect([r.stdout, r.stderr, logs].some((t) => t.includes(token))).toBe(false);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("런처: 토큰이 있으면 ?k=<토큰> 주소로 열고, 열리면 출력에 토큰 값이 없다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
+      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fakeNode(rig);
+      writeFileSync(rig.stubLog, "");
+      const token = readFileSync(join(prefix, "token"), "utf8");
+      const r = runLauncher(prefix, env(rig));
+      const log = readFileSync(rig.stubLog, "utf8");
+      expect(log.includes(`open http://127.0.0.1:5999/?k=${token}`)).toBe(true);
+      expect((r.stdout + r.stderr).includes(token)).toBe(false);
+      expect(r.stdout).not.toContain("브라우저를 열지 못했습니다");
+    } finally {
+      rig.cleanup();
+    }
+  }, 20_000);
+
+  it("런처: 토큰이 없으면 예전 주소로 연다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      rmSync(join(prefix, "token"));
+      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
+      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fakeNode(rig);
+      writeFileSync(rig.stubLog, "");
+      runLauncher(prefix, env(rig));
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe("open http://127.0.0.1:5999/");
+    } finally {
+      rig.cleanup();
+    }
+  }, 20_000);
+
+  it.each([
+    ["열기 명령이 실패하면(exit 1)", "fail"],
+    ["열기 명령이 없으면", "missing"],
+  ] as const)("%s 토큰 주소와 \"남에게 보내지 마세요\" 안내를 출력한다", (_label, mode) => {
+    requireBuildOk();
+    const rig = makeRig();
+    const tools = toolsWithoutOpen();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      if (mode === "fail") {
+        writeFileSync(join(rig.stubBin, "open"), "#!/bin/sh\nexit 1\n");
+        chmodSync(join(rig.stubBin, "open"), 0o755);
+      }
+      fakeNode(rig);
+      const token = readFileSync(join(prefix, "token"), "utf8");
+      // /usr/bin(진짜 open이 있는 곳)를 빼고, 런처가 쓰는 명령만 링크한 폴더를 쓴다
+      const r = runLauncher(prefix, env(rig, { PATH: `${rig.stubBin}:${tools}` }));
+      const lines = r.stdout.split("\n");
+      const i = lines.findIndex((l) => l.startsWith("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: "));
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(lines[i].endsWith(`http://127.0.0.1:5999/?k=${token}`)).toBe(true);
+      expect(lines[i + 1]).toBe("이 주소는 열쇠입니다. 남에게 보내지 마세요.");
+      // 설치 로그에는 어느 경우에도 없다
+      const logs = readdirSync(join(prefix, "logs")).map((f) => readFileSync(join(prefix, "logs", f), "utf8")).join("");
+      expect(logs.includes(token)).toBe(false);
+    } finally {
+      rmSync(tools, { recursive: true, force: true });
+      rig.cleanup();
+    }
+  }, 20_000);
+
+  it(
+    "실제 서버로 켜도 서버 로그 파일에 토큰 값이 없다",
+    async () => {
+      requireBuildOk();
+      const rig = makeRig();
+      try {
+        const prefix = join(rig.home, ".claude-office");
+        expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+        writeFileSync(join(rig.stubBin, "open"), "#!/bin/sh\nexit 1\n"); // 열기 실패 → 터미널 출력 경로
+        chmodSync(join(rig.stubBin, "open"), 0o755);
+        const token = readFileSync(join(prefix, "token"), "utf8");
+        const port = await getFreePort();
+        const fakeClaudeHome = join(rig.home, "fake-claude-home");
+        mkdirSync(fakeClaudeHome, { recursive: true });
+        const child = spawn(join(prefix, "bin/claude-office"), ["--port", String(port), "--claude-home", fakeClaudeHome], { env: env(rig) });
+        let out = "";
+        child.stdout?.on("data", (b: Buffer) => (out += b.toString()));
+        try {
+          const deadline = Date.now() + 10_000;
+          while (!out.includes("남에게 보내지 마세요") && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+          expect(out.includes("남에게 보내지 마세요")).toBe(true);
+        } finally {
+          await killAndWait(child);
+        }
+        const logs = readdirSync(join(prefix, "logs")).map((f) => readFileSync(join(prefix, "logs", f), "utf8")).join("");
+        expect(logs).toContain('"msg":"start"');
+        expect(logs.includes(token)).toBe(false);
+      } finally {
+        rig.cleanup();
+      }
+    },
+    30_000,
+  );
+
+  it("uninstall은 token과 state.json도 지운다(로그를 남기기로 해도)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(join(prefix, "state.json"), '{"sessions":{}}');
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input: "n\nn\n" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(prefix, "token"))).toBe(false);
+      expect(existsSync(join(prefix, "state.json"))).toBe(false);
+      expect(existsSync(join(prefix, "logs"))).toBe(true); // 로그는 남겼다
+      expect(r.stdout).toContain("지움: 프로그램 파일");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("uninstall --yes 뒤 token과 state.json이 없다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(join(prefix, "state.json"), '{"sessions":{}}');
+      expect(spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" }).status).toBe(0);
+      expect(existsSync(join(prefix, "token"))).toBe(false);
+      expect(existsSync(join(prefix, "state.json"))).toBe(false);
     } finally {
       rig.cleanup();
     }

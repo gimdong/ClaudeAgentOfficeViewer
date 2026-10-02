@@ -389,4 +389,59 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
       expect(r.status, `${f}: ${r.stderr}`).toBe(0);
     }
   });
+
+  // ───────── Phase 2 Task 11: 대시보드 토큰 ─────────
+  it("install.ps1(정적): RandomNumberGenerator로 32바이트를 만들고, 이미 있으면 건너뛰며, 출력·로그 줄에 토큰 변수를 넣지 않는다", () => {
+    const text = readFileSync(INSTALL_PS1, "utf8");
+    expect(text).toContain("[System.Security.Cryptography.RandomNumberGenerator]");
+    expect(text).toMatch(/New-Object byte\[\] 32/);
+    expect(text).toMatch(/if \(Test-Path -LiteralPath \$tokenFile\)/);
+    expect(text).toContain('Write-InstallLog "token" "skip" "이미 있음"');
+    expect(text).toContain('Write-InstallLog "token" "ok" "토큰 파일 준비"');
+    // BOM 없는 ASCII로 쓴다
+    expect(text).toMatch(/WriteAllText\(\$tokenFile, \$hex, \[System\.Text\.Encoding\]::ASCII\)/);
+    const code = text.split("\n").filter((l) => !l.trim().startsWith("#"));
+    for (const l of code.filter((l) => /Write-Host|Write-InstallLog|Write-Output|Add-Content/.test(l))) {
+      expect(l, l).not.toMatch(/\$hex|\$token\b|\$bytes/);
+    }
+  });
+
+  it("claude-office.ps1(정적): 토큰이 있으면 ?k= 주소로 열고, 실패할 때만 안내를 콘솔에 쓴다", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    expect(text).toContain('Join-Path $Prefix "token"');
+    expect(text).toMatch(/\?k=/);
+    expect(text).toContain("Start-Sleep -Seconds 1");
+    expect(text).toMatch(/Start-Process \$url -ErrorAction Stop/);
+    // 백그라운드 job은 콘솔에 쓰지 못하므로 같은 프로세스의 runspace에서 연다
+    expect(text).toContain("[powershell]::Create()");
+    expect(text.split("\n").filter((l) => !l.trim().startsWith("#")).some((l) => l.includes("Start-Job"))).toBe(false);
+    expect(text).toContain('[Console]::WriteLine("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url")');
+    expect(text).toContain('[Console]::WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")');
+  });
+
+  it("uninstall(ps1)은 token과 state.json도 지운다", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    expect(text).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "token")');
+    expect(text).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "state.json")');
+  });
+
+  it("Phase 2 문구가 sh·ps1에서 글자까지 같다(설치 질문, 토큰 로그, 열기 실패 안내)", () => {
+    const installSh = readFileSync(join(ROOT, "packaging/install.sh"), "utf8");
+    const launcherSh = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8");
+    const installPs1 = readFileSync(INSTALL_PS1, "utf8");
+    const launcherPs1 = readFileSync(LAUNCHER_PS1, "utf8");
+    const q = "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다.";
+    expect(installSh).toContain(q);
+    expect(installPs1).toContain(q);
+    expect(q).toContain("돌려줍니다");
+    expect(installSh).not.toContain("도구 사용 기록을 이 PC의 뷰어로 보냅니다.");
+    for (const m of ["토큰 파일 준비", "이미 있음"]) {
+      expect(installSh).toContain(`log token ${m === "이미 있음" ? "skip" : "ok"} "${m}"`);
+      expect(installPs1).toContain(`Write-InstallLog "token" "${m === "이미 있음" ? "skip" : "ok"}" "${m}"`);
+    }
+    for (const m of ["브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: ", "이 주소는 열쇠입니다. 남에게 보내지 마세요."]) {
+      expect(launcherSh).toContain(m);
+      expect(launcherPs1).toContain(m);
+    }
+  });
 });

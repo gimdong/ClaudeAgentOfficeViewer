@@ -250,8 +250,20 @@ async function main(): Promise<void> {
   });
   server.on("error", (e: NodeJS.ErrnoException) => {
     if (e.code === "EADDRINUSE") {
-      console.error(`포트 ${opts.port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
-      log.error("server", "port in use", { port: opts.port });
+      // 이미 이 프로그램이 켜져 있으면(Ruling B42) 오류가 아니다 — 런처가 토큰 주소로 브라우저를 이미 다시 열었다.
+      // 판별은 doctor의 포트 판정을 그대로 쓴다(토큰을 보내지 않는다, B52). v1·다른 프로그램은 기존 안내와 종료 코드 1
+      void defaultProbePort(opts.port).then((state) => {
+        hub.stop();
+        if (state === "ours") {
+          console.log("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+          log.info("server", "already running", { port: opts.port });
+          process.exit(0);
+        }
+        console.error(`포트 ${opts.port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+        log.error("server", "port in use", { port: opts.port });
+        process.exit(1);
+      });
+      return;
     } else {
       console.error(e);
       log.error("server", "listen failed", { error: errInfo(e) });

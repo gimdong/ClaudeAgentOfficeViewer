@@ -148,6 +148,15 @@ describe("npm run package:beta", () => {
     for (const rel of required) expect(existsSync(join(RELEASE_DIR, rel)), rel).toBe(true);
   });
 
+  it("패키지 속 플러그인의 PermissionRequest hook timeout은 600, 나머지는 5(Phase 2)", () => {
+    requireBuildOk();
+    const f = JSON.parse(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")) as { hooks: Record<string, Array<{ hooks: Array<{ timeout: number }> }>> };
+    for (const [event, groups] of Object.entries(f.hooks)) {
+      const timeouts = groups.flatMap((g) => g.hooks.map((h) => h.timeout));
+      expect(timeouts, event).toEqual([event === "PermissionRequest" ? 600 : 5]);
+    }
+  });
+
   it("app/node_modules에 개발 의존성이 없다", () => {
     requireBuildOk();
     for (const dev of ["vite", "vitest", "tsx", "typescript", "react"]) {

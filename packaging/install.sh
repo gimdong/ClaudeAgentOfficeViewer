@@ -131,6 +131,16 @@ cp "$HERE/VERSION" "$PREFIX/VERSION"
 cp "$HERE/claude-office.sh" "$PREFIX/bin/claude-office"; chmod 755 "$PREFIX/bin/claude-office"
 log copy ok "앱 파일 복사 완료 \"$PREFIX/app\""
 
+# 2-1. 대시보드 토큰(Phase 2 스펙 7.1): 없으면 무작위 32바이트(hex)를 0600으로 만들고, 있으면 그대로 둔다.
+# 값은 화면·설치 로그 어디에도 쓰지 않는다(로그에는 ok/skip만). 서버도 없으면 만들지만(B33) 설치 때 미리 둔다
+if [ -s "$PREFIX/token" ]; then
+  log token skip "이미 있음"
+else
+  ( umask 077; node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))' > "$PREFIX/token" ) || fail token "대시보드 토큰 파일을 만들지 못했습니다."
+  chmod 600 "$PREFIX/token"
+  log token ok "토큰 파일 준비"
+fi
+
 # 3. PATH
 PATH_ADDED=0 # SPEC 3장: PATH에 안 들어갔으면 끝에서 전체 경로 실행법을 안내해야 한다
 if [ "$NOPATH" = 0 ]; then
@@ -161,7 +171,7 @@ fi
 
 # 4. 플러그인
 if command -v claude >/dev/null 2>&1; then
-  if ask "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보냅니다."; then
+  if ask "Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다."; then
     plugin_ok=1
     claude plugin marketplace add "$PREFIX/plugin" || { echo "마켓플레이스 등록 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }
     claude plugin install claude-office@claude-office --scope user || { echo "플러그인 설치 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }

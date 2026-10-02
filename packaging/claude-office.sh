@@ -134,7 +134,8 @@ case "$cmd" in
       fi
     done
 
-    rm -rf "$PREFIX/app" "$PREFIX/plugin" "$PREFIX/bin" "$PREFIX/VERSION" "$PREFIX/사용설명서.html"
+    # token(대시보드 열쇠)과 state.json(층 예산)도 프로그램 파일로 함께 지운다(요약 문구는 그대로)
+    rm -rf "$PREFIX/app" "$PREFIX/plugin" "$PREFIX/bin" "$PREFIX/VERSION" "$PREFIX/사용설명서.html" "$PREFIX/token" "$PREFIX/state.json"
     logs_removed=0
     if ask_u "로그와 진단 파일도 지울까요?"; then
       rm -rf "$PREFIX/logs" "$PREFIX/diagnostics"
@@ -176,7 +177,18 @@ case "$cmd" in
       prev="$a"
     done
     if [ -z "${CLAUDE_OFFICE_NO_OPEN:-}" ]; then
-      (sleep 1; open "http://127.0.0.1:$port/" 2>/dev/null || xdg-open "http://127.0.0.1:$port/" 2>/dev/null) &
+      # 토큰 주소(/?k=…)로 연다 — 서버가 쿠키로 바꾸고 /로 돌려보낸다(Phase 2 스펙 7.1). 서버가 방금 토큰을
+      # 만들었을 수 있어 1초 뒤에 읽는다(B33). 토큰 주소는 평소에는 출력하지 않고, 브라우저 열기 명령이
+      # 없거나 실패했을 때만 붙여 넣을 수 있게 터미널에 쓴다(Ruling B45, ps1과 같은 문구). 로그에는 쓰지 않는다
+      (
+        sleep 1
+        url="http://127.0.0.1:$port/"
+        if [ -s "$PREFIX/token" ]; then url="${url}?k=$(tr -d ' \n\r' < "$PREFIX/token")"; fi
+        open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || {
+          echo "브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url"
+          echo "이 주소는 열쇠입니다. 남에게 보내지 마세요."
+        }
+      ) &
     fi
     # SPEC 3장 명령 표: ps1과 글자까지 같은 안내(B17).
     echo "이 창을 닫으면 대시보드가 꺼집니다."

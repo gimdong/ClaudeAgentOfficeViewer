@@ -170,6 +170,9 @@ switch ($cmd) {
     Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "bin")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "VERSION")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "사용설명서.html")
+    # token(대시보드 열쇠)과 state.json(층 예산)도 프로그램 파일로 함께 지운다(sh와 같음, 요약 문구는 그대로)
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "token")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "state.json")
 
     $removeLogs = & $ask_u "로그와 진단 파일도 지울까요?"
     if ($removeLogs) {
@@ -212,11 +215,23 @@ switch ($cmd) {
       $prev = $a
     }
     if (-not $env:CLAUDE_OFFICE_NO_OPEN) {
-      Start-Job -ScriptBlock {
-        param($p)
+      # 토큰 주소(/?k=…)로 연다(Phase 2 스펙 7.1). 서버가 방금 토큰을 만들었을 수 있어 1초 뒤에 읽는다(B33).
+      # 백그라운드 job(Start-Job)은 콘솔에 쓰지 못하므로 같은 프로세스의 runspace에서 열고, 열기에 실패했을 때만
+      # 붙여 넣을 주소를 콘솔에 쓴다(Ruling B45, sh와 같은 문구). 로그에는 쓰지 않는다
+      $opener = [powershell]::Create().AddScript({
+        param($p, $tokenFile)
         Start-Sleep -Seconds 1
-        try { Start-Process "http://127.0.0.1:$p/" } catch {}
-      } -ArgumentList $port | Out-Null
+        $url = "http://127.0.0.1:$p/"
+        if (Test-Path -LiteralPath $tokenFile) {
+          $t = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
+          if ($t) { $url = "$url" + "?k=$t" }
+        }
+        try { Start-Process $url -ErrorAction Stop } catch {
+          [Console]::WriteLine("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url")
+          [Console]::WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")
+        }
+      }).AddArgument($port).AddArgument((Join-Path $Prefix "token"))
+      $null = $opener.BeginInvoke()
     }
     # SPEC 3장 명령 표: sh와 글자까지 같은 안내(B17).
     Write-Host "이 창을 닫으면 대시보드가 꺼집니다."

@@ -246,6 +246,39 @@ describe("CLI", () => {
     }
   }, 30_000);
 
+  it("같은 포트에 우리 서버가 있으면 안내 뒤 종료 코드 0(Ruling B42)", async () => {
+    const s = await startServer();
+    try {
+      const logDir = mkdtempSync(join(tmpdir(), "office-b42-log-"));
+      const r = await run(["--port", String(s.port), "--claude-home", s.home, "--log-dir", logDir], s.env);
+      rmSync(logDir, { recursive: true, force: true });
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain("이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+      expect(r.stderr).not.toContain("이미 사용 중입니다");
+    } finally {
+      await s.stop();
+    }
+  }, 40_000);
+
+  it("다른 프로그램(http)이 포트를 쓰면 기존 안내와 종료 코드 1", async () => {
+    const { createServer: createHttp } = await import("node:http");
+    const other = createHttp((_req, res) => void res.writeHead(200, { "Content-Type": "text/html" }).end("<!doctype html>")).listen(0, "127.0.0.1");
+    await new Promise((r) => other.once("listening", r));
+    const port = (other.address() as { port: number }).port;
+    const prefix = mkdtempSync(join(tmpdir(), "office-b42-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-b42-home-"));
+    const logDir = mkdtempSync(join(tmpdir(), "office-b42-log-"));
+    try {
+      const r = await run(["--port", String(port), "--claude-home", home, "--log-dir", logDir], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+      expect(r.stdout).not.toContain("이미 켜져 있습니다");
+    } finally {
+      other.close();
+      for (const d of [prefix, home, logDir]) rmSync(d, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("설치본 모드에서는 콘솔에 토큰이 나오지 않는다", async () => {
     const s = await startServer();
     try {
