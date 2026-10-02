@@ -114,7 +114,7 @@ function What({ v }: { v: DecisionView }) {
  * 결정 보고서 서랍(디자인 phase2 §1–§5). 비모달이고 포커스를 가두지 않는다.
  * 알림은 App의 하나뿐인 role="status"(announce)로만 한다. 배너에는 role을 주지 않고, 보내기 실패만 role="alert"(Ruling B47).
  */
-export function DecisionReport({ d, sessions, announce, children }: { d: Decisions; sessions: SessionView[]; announce(text: string): void; children?: ReactNode }) {
+export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessions: SessionView[]; announce(text: string): void }) {
   const v = d.view;
   const [now, setNow] = useState(() => Date.now());
   const [reason, setReason] = useState("");
@@ -269,7 +269,7 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
   } else if (v.kind === "question") {
     // key로 결정마다 고른 상태를 새로 시작한다. 답은 인덱스로만 보낸다(Ruling B30)
     answer = answerable
-      ? (children ?? <QuestionForm key={v.id} questions={v.questions ?? []} disabled={busy} onSubmit={(answers) => send({ action: "answer", answers })} />)
+      ? <QuestionForm key={v.id} questions={v.questions ?? []} disabled={busy} onSubmit={(answers) => send({ action: "answer", answers })} />
       : null;
   }
   if (!v.answerable) {

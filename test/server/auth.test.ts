@@ -109,6 +109,17 @@ describe("읽기 API 인증", () => {
     expect((await send("GET", "/api/stream", cookie)).status).toBe(200);
   });
 
+  it("인증된 /api/snapshot 본문과 /api/stream 첫 메시지에 토큰 값이 없다(스펙 10장)", async () => {
+    for (const [p, h] of [["/api/snapshot", cookie], ["/api/stream", cookie], ["/api/snapshot", bearer]] as const) {
+      const r = await send("GET", p, h);
+      expect(r.status, p).toBe(200);
+      expect(r.body.includes('"sessions"'), p).toBe(true); // 스냅샷이 실제로 실렸다
+      // 값 자체를 단언 메시지에 싣지 않도록 포함 여부만 본다
+      const hasToken = r.body.includes(TOKEN);
+      expect(hasToken, p).toBe(false);
+    }
+  });
+
   it("Bearer가 맞으면 200", async () => {
     expect((await send("GET", "/api/snapshot", bearer)).status).toBe(200);
     expect((await send("GET", "/api/diagnostics", bearer)).status).toBe(200);

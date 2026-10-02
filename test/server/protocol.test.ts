@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { budgetReason, buildAnswers, parseAnswer, permissionResponse, preToolAsk } from "../../server/decisions/protocol";
+import { OTHER_MAX, budgetReason, buildAnswers, parseAnswer, permissionResponse, preToolAsk } from "../../server/decisions/protocol";
+import { toGraphemes } from "../../server/events/summarize";
+import { OTHER_MAX as WEB_OTHER_MAX } from "../../web/report/QuestionForm";
+import { graphemes } from "../../web/report/text";
 
 describe("hook 응답 형식(스펙 2장, 계획 Global Constraints)", () => {
   it("권한 응답 JSON이 글자 그대로다", () => {
@@ -78,5 +81,17 @@ describe("parseAnswer(답 본문 모양)", () => {
       JSON.parse('{"__proto__":{"x":1},"action":"allow"}'),
       JSON.parse('{"action":"answer","answers":[{"__proto__":{},"labels":[0]}]}'),
     ]) expect(parseAnswer(bad), JSON.stringify(bad)).toBeNull();
+  });
+});
+
+describe("화면과 서버가 같은 기준으로 센다(Ruling B72)", () => {
+  it("기타 답 상한 OTHER_MAX가 화면과 서버에서 같다", () => {
+    expect(WEB_OTHER_MAX).toBe(OTHER_MAX);
+  });
+
+  it("화면 graphemes와 서버 toGraphemes가 이모지·결합 문자에 같은 결과를 낸다", () => {
+    const s = "가👍🏽나👨‍👩‍👧e\u0301🇰🇷한\u1100\u1161";
+    expect(graphemes(s)).toEqual(toGraphemes(s));
+    expect(graphemes(s)).toHaveLength(8);
   });
 });
