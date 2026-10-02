@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DiagnosticsSummary } from "../../src/shared/types";
 import { Icon } from "../pixel/Icon";
 import { DiagIcon } from "./DiagIcon";
@@ -14,7 +14,9 @@ function BundleSection({ diagDir, announce }: { diagDir: string | null; announce
   const btn = useRef<HTMLButtonElement>(null);
   const link = useRef<HTMLAnchorElement>(null);
 
-  useEffect(() => {
+  // 포커스는 그 상자가 그려지는 커밋 안에서 옮긴다. useEffect면 그 사이에 Esc로 칩에 돌려준 포커스를
+  // 늦게 실행된 effect가 받기 링크로 다시 가져가고, 곧 패널이 닫히며 포커스가 body로 사라진다
+  useLayoutEffect(() => {
     if (b.state === "done") link.current?.focus();
     if (b.state === "fail") btn.current?.focus();
   }, [b]);

@@ -153,6 +153,28 @@ describe("Hud의 진단 칩과 패널", () => {
     expect(screen.queryByRole("link", { name: "받기" })).toBeNull();
   });
 
+  it("받기 링크가 그려진 바로 그 순간에 Esc를 눌러도 포커스는 칩으로(포커스 이동이 늦게 실행되지 않는다)", async () => {
+    render(<Hud snapshot={makeSnapshot()} live />);
+    const chip = await screen.findByRole("button", { name: "진단 열기" });
+    fireEvent.click(chip);
+    const make = await screen.findByRole("button", { name: "진단 파일 만들기" });
+    // 링크가 DOM에 붙는 커밋 직후(마이크로태스크)에 Esc를 누른다. 늦게 도는 effect가 남아 있으면 여기서 드러난다
+    const drawn = new Promise<void>((resolve) => {
+      const mo = new MutationObserver(() => {
+        if (document.querySelector(".dp-result a")) {
+          mo.disconnect();
+          resolve();
+        }
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+    });
+    fireEvent.click(make);
+    await drawn;
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(chip);
+  });
+
   it("말풍선이 떠 있으면 Esc는 말풍선이 먼저(패널은 그대로)", async () => {
     render(<Hud snapshot={makeSnapshot()} live />);
     fireEvent.click(await screen.findByRole("button", { name: "진단 열기" }));
