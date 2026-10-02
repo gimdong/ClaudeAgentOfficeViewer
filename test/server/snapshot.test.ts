@@ -300,7 +300,13 @@ describe("SnapshotBuilder + 결정 큐(Phase 2, Ruling B28·B40)", () => {
     const dev = snap.sessions.find((s) => s.id === "s1")!.members.find((m) => m.name === "developer")!;
     const at = T - 60_000;
     expect(dev.state).toBe("decision");
-    expect(dev.decision).toEqual({ kind: "team", since: new Date(at).toISOString(), summary: "[결정 필요] 포트를 무엇으로 할까요 token=***" });
+    expect(dev.decision).toEqual({
+      kind: "team",
+      since: new Date(at).toISOString(),
+      summary: "[결정 필요] 포트를 무엇으로 할까요 token=***",
+      id: `team:s1:developer:${at}`,
+      deadline: new Date(at + 30 * 60_000).toISOString(),
+    });
     const item = snap.decisions.find((d) => d.kind === "team")!;
     expect(item).toMatchObject({ id: `team:s1:developer:${at}`, sessionId: "s1", agent: "developer", state: "pending", answerable: false, detail: { description: "[결정 필요] 포트를 무엇으로 할까요 token=***" } });
     expect(snap.decisionCount).toBe(1);

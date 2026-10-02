@@ -31,7 +31,26 @@ describe("DecisionChip", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("'결정 대기 N'과 접근성 이름, 누르면 가장 오래 기다린 층으로 스크롤만 한다(Phase 1)", () => {
+  it("'결정 대기 N'과 접근성 이름, 누르면 가장 오래 기다린 결정의 보고서를 연다(Phase 2, Ruling P8 되돌림)", () => {
+    const s = sessions();
+    const opened: HTMLElement[] = [];
+    render(
+      <>
+        <DecisionChip snapshot={makeSnapshot({ sessions: s, decisionCount: 2 })} onOpen={(el) => opened.push(el)} />
+        <Building sessions={s} />
+      </>,
+    );
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const chip = screen.getByRole("button", { name: "결정 대기 2건, 다음 요청 열기" });
+    expect(chip.textContent).toBe("결정 대기 2");
+    expect(chip.getAttribute("aria-haspopup")).toBe("dialog");
+    fireEvent.click(chip);
+    expect(opened).toEqual([chip]);
+    expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it("보고서 없이 그린 칩(onOpen 없음)은 가장 오래 기다린 층으로 스크롤만 한다", () => {
     const s = sessions();
     render(
       <>
@@ -41,7 +60,7 @@ describe("DecisionChip", () => {
     );
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
-    const chip = screen.getByRole("button", { name: "결정 대기 2건, 가장 오래 기다린 층으로 이동" });
+    const chip = screen.getByRole("button", { name: "결정 대기 2건, 다음 요청 열기" });
     expect(chip.textContent).toBe("결정 대기 2");
     chip.focus();
     fireEvent.click(chip);

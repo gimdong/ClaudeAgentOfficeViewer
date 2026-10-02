@@ -116,7 +116,8 @@ function elapsedLabel(secs: number): string {
 
 /** 보조 줄(디자인 7.1): {모델} · 토큰 {n} · {경과}. 결정 대기와 퇴근은 따로 */
 export function metaLine(m: Member, now: number): string {
-  if (m.state === "decision") return "결정 보고서는 다음 버전에서 열립니다";
+  // 보고서를 열 수 있는 결정(큐의 id가 있음)이면 Phase 2 문구(phase2 §9.2). id가 없으면 열리지 않으므로 Phase 1 문구 그대로
+  if (m.state === "decision") return m.decision?.id ? "누르면 결정 보고서가 열립니다" : "결정 보고서는 다음 버전에서 열립니다";
   if (m.state === "offline") return "";
   const parts: string[] = [];
   // 디자인 7.1: 리드에 합친 서브에이전트가 한 일이면 앞머리에 "서브에이전트" 또는 "서브에이전트({agent_type})"

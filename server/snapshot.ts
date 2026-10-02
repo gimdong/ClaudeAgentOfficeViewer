@@ -176,19 +176,22 @@ export class SnapshotBuilder {
       const req = teamRequests.find((r) => r.from === name);
       if (!req) return d;
       const since = iso(req.at);
+      const id = `team:${s.sessionId}:${name}:${req.at}`;
+      const deadline = iso(req.at + TEAM_REQUEST_TTL);
       teamItems.push({
-        id: `team:${s.sessionId}:${name}:${req.at}`,
+        id,
         sessionId: s.sessionId,
         agent: name,
         kind: "team",
         toolName: "SendMessage",
         state: "pending",
         createdAt: since,
-        deadline: iso(req.at + TEAM_REQUEST_TTL),
+        deadline,
         detail: { description: req.summary },
         answerable: false,
       });
-      return { ...(d ?? { toolRunning: false }), decision: { kind: "team", since, summary: req.summary } };
+      // id가 있어야 책상이 보고서를 여는 버튼이 된다(Ruling B55, 디자인 phase2 §9.2)
+      return { ...(d ?? { toolRunning: false }), decision: { kind: "team", since, summary: req.summary, id, deadline } };
     };
 
     const leadEntry = leadFile ? await readLastEntry(leadFile).catch((e) => void warnCaught("snapshot", "cannot read last entry", e, "transcript")) : undefined;

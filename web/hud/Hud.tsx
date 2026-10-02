@@ -10,7 +10,22 @@ import { Elevator } from "./Elevator";
 import { HeartBar } from "./HeartBar";
 import { TokenCounter } from "./TokenCounter";
 
-export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
+export function Hud({
+  snapshot,
+  live,
+  onOpenDecision,
+  reportOpen = false,
+  onDiagOpen,
+}: {
+  snapshot: Snapshot;
+  live: boolean;
+  /** HUD 결정 칩이 가장 오래 기다린 결정을 연다 */
+  onOpenDecision?(opener: HTMLElement): void;
+  /** 결정 보고서가 열려 있으면 진단 서랍을 닫는다(phase2 §5: 한 번에 하나) */
+  reportOpen?: boolean;
+  /** 진단 서랍을 열 때 결정 보고서를 닫게 알린다 */
+  onDiagOpen?(): void;
+}) {
   const { usage, budget, limits } = snapshot;
   const five = budget.fiveHour ? remainingPct(usage.last5h.total, budget.fiveHour) : null;
   const week = budget.weekly ? remainingPct(usage.last7d.total, budget.weekly) : null;
@@ -37,6 +52,10 @@ export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
     setDiagOpen(false);
     chip.current?.focus();
   };
+  // 보고서가 열리면 진단 서랍은 애니메이션 없이 바로 닫는다. 포커스는 보고서의 규칙을 따른다(§5)
+  useEffect(() => {
+    if (reportOpen) setDiagOpen(false);
+  }, [reportOpen]);
   useEffect(() => {
     if (!diagOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -57,12 +76,16 @@ export function Hud({ snapshot, live }: { snapshot: Snapshot; live: boolean }) {
       <HeartBar label="5H" remaining={five} emptyText="-- 설정 필요" />
       <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
       <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
-      <DecisionChip snapshot={snapshot} />
+      <DecisionChip snapshot={snapshot} onOpen={onOpenDecision} />
       <DiagnosticsChip
         ref={chip}
         errorsLastHour={diag.data?.errorsLastHour ?? 0}
         open={diagOpen}
-        onToggle={() => (diagOpen ? closeDiag() : setDiagOpen(true))}
+        onToggle={() => {
+          if (diagOpen) return closeDiag();
+          onDiagOpen?.();
+          setDiagOpen(true);
+        }}
       />
       <span className={`live ${live ? "on" : "off"}`}>{live ? "● LIVE" : "○ 재연결 중"}</span>
       <Elevator sessions={snapshot.sessions} />

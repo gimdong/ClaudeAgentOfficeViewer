@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Desk } from "../../web/office/Desk";
+import { OpenDecisionContext } from "../../web/report/useDecisions";
 import { NEON } from "../../web/pixel/palette";
 import { makeMember, makeSession } from "./fixtures";
 
@@ -54,22 +55,48 @@ describe("Desk", () => {
     expect(desk.getAttribute("aria-label")).toBe("developer, 작업 중");
   });
 
-  it("결정 대기(Phase 1): 누를 수 있다는 신호 없이 손든 캐릭터와 ?, 켜진 모니터, 말머리 없음", () => {
+  it("결정 대기(Phase 2): 큐의 id가 있으면 보고서를 여는 버튼이고, 손든 캐릭터와 ?, QRING, 켜진 모니터, 말머리 없음", () => {
+    const opened: Array<[string, HTMLElement | null | undefined]> = [];
+    render(
+      <OpenDecisionContext.Provider value={(id, el) => opened.push([id, el])}>
+        <Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: "2999-01-01T00:00:00.000Z" } })} />
+      </OpenDecisionContext.Provider>,
+    );
+    const desk = screen.getByTestId("desk-developer");
+    expect(desk.tagName).toBe("BUTTON");
+    expect(desk.getAttribute("type")).toBe("button");
+    expect(desk.getAttribute("role")).toBeNull();
+    expect(desk.className).toContain("desk--decision");
+    expect(desk.className).toContain("state-decision");
+    expect(desk.getAttribute("aria-label")).toBe("developer, 결정 필요. 결정 보고서 열기");
+    expect(desk.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(desk.getAttribute("title")).toBeNull();
+    expect(desk.querySelector(".hand .hop")).not.toBeNull();
+    expect(desk.querySelector(".qmark")).not.toBeNull();
+    expect(desk.querySelector(".q-ring")).not.toBeNull();
+    expect(desk.querySelector(".nametag")!.textContent).toBe("developer · 열기");
+    expect(within(desk).queryByTestId("bubble")).toBeNull();
+    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOn);
+    fireEvent.click(desk);
+    expect(opened).toEqual([["d1", desk]]);
+  });
+
+  it("id가 없는 결정 대기(큐 없이 만든 스냅샷)는 누를 수 없는 div로 둔다", () => {
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t" } })} />);
     const desk = screen.getByTestId("desk-developer");
     expect(desk.tagName).toBe("DIV");
     expect(desk.getAttribute("role")).toBe("img");
     expect(desk.getAttribute("tabindex")).toBe("0");
-    expect(desk.className).toContain("desk--decision");
-    expect(desk.className).toContain("state-decision");
     expect(desk.getAttribute("aria-label")).toBe("developer, 결정 필요");
     expect(desk.getAttribute("aria-haspopup")).toBeNull();
-    expect(desk.getAttribute("title")).toBeNull();
-    expect(desk.querySelector(".hand .hop")).not.toBeNull();
-    expect(desk.querySelector(".qmark")).not.toBeNull();
     expect(desk.querySelector(".q-ring")).toBeNull();
-    expect(within(desk).queryByTestId("bubble")).toBeNull();
-    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOn);
+    expect(desk.querySelector(".qmark")).not.toBeNull();
+  });
+
+  it("남은 시간이 60초 이하이면 급함(urgent) 표시", () => {
+    const soon = new Date(Date.now() + 30_000).toISOString();
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: soon } })} />);
+    expect(screen.getByTestId("desk-developer").className).toContain("urgent");
   });
 
   it("손든 캐릭터는 BODY_UP이다: 8번째 열 0행(손)이 피부색", () => {

@@ -54,7 +54,7 @@ describe("useSnapshot", () => {
     expect(FakeEventSource.last.url).toBe("/api/stream");
 
     act(() => FakeEventSource.last.emit("snapshot", { generatedAt: "sse" }));
-    expect(result.current).toEqual({ snapshot: { generatedAt: "sse" }, live: true });
+    expect(result.current).toEqual({ snapshot: { generatedAt: "sse" }, live: true, unauthorized: false });
 
     act(() => FakeEventSource.last.onerror?.());
     expect(result.current.live).toBe(false);
