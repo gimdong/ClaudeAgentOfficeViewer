@@ -184,8 +184,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     }
     // install.sh가 가리키는 6장이 "문제가 생겼을 때"다
     expect(html).toContain('<h2 id="s6">6. 문제가 생겼을 때</h2>');
-    // Phase 2: Task 11(설치·런처) 출력이 나오기 전까지 TODO(T11) 표시만 남긴다. 채운 뒤에는 다시 0개여야 한다
-    expect([...html.matchAll(/TODO\((\w+)\)/g)].map((m) => m[1]).filter((t) => t !== "T11")).toEqual([]);
+    expect(html).not.toMatch(/TODO\(/);
     expect(html).toContain("지움: 프로그램 파일, PATH 설정, 플러그인, logs, diagnostics");
     expect(html).toContain("지움: 프로그램 파일, PATH 설정\n남김: 플러그인, logs, diagnostics");
     expect(html).not.toContain("지움: 없음");
@@ -423,6 +422,17 @@ describe("사용설명서(docs/manual/index.html)", () => {
     it("doctor 새 두 줄(server/diag/doctor.ts)", () => {
       same("server/diag/doctor.ts", ["대시보드 열쇠", "결정 대기 시간", "claude-office를 다시 켜면 만들어집니다", "대시보드에서 답하려면 플러그인을 업데이트해 주세요"]);
       expect(prose).toContain("⚠️ 결정 대기 시간: 5초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요");
+    });
+
+    it("런처 출력이 스크립트·서버와 같다(B45 브라우저 열기 실패 두 줄, B42 이미 켜져 있음)", () => {
+      const lines = ["브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: ", "이 주소는 열쇠입니다. 남에게 보내지 마세요."];
+      for (const f of ["packaging/claude-office.sh", "packaging/claude-office.ps1"]) for (const l of lines) expect(read(f), `${f}: ${l}`).toContain(l);
+      expect(prose).toContain(`${lines[0]}http://127.0.0.1:4317/?k=…\n${lines[1]}`);
+      expect(read("server/index.ts")).toContain('"이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다."');
+      expect(prose).toContain("이 창을 닫으면 대시보드가 꺼집니다.\n이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다.");
+      // 7장: 제거가 token·state.json도 지운다
+      expect(read("packaging/claude-office.sh")).toMatch(/rm -rf [^\n]*"\$PREFIX\/token" "\$PREFIX\/state\.json"/);
+      expect(prose).toContain("접속 열쇠 파일(<code>token</code>)과 층별 예산 설정(<code>state.json</code>)");
     });
 
     it("Phase 2로 사실이 바뀐 옛 문장이 남아 있지 않다(B41)", () => {
