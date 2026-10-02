@@ -429,8 +429,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
       for (const f of ["packaging/claude-office.sh", "packaging/claude-office.ps1"]) for (const l of lines) expect(read(f), `${f}: ${l}`).toContain(l);
       expect(prose).toContain(`${lines[0]}http://127.0.0.1:4317/?k=…\n${lines[1]}`);
       // B64: 설치본의 문구(새 버전이 이미 켜져 있음)와 이전 버전이 켜져 있을 때의 문구
-      const onNew = "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 됩니다.";
-      const onOld = "이전 버전 대시보드가 켜져 있습니다. 그 창을 닫고(Ctrl+C) claude-office를 다시 실행해 주세요.";
+      const onNew = "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다.";
+      const onOld = "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.";
       for (const t of [onNew, onOld]) expect(read("server/index.ts"), t).toContain(`"${t}"`);
       expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onNew}`);
       expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onOld}`);
