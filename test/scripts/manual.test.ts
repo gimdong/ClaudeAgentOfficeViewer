@@ -534,6 +534,12 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(b).toContain("Claude Code 창에서 먼저 답해도 대시보드에 요청이 잠깐 남을 수 있고, 그때 대시보드에서 누른 답은 화면에 어떻게 보이든 적용되지 않습니다.");
     });
 
+    it("예산 보고서는 저절로 열리지 않는다: 다음 도구 때 권한 창과 손들기, 누르면 열림(#191)", () => {
+      const budget = prose.slice(prose.indexOf('<h3 id="budget">'), prose.indexOf("<h3>위쪽 막대의 숫자</h3>"));
+      expect(budget).toContain("소리는 없습니다. 그 뒤 Claude가 <strong>다음 도구를 쓰려 할 때</strong> Claude Code 창에 <code>예산(500,000토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요</code> 같은 권한 창이 뜨고, 대시보드에서는 그 층의 캐릭터가 손을 듭니다. 손 든 캐릭터(또는 위쪽 막대의 <strong>결정 대기 N</strong>)를 누르면 <code>예산에 도달했습니다. 계속할까요?</code> 보고서가 열립니다. 먼저 답한 쪽이 적용됩니다.</li>");
+      expect(budget).not.toContain("같은 권한 창이 뜨고, 대시보드에는 <code>예산에 도달했습니다");
+    });
+
     it("열쇠 값 모양(64자 hex)이 없다", () => {
       expect(html).not.toMatch(/[0-9a-f]{64}/i);
     });
