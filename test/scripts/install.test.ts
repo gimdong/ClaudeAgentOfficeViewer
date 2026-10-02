@@ -1080,6 +1080,7 @@ describe("FB-1 안내는 입력이 끊겨(EOF) 아니오가 됐을 때만(Ruling
     ["파이프로 n을 답하면(실제로 아니오) 안내 없음", "n\nn\n", false],
     ["입력이 비어 EOF면 안내 있음", "", true],
     ["첫 질문만 답하고 끊기면 안내 있음", "y\n", true],
+    ["줄바꿈 없는 y도 답으로 본다", "y\ny", false],
   ] as const)("install: %s", (_label, input, hinted) => {
     requireBuildOk();
     const rig = makeRig(); // stub claude 있음 → PATH·플러그인 두 질문

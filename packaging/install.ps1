@@ -69,9 +69,15 @@ if ((Test-Path -LiteralPath $Prefix) -and ((Get-ChildItem -Force -LiteralPath $P
 $EofNo = $false
 function Confirm-Step([string]$Message) {
   if ($Yes) { return $true }
-  Write-Host -NoNewline "$Message [y/N] "
-  $a = [Console]::In.ReadLine()
-  if ($null -eq $a) { $script:EofNo = $true; return $false }
+  # Ruling B68: 콘솔 호스트에서만 표준 입력을 직접 읽어 EOF를 구분한다. ISE·VS Code 확장 같은
+  # 호스트는 [Console]::In이 사용자 입력과 이어져 있지 않을 수 있어 B65 이전처럼 Read-Host를 쓴다(EOF 표시 없음)
+  if ($Host.Name -eq 'ConsoleHost') {
+    Write-Host -NoNewline "$Message [y/N] "
+    $a = [Console]::In.ReadLine()
+    if ($null -eq $a) { $script:EofNo = $true; return $false }
+  } else {
+    $a = Read-Host "$Message [y/N]"
+  }
   return ($a -eq "y" -or $a -eq "Y")
 }
 

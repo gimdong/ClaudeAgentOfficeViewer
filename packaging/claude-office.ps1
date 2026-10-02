@@ -72,13 +72,22 @@ if ($major -lt 24) {
 $EofNo = $false
 function Confirm-Step([string]$Message) {
   # 입력을 못 받으면(EOF 등) "아니오"로 처리한다 — 대화형이 아닌 실행에서 멈추지 않는다(리뷰어 지시).
-  Write-Host -NoNewline "$Message [y/N] "
-  try {
-    $a = [Console]::In.ReadLine()
-  } catch {
-    $a = $null
+  # Ruling B68: 콘솔 호스트에서만 표준 입력을 직접 읽어 EOF를 구분한다. 그 밖의 호스트(ISE·VS Code 확장 등)는 Read-Host
+  if ($Host.Name -eq 'ConsoleHost') {
+    Write-Host -NoNewline "$Message [y/N] "
+    try {
+      $a = [Console]::In.ReadLine()
+    } catch {
+      $a = $null
+    }
+    if ($null -eq $a) { $script:EofNo = $true; return $false }
+  } else {
+    try {
+      $a = Read-Host "$Message [y/N]"
+    } catch {
+      return $false
+    }
   }
-  if ($null -eq $a) { $script:EofNo = $true; return $false }
   return ($a -eq "y" -or $a -eq "Y")
 }
 

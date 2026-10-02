@@ -574,3 +574,29 @@ describe("문구 함수", () => {
     expect(metaLine(makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1" } }), T0)).toBe("누르면 결정 보고서가 열립니다");
   });
 });
+
+describe("자동 넘김 직후 Esc(#180)", () => {
+  it("다음 결정이 그려진 바로 그 순간에 Esc를 눌러도 포커스는 연 책상으로(포커스 이동이 늦게 실행되지 않는다)", async () => {
+    vi.useRealTimers();
+    show(snap([dv({ id: "a" }), dv({ id: "b", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() })]));
+    render(<App />);
+    const desk = screen.getByRole("button", { name: /developer, 결정 필요/ });
+    desk.focus();
+    fireEvent.click(desk);
+    fireEvent.click(screen.getByRole("button", { name: "허용" }));
+    // 3초 자동 넘김으로 다음 결정(reviewer)이 DOM에 붙는 커밋 직후에 Esc를 누른다. 늦게 도는 포커스 effect가 남아 있으면 여기서 드러난다
+    const drawn = new Promise<void>((resolve) => {
+      const mo = new MutationObserver(() => {
+        if (document.querySelector(".rp-who")?.textContent?.includes("reviewer")) {
+          mo.disconnect();
+          resolve();
+        }
+      });
+      mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+    await drawn;
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(desk);
+  }, 10_000);
+});

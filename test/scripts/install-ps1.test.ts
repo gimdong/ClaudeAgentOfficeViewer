@@ -381,6 +381,19 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     for (const f of [installPs1, launcherPs1]) expect(f).not.toMatch(/\$script:(Uninstall)?Asked\s*=/);
   });
 
+  it("B68: Confirm-Step은 콘솔 호스트에서만 ReadLine(EOF 표시), 그 밖의 호스트(ISE·VS Code 등)는 Read-Host", () => {
+    for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
+      const text = readFileSync(f, "utf8");
+      const body = text.slice(text.indexOf("function Confirm-Step"), text.indexOf("\n}\n", text.indexOf("function Confirm-Step")));
+      expect(body, f).toMatch(/if \(\$Host\.Name -eq 'ConsoleHost'\) \{/);
+      expect(body, f).toContain("[Console]::In.ReadLine()");
+      expect(body, f).toContain('Read-Host "$Message [y/N]"');
+      // Read-Host 쪽에서는 EOF 표시를 세우지 않는다(입력이 끊겼는지 알 수 없다)
+      const hostBranch = body.slice(body.indexOf("} else {"));
+      expect(hostBranch, f).not.toContain("EofNo");
+    }
+  });
+
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {
     for (const f of [INSTALL_PS1, LAUNCHER_PS1]) {
       const script = `

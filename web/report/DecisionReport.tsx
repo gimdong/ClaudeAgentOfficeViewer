@@ -153,8 +153,9 @@ export function DecisionReport({ d, sessions, announce, children }: { d: Decisio
     else if (p.secs > 10 && secs <= 10 && secs > 0) announce("10초 남았습니다");
   }, [secs, v?.id, announce]);
 
-  // 결정이 바뀌면 입력을 비우고 포커스 규칙(§4)을 다시 적용한다
-  useEffect(() => {
+  // 결정이 바뀌면 입력을 비우고 포커스 규칙(§4)을 다시 적용한다. 자동 넘김은 타이머 안의 업데이트라
+  // useEffect면 커밋 뒤로 미뤄지고, 그 틈에 Esc를 누르면 포커스가 body로 떨어진다(#180, diag 621f1c9와 같은 원인)
+  useLayoutEffect(() => {
     if (!v) return;
     setReason("");
     const mode = navFocus.current;
