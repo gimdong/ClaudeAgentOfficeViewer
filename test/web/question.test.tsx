@@ -72,7 +72,7 @@ describe("QuestionForm", () => {
     form();
     const g1 = screen.getAllByRole("group")[1];
     const cheese = within(g1).getByRole("checkbox", { name: "치즈" }) as HTMLInputElement;
-    const other = within(g1).getByRole("checkbox", { name: "기타 (직접 입력)" }) as HTMLInputElement;
+    const other = within(g1).getByRole("checkbox", { name: /^기타 \(직접 입력\)/ }) as HTMLInputElement; // 다중 선택은 이름에 안내 줄이 붙는다
     fireEvent.click(cheese);
     fireEvent.click(other);
     expect(cheese.checked).toBe(false);
@@ -87,10 +87,31 @@ describe("QuestionForm", () => {
     const g0 = screen.getAllByRole("group")[0];
     fireEvent.click(within(g0).getByRole("radio", { name: "기타 (직접 입력)" }));
     const other = within(g0).getByLabelText("기타 답") as HTMLTextAreaElement;
-    expect(other.maxLength).toBe(500);
     fireEvent.change(other, { target: { value: "가".repeat(600) } });
     expect(other.value).toHaveLength(500);
     expect(g0.textContent).toContain("500/500");
+  });
+
+  it("기타 입력은 서버와 같이 글자(그래핌)로 센다: 이모지가 섞인 500자가 들어가고 카운터가 500", () => {
+    form([QS[0]]);
+    const g0 = screen.getAllByRole("group")[0];
+    fireEvent.click(within(g0).getByRole("radio", { name: "기타 (직접 입력)" }));
+    const other = within(g0).getByLabelText("기타 답") as HTMLTextAreaElement;
+    const text = "😀".repeat(250) + "가".repeat(250);
+    fireEvent.change(other, { target: { value: text } });
+    expect(other.value).toBe(text);
+    expect(g0.textContent).toContain("500/500");
+    fireEvent.change(other, { target: { value: text + "👍🏽" } });
+    expect(other.value).toBe(text); // 501번째 글자는 들어가지 않는다
+    fireEvent.click(submit());
+    expect(sent).toEqual([[{ other: text }]]);
+  });
+
+  it("다중 선택의 기타 상자에만 \"고르면 다른 선택은 풀립니다\" 안내가 있다", () => {
+    form();
+    const [g0, g1] = screen.getAllByRole("group");
+    expect(within(g1).getByRole("checkbox", { name: /기타 \(직접 입력\)/ }).closest("label")!.textContent).toContain("고르면 다른 선택은 풀립니다");
+    expect(g0.textContent).not.toContain("고르면 다른 선택은 풀립니다");
   });
 
   it("한글 조합 중 Enter는 보내지 않는다", () => {
@@ -214,5 +235,33 @@ describe("보고서에서 질문 답하기", () => {
     expect(dialog.textContent).toContain("대시보드에서 답함");
     expect(screen.getByRole("status").textContent!.trim()).toBe("대시보드에서 답함");
     expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("다른 질문 결정으로 넘기면 고른 상태가 새로 시작한다(key로 초기화)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })));
+    const a = dv();
+    const b = { ...dv(), id: "q2", agent: "reviewer", createdAt: new Date(T0 + 1000).toISOString() };
+    const decided = (v: DecisionView) => ({ state: "decision" as const, decision: { kind: "question" as const, since: v.createdAt, id: v.id, deadline: v.deadline } });
+    state.value = {
+      ...state.value,
+      snapshot: makeSnapshot({
+        sessions: [makeSession({ id: "s1", name: "claude_project", floor: 3, members: [makeMember({ name: "developer", ...decided(a) }), makeMember({ name: "reviewer", ...decided(b) })] })],
+        decisions: [a, b],
+        decisionCount: 2,
+      }),
+    };
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /developer, 결정 필요/ }));
+    const g0 = within(screen.getByRole("dialog")).getAllByRole("group")[0];
+    fireEvent.click(within(g0).getByRole("radio", { name: "배" }));
+    expect((within(g0).getByRole("radio", { name: "배" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "다음 결정" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("3F claude_project · reviewer");
+    const radios = within(dialog).getAllByRole("radio") as HTMLInputElement[];
+    expect(radios.some((r) => r.checked)).toBe(false);
+    expect(within(dialog).getByRole("button", { name: "이 답 보내기" }).getAttribute("aria-disabled")).toBe("true");
   });
 });

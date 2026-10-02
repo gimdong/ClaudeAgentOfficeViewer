@@ -1,5 +1,6 @@
 import { useId, useState, type KeyboardEvent } from "react";
 import type { QuestionView } from "../../src/shared/types";
+import { cutGraphemes, graphemes } from "./text";
 
 export const OTHER_MAX = 500;
 type Answer = { labels: number[] } | { other: string };
@@ -89,22 +90,23 @@ export function QuestionForm({ questions, disabled, onSubmit }: { questions: Que
                 onKeyDown={q.multiSelect ? undefined : onRadioKey(qi, q.options.length)}
               />
               <span className="qf-label">기타 (직접 입력)</span>
+              {q.multiSelect && <span className="qf-desc">고르면 다른 선택은 풀립니다</span>}
             </label>
             {p.other && (
               <div className="qf-other">
                 <label htmlFor={`${name}-text`}>기타 답</label>
+                {/* maxLength(UTF-16)는 이모지를 둘로 세므로 쓰지 않고, 서버(OTHER_MAX)와 같은 글자 단위로 자르고 센다 */}
                 <textarea
                   id={`${name}-text`}
                   rows={2}
-                  maxLength={OTHER_MAX}
                   value={p.text}
                   onChange={(e) => {
-                    const text = e.target.value.slice(0, OTHER_MAX);
+                    const text = cutGraphemes(e.target.value, OTHER_MAX);
                     set(qi, (cur) => ({ ...cur, text }));
                   }}
                   onKeyDown={onOtherKey}
                 />
-                <span className="qf-count" aria-hidden="true">{`${[...p.text].length}/${OTHER_MAX}`}</span>
+                <span className="qf-count" aria-hidden="true">{`${graphemes(p.text).length}/${OTHER_MAX}`}</span>
               </div>
             )}
           </fieldset>
