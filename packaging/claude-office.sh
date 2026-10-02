@@ -60,7 +60,11 @@ command -v node >/dev/null 2>&1 || { echo "Node.js 24 이상이 필요합니다.
 major=$(node -v | sed 's/^v\([0-9]*\).*/\1/')
 [ "$major" -ge 24 ] || { echo "Node.js 24 이상이 필요합니다(지금 $(node -v))." >&2; exit 1; }
 
-ask() { printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }
+# FB-1 안내(B65): 실제로 물었는데 읽기가 EOF로 끊겨(읽은 글자 없음) "아니오"가 됐을 때만 EOF_NO=1로 세운다.
+# 파이프로 y·n을 답했으면 읽기에 성공했으므로 안내하지 않는다(전에는 "물어봤는지"만 봐서 파이프 답에도 안내가 나왔다).
+# 마지막 줄에 줄바꿈 없이 "y"만 온 경우는 read가 실패해도 글자를 읽었으므로 답으로 본다.
+EOF_NO=0
+ask() { printf '%s [y/N] ' "$1"; read -r a || { [ -n "${a:-}" ] || EOF_NO=1; }; [ "$a" = y ] || [ "$a" = Y ]; }
 
 cmd="${1:-}"
 case "$cmd" in
@@ -74,10 +78,8 @@ case "$cmd" in
     shift
     UYES=0
     for a in "$@"; do [ "$a" = "--yes" ] && UYES=1; done
-    # FB-1 fix round 1(#115) Minor: 실제로 물어본 적이 있을 때만(그리고 그게 입력 차단 때문에
-    # 아니오가 됐을 때만) 끝에 안내를 세운다 — install.sh의 ASKED와 같은 이유.
-    ASKED=0
-    ask_u() { [ "$UYES" = 1 ] && return 0; ASKED=1; ask "$1"; }
+    # FB-1(B65): 안내는 ask()가 EOF로 아니오가 됐을 때(EOF_NO=1)만 — install.sh와 같은 규칙
+    ask_u() { [ "$UYES" = 1 ] && return 0; ask "$1"; }
     # FB-1(사용자 피드백): install.sh와 같은 이유로, 표준 입력이 터미널이 아니면 두 질문 다
     # 조용히 "아니오"가 된다 — --yes 없이 그런 환경이면 끝에 안내한다(설치 쪽과 글자만 다름).
     if [ -t 0 ]; then STDIN_TTY=1; else STDIN_TTY=0; fi
@@ -160,9 +162,9 @@ case "$cmd" in
     echo "제거를 마쳤습니다."
     echo "지움: $removed"
     echo "남김: ${kept:-없음}"
-    if [ "$STDIN_TTY" = 0 ] && [ "$UYES" = 0 ] && [ "$ASKED" = 1 ]; then
+    if [ "$STDIN_TTY" = 0 ] && [ "$UYES" = 0 ] && [ "$EOF_NO" = 1 ]; then
       # FB-1: ps1과 글자까지 같은 문구(설치 쪽은 "설치하려면", 여기는 "제거하려면").
-      # ASKED=1(실제로 물어본 적 있음)일 때만 세운다(#115 Minor).
+      # 입력이 끊겨 아니오가 됐을 때(EOF_NO=1)만 세운다(B65).
       echo "입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요."
     fi
     ;;

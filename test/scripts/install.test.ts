@@ -1068,3 +1068,47 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
     }
   });
 });
+
+// ───────── B65: 파이프로 답했는데 "아니오로 처리" 안내가 나오던 버그 ─────────
+// 안내는 읽기가 EOF로 실패해서 아니오가 됐을 때만 나와야 한다(실제로 y나 n을 읽었으면 안 나온다)
+describe("FB-1 안내는 입력이 끊겨(EOF) 아니오가 됐을 때만(Ruling B65)", () => {
+  const INSTALL_HINT = "입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.";
+  const UNINSTALL_HINT = "입력을 받을 수 없어 '아니오'로 처리했습니다. 제거하려면 --yes를 붙여 다시 실행하세요.";
+
+  it.each([
+    ["파이프로 y를 답하면 안내 없음", "y\ny\n", false],
+    ["파이프로 n을 답하면(실제로 아니오) 안내 없음", "n\nn\n", false],
+    ["입력이 비어 EOF면 안내 있음", "", true],
+    ["첫 질문만 답하고 끊기면 안내 있음", "y\n", true],
+  ] as const)("install: %s", (_label, input, hinted) => {
+    requireBuildOk();
+    const rig = makeRig(); // stub claude 있음 → PATH·플러그인 두 질문
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = spawnSync("sh", [join(releaseAppDir, "install.sh"), "--prefix", prefix, "--no-open"], { env: env(rig), encoding: "utf8", input });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout.includes(INSTALL_HINT)).toBe(hinted);
+      if (input.startsWith("y")) expect(readFileSync(join(rig.home, ".zshrc"), "utf8")).toContain("# claude-office PATH");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it.each([
+    ["파이프로 y를 답하면 안내 없음", "y\ny\n", false],
+    ["파이프로 n을 답하면(실제로 아니오) 안내 없음", "n\nn\n", false],
+    ["입력이 비어 EOF면 안내 있음", "", true],
+  ] as const)("uninstall: %s", (_label, input, hinted) => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout.includes(UNINSTALL_HINT)).toBe(hinted);
+    } finally {
+      rig.cleanup();
+    }
+  });
+});

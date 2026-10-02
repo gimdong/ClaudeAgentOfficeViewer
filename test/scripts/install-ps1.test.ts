@@ -357,24 +357,28 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     for (const f of [installPs1, launcherPs1]) expect(f).toContain("[Console]::IsInputRedirected");
   });
 
-  // #115 Minor: 질문을 실제로 한 적 있을 때만 FB-1 안내를 세운다 — 안내 조건에 ASKED/$Asked가
-  // 들어가는지와, 실제로 물을 때만(=$Yes/$UYes로 건너뛰지 않을 때만) 그 값이 세워지는지 확인한다.
-  it("#115 Minor: FB-1 안내는 실제로 질문했을 때만(ASKED/$Asked) 나온다", () => {
+  // #115 Minor → B65: FB-1 안내는 실제로 물었는데 읽기가 EOF로 끊겨 아니오가 됐을 때만 세운다(파이프로 y·n을 답하면 안 나온다).
+  // 안내 조건에 EOF 표시(EOF_NO / $EofNo)가 들어가는지, 그 표시가 읽기 실패에서만 세워지는지 확인한다(sh·ps1 같은 구조).
+  it("B65: FB-1 안내는 읽기가 EOF로 끊겨 아니오가 됐을 때만(EOF_NO/$EofNo) 나온다", () => {
     const installSh = readFileSync(join(ROOT, "packaging/install.sh"), "utf8");
     const launcherSh = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8");
     const installPs1 = readFileSync(INSTALL_PS1, "utf8");
     const launcherPs1 = readFileSync(LAUNCHER_PS1, "utf8");
 
-    expect(installSh).toMatch(/STDIN_TTY"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$YES"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$ASKED"\s*=\s*1\s*\]/);
-    expect(launcherSh).toMatch(/STDIN_TTY"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$UYES"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$ASKED"\s*=\s*1\s*\]/);
-    expect(installPs1).toMatch(/\$InputBlocked\s+-and\s+-not\s+\$Yes\s+-and\s+\$Asked/);
-    expect(launcherPs1).toMatch(/\$UninstallInputBlocked\s+-and\s+-not\s+\$UYes\s+-and\s+\$UninstallAsked/);
+    expect(installSh).toMatch(/STDIN_TTY"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$YES"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$EOF_NO"\s*=\s*1\s*\]/);
+    expect(launcherSh).toMatch(/STDIN_TTY"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$UYES"\s*=\s*0\s*\]\s*&&\s*\[\s*"\$EOF_NO"\s*=\s*1\s*\]/);
+    expect(installPs1).toMatch(/\$InputBlocked\s+-and\s+-not\s+\$Yes\s+-and\s+\$EofNo/);
+    expect(launcherPs1).toMatch(/\$UninstallInputBlocked\s+-and\s+-not\s+\$UYes\s+-and\s+\$EofNo/);
 
-    // 실제로 물을 때만(=$Yes/$UYes 단락평가를 지나칠 때만) 세운다 — 묻지도 않고 세우면 안 된다.
-    expect(installSh).toMatch(/ask\(\)\s*\{\s*\[\s*"\$YES"\s*=\s*1\s*\]\s*&&\s*return 0;\s*ASKED=1;/);
-    expect(launcherSh).toMatch(/ask_u\(\)\s*\{\s*\[\s*"\$UYES"\s*=\s*1\s*\]\s*&&\s*return 0;\s*ASKED=1;/);
-    expect(installPs1).toMatch(/if\s*\(\$Yes\)\s*\{\s*return\s*\$true\s*\}\s*\$script:Asked\s*=\s*\$true/);
-    expect(launcherPs1).toMatch(/if\s*\(\$UYes\)\s*\{\s*\$true\s*\}\s*else\s*\{\s*\$script:UninstallAsked\s*=\s*\$true;/);
+    // 읽기가 실패하고 읽은 글자도 없을 때만 세운다(마지막 줄에 줄바꿈 없이 "y"만 온 경우는 답으로 본다)
+    for (const f of [installSh, launcherSh]) expect(f).toContain('read -r a || { [ -n "${a:-}" ] || EOF_NO=1; }');
+    for (const f of [installPs1, launcherPs1]) {
+      expect(f).toContain("[Console]::In.ReadLine()");
+      expect(f).toMatch(/if \(\$null -eq \$a\) \{ \$script:EofNo = \$true; return \$false \}/);
+    }
+    // 예전 "물었으면 안내" 표시는 남지 않는다
+    for (const f of [installSh, launcherSh]) expect(f).not.toMatch(/\bASKED=1/);
+    for (const f of [installPs1, launcherPs1]) expect(f).not.toMatch(/\$script:(Uninstall)?Asked\s*=/);
   });
 
   it.skipIf(!hasPwsh)("pwsh ParseFile 문법 검사를 통과한다", () => {
