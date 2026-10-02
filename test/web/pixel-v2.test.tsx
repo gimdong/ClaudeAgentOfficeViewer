@@ -38,11 +38,11 @@ describe("? 와 링 (디자인 4.3)", () => {
 });
 
 describe("아이콘 (디자인 4.5)", () => {
-  it("18개 모두 7×7이고 x, a, . 만 쓴다", () => {
-    expect(Object.keys(ICONS)).toHaveLength(18);
-    for (const rows of Object.values(ICONS)) {
+  it("20개 모두 7×7이고 x, a, . 만 쓴다(경광등 siren만 받침 b를 더 쓴다, phase2 §0)", () => {
+    expect(Object.keys(ICONS)).toHaveLength(20);
+    for (const [name, rows] of Object.entries(ICONS)) {
       expect(rows).toHaveLength(7);
-      for (const r of rows) expect(r).toMatch(/^[xa.]{7}$/);
+      for (const r of rows) expect(r).toMatch(name === "siren" ? /^[xab.]{7}$/ : /^[xa.]{7}$/);
     }
     expect(ICONS.ask[0]).toBe(".aaaa..");
   });

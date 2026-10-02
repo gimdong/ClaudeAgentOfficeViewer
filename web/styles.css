@@ -58,6 +58,8 @@
   --room-min-h: 156px;
   --slab-h: 8px;
   --report-w: 440px;
+  --alarm-wash: #3a1430; /* phase2 §0: 경광등이 켜진 층의 기둥 */
+  --pink-dim: #7a2a50;
   color-scheme: dark; /* 진단 디자인 가정 D1: 스크롤바·기본 컨트롤도 어둡게 */
 }
 * { box-sizing: border-box; }
@@ -353,6 +355,30 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .pbtn--deny { color: var(--pink); border-color: var(--pink); }
 .pbtn--deny:hover { border-color: var(--ink); }
 
+/* ───────── 예산 막대·설정 창·경광등 (디자인 phase2 §6·§7) ───────── */
+.budget { display: inline-flex; align-items: center; gap: 6px; }
+.budget-set { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; background: none; border: 2px solid var(--desk); color: var(--ink); cursor: pointer; }
+.budget-set:hover { border-color: var(--cyan); }
+.siren { width: 14px; height: 14px; overflow: visible; margin-top: -2px; }
+.siren .siren-on { animation: frameA .5s steps(1) infinite; filter: drop-shadow(0 0 4px var(--pink)); }
+.siren .siren-off { opacity: 0; animation: frameB .5s steps(1) infinite; }
+.floor--alarm .shaft { animation: alarm-wash .5s steps(1) infinite; }
+@keyframes alarm-wash { 0% { background: var(--shaft); } 50% { background: var(--alarm-wash); } }
+.dlg { width: min(420px, calc(100vw - 32px)); box-sizing: border-box; background: var(--panel); color: var(--ink); border: 4px solid var(--desk); box-shadow: 0 6px 0 var(--slab); padding: 18px 20px; font-family: var(--font-pixel); font-size: 12px; }
+.dlg::backdrop { background: rgba(11,10,23,.7); }
+.dlg-title { margin: 0 0 14px; font-family: var(--font-text); font-size: 17px; font-weight: 700; }
+.dlg-field { margin-bottom: 14px; }
+.dlg-field label { display: block; margin-bottom: 4px; font-size: 12px; }
+.dlg-input { display: flex; align-items: center; gap: 8px; }
+.dlg-input input { flex: 1; min-width: 0; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 14px; }
+.dlg-input input:focus { border-color: var(--cyan); outline: none; }
+.dlg-input input[aria-invalid="true"] { border-color: var(--red); }
+.dlg-input .unit { font-size: 12px; color: var(--muted); }
+.dlg-help { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; line-height: 1.6; color: var(--muted); }
+.dlg-err { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--red); }
+.dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dlg-buttons .pbtn { height: 36px; padding: 0 16px; font-size: 13px; }
+
 /* ───────── 401 화면 (디자인 phase2 §8) ───────── */
 .auth { max-width: 480px; margin: 15vh auto 0; padding: 0 16px; text-align: center; font-family: var(--font-text); }
 .auth-shutter { position: relative; width: 160px; height: 88px; margin: 0 auto 20px; background: repeating-linear-gradient(var(--shutter) 0 6px, var(--shutter-gap) 6px 8px); border-bottom: 6px solid var(--shutter-bar); display: grid; place-items: center; }
@@ -381,4 +407,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .frame-b { opacity: 0 !important; }
+  /* 경광등: 켜짐 프레임과 물든 기둥에 멈춘다(§7). LED는 분홍 그대로 */
+  .siren .siren-off { opacity: 0 !important; }
+  .floor--alarm .shaft { background: var(--alarm-wash); }
 }

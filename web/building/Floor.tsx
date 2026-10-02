@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
@@ -6,6 +6,8 @@ import { Icon } from "../pixel/Icon";
 import { Backdrop } from "./Backdrop";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
+import { BudgetBar, Siren } from "../budget/BudgetBar";
+import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
@@ -28,20 +30,36 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
     setCollapsed(next);
   };
 
+  const budgetCtx = useContext(BudgetSettingsContext);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsBtn = useRef<HTMLButtonElement>(null);
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    settingsBtn.current?.focus();
+  };
+
   const id = floorDomId(session.id);
   const decisions = session.members.filter((m) => m.state === "decision").length;
   const working = session.members.filter((m) => m.state === "working").length;
   const ended = session.floorStatus === "ended";
   // TS가 별도의 ended 변수만으로는 floorStatus를 좁히지 못해 조건을 다시 직접 검사한다
   const statusText = session.floorStatus === "ended" ? `종료됨 ${hhmm(session.endedAt)}`.trim() : STATUS_LABEL[session.floorStatus];
-  const led = decisions ? "decision" : session.floorStatus;
+  // 예산 도달(§7): 결정 대기가 있으면 Phase 1처럼 결정(노랑)이 먼저
+  const alarm = !!session.budget?.reached && !ended;
+  const led = decisions ? "decision" : alarm ? "budget" : session.floorStatus;
   const ctx = session.context;
 
   return (
-    <section className={`floor floor--${session.floorStatus}${collapsed ? " collapsed" : ""}`} id={id} aria-labelledby={`${id}-name`} data-testid="floor">
+    <section
+      className={`floor floor--${session.floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}`}
+      id={id}
+      aria-labelledby={`${id}-name`}
+      data-testid="floor"
+    >
       <div className="shaft">
         <span className="fl-no">{session.floor}F</span>
-        <span className={`led led--${led}`} title={decisions ? "결정 대기" : statusText} />
+        <span className={`led led--${led}`} title={decisions ? "결정 대기" : alarm ? "예산 도달" : statusText} />
+        {alarm && <Siren />}
       </div>
       <div className="floor-body">
         <header className="floor-head">
@@ -58,6 +76,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
           </h2>
           <span className={`chip chip--${session.floorStatus}`}>{statusText}</span>
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
+          {alarm && <span className="chip chip--budget">예산 도달</span>}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}
           <span className="summary">
             팀원 {session.members.length} · 작업 중 {working}
@@ -66,7 +85,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
           {!ended && (
             <span className="bars">
               <MiniBar label="CTX" remaining={ctx ? 100 - ctx.pct : null} noneText="--" hint={ctx?.estimated ? "추정" : undefined} />
-              <MiniBar label="예산" remaining={null} noneText="없음" />
+              <BudgetBar ref={settingsBtn} budget={session.budget} floorName={session.name} onOpenSettings={() => setSettingsOpen(true)} />
             </span>
           )}
           <FloorControls session={session} />
@@ -80,6 +99,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
           </div>
         </div>
       </div>
+      {settingsOpen && <BudgetDialog session={session} defaultTokens={budgetCtx.defaultTokens} announce={budgetCtx.announce} onClose={closeSettings} />}
     </section>
   );
 }

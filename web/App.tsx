@@ -7,6 +7,8 @@ import { DecisionReport } from "./report/DecisionReport";
 import { OpenDecisionContext, useDecisions } from "./report/useDecisions";
 import { useDecisionAnnouncer } from "./useDecisionAnnouncer";
 import { useSnapshot } from "./useSnapshot";
+import { BudgetSettingsContext } from "./budget/BudgetDialog";
+import { useBudgetAlarm } from "./budget/useBudgetAlarm";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
 
@@ -55,6 +57,7 @@ export function App() {
   const { text: announceText, n: announceN, announce } = useLiveRegion(useDecisionAnnouncer(snapshot));
   const { target, handlers } = useBubble();
   const d = useDecisions(snapshot);
+  useBudgetAlarm(snapshot, announce);
   if (unauthorized) return <AuthScreen />;
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
   // aria-live(role=status)는 같은 노드의 "내용이 바뀔 때" 알린다 — key로 다시 마운트하면 새 영역의
@@ -64,6 +67,7 @@ export function App() {
   // 접히지 않는 줄바꿈 없는 공백(U+00A0, NBSP)을 쓴다. 결정 보고서의 알림도 이 노드 하나로 한다(phase2 §9.5)
   const shown = announceN % 2 === 0 ? announceText : `${announceText}\u00A0`;
   return (
+    <BudgetSettingsContext.Provider value={{ defaultTokens: snapshot.defaultBudgetTokens, announce }}>
     <OpenDecisionContext.Provider value={d.open}>
       <div className="app">
         {snapshot.error && (
@@ -80,5 +84,6 @@ export function App() {
         </div>
       </div>
     </OpenDecisionContext.Provider>
+    </BudgetSettingsContext.Provider>
   );
 }

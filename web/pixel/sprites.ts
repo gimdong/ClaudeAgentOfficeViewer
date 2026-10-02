@@ -83,6 +83,9 @@ export const ICONS = {
   close: ["x.....x", ".x...x.", "..x.x..", "...x...", "..x.x..", ".x...x.", "x.....x"],
   prev: ["....x..", "...xx..", "..xxx..", ".xxxx..", "..xxx..", "...xx..", "....x.."],
   next: ["..x....", "..xx...", "..xxx..", "..xxxx.", "..xxx..", "..xx...", "..x...."],
+  // phase2 §0: 설정 톱니, 경광등(x 등, a 반사광, b 받침 — 받침은 Icon이 아니라 Siren이 색을 준다)
+  settings: ["...x...", ".xxxxx.", ".xx.xx.", "xx...xx", ".xx.xx.", ".xxxxx.", "...x..."],
+  siren: ["..xxx..", ".xaxxx.", ".xaxxx.", ".xxxxx.", ".xxxxx.", "bbbbbbb", "bbbbbbb"],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof ICONS;
