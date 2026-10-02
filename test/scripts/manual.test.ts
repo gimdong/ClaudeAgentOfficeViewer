@@ -358,7 +358,20 @@ describe("사용설명서(docs/manual/index.html)", () => {
   });
 
   it("PowerShell ISE가 아니라 PowerShell 창에서 실행하라는 안내가 3장과 6장에 있다(B67)", () => {
-    // B68로 ISE에서도 입력 창으로 묻게 되더라도 이 안내는 유지한다(입력 방식은 단언하지 않음)
+    // 설명서의 ISE 문장이 기대는 코드 사실(B68): 두 ps1의 Confirm-Step은 ConsoleHost일 때만 콘솔에서 직접 읽고,
+    // 그 밖의 호스트(ISE 등)는 Read-Host로 묻는다. 글자 그대로가 아니라 분기 구조만 본다
+    for (const f of ["packaging/install.ps1", "packaging/claude-office.ps1"]) {
+      const src = readFileSync(join(__dirname, "../..", f), "utf8");
+      const start = src.indexOf("function Confirm-Step");
+      const fn = src.slice(start, src.indexOf("\n}\n", start));
+      const m = /\n  if \(\$Host\.Name -eq 'ConsoleHost'\) \{([\s\S]*?)\n  \} else \{([\s\S]*?)\n  \}/.exec(fn);
+      expect(m, `${f}: ConsoleHost 분기`).not.toBeNull();
+      const [, consoleSide, otherSide] = m!;
+      expect(consoleSide, f).toContain("[Console]::In.ReadLine()");
+      expect(consoleSide, f).not.toContain("Read-Host");
+      expect(otherSide, f).toMatch(/Read-Host /);
+      expect(otherSide, f).not.toContain("ReadLine");
+    }
     const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
     const line = "<strong>PowerShell ISE</strong>가 아니라 PowerShell 창(또는 Windows Terminal)에서 실행해 주세요.";
     const win = prose.slice(prose.indexOf('data-os="win"'), prose.indexOf('<h3>설치 중 질문</h3>'));
