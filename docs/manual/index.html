@@ -379,9 +379,9 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li><strong>알림 허락</strong>: 예산을 처음 저장할 때 브라우저가 알림을 허용할지 묻습니다. 거절해도 층 경광등은 켜집니다.</li>
   <li><strong>막대</strong>: 층 머리에 남은 양이 %로 보입니다. 50% 이상 초록, 20% 이상 노랑, 그 아래는 분홍입니다.</li>
   <li><strong>예산에 닿으면</strong>: 그 층에 경광등이 켜지고, 브라우저 알림(<code>예산에 도달했습니다</code>)이 한 번 옵니다. 소리는 없습니다. Claude Code 창에는 <code>예산(500,000토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요</code> 같은 권한 창이 뜨고, 대시보드에는 <code>예산에 도달했습니다. 계속할까요?</code> 보고서가 열립니다. 먼저 답한 쪽이 적용됩니다.</li>
-  <li><strong>계속 / 중단</strong>: <strong>계속</strong>을 누르면 <code>계속을 누르면 이 도구 실행도 함께 허용됩니다</code>대로 하던 일을 이어 가고, <code>예산만큼 더 쓰면 다시 묻습니다</code>. <strong>중단</strong>을 누르면 Claude에게 <code>예산에 도달해 사용자가 중단했습니다</code>가 전해집니다.</li>
+  <li><strong>계속 / 중단</strong>: <strong>계속</strong>을 누르면 하던 일을 이어 갑니다. 보고서에 적힌 대로(<code>계속을 누르면 이 도구 실행도 함께 허용됩니다</code>) 기다리던 그 도구도 함께 실행되고, <code>예산만큼 더 쓰면 다시 묻습니다</code>. <strong>중단</strong>을 누르면 Claude에게 <code>예산에 도달해 사용자가 중단했습니다</code>가 전해집니다. 중단하면 그 도구만 막히고, Claude가 다음 도구를 쓰려 하면 다시 묻습니다.</li>
 </ol>
-<p>대시보드가 꺼져 있거나 답하지 않으면 Claude Code 창의 권한 창에서만 정합니다. 예산은 대화 기록으로 세므로 요금제의 실제 사용량과 다를 수 있습니다.</p>
+<p>대시보드가 꺼져 있거나 답하지 않으면 Claude Code 창의 권한 창에서만 정합니다. Claude Code 창에서 허용해도 '계속'과 같습니다(예산만큼 더 쓰면 다시 묻습니다). 예산은 대화 기록으로 세므로 요금제의 실제 사용량과 다를 수 있습니다.</p>
 <figure class="fig" data-fig="fig-budget-bar">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 246" role="img" aria-labelledby="fig-budget-bar-t fig-budget-bar-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
 <title id="fig-budget-bar-t">층 머리의 예산 막대</title>
@@ -594,7 +594,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <div class="symptom">
   <h4>④ 켤 때 "포트 4317번이 이미 사용 중입니다"가 나와요</h4>
   <pre class="out">포트 4317번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.</pre>
-  <p>포트는 프로그램이 쓰는 "통로 번호"입니다. 대시보드가 이미 다른 창에서 켜져 있을 가능성이 가장 큽니다. 브라우저에서 <code>http://127.0.0.1:4317</code>을 열어 보세요. 대시보드가 보이면 그대로 쓰면 됩니다.</p>
+  <p>포트는 프로그램이 쓰는 "통로 번호"입니다. 이 안내는 <strong>다른 프로그램이나 예전 뷰어(v1)</strong>가 4317을 쓰고 있을 때만 나옵니다. 이 대시보드가 이미 켜져 있으면 4장의 <code>이미 켜져 있습니다…</code>가, 이전 버전(베타) 대시보드가 켜져 있으면 <code>이전 버전 대시보드가 켜져 있습니다…</code>가 대신 나옵니다. 무엇이 4317을 쓰고 있는지는 doctor로 확인합니다.</p>
   <p>다른 프로그램이 4317을 쓰고 있다면 doctor에 이렇게 나옵니다.</p>
   <pre class="out">❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다</pre>
   <p>그 프로그램을 끄는 것이 가장 좋습니다. 다른 번호로 켤 수도 있지만(<code>--port</code>), 그러면 말풍선과 손들기가 보이지 않습니다.</p>
@@ -656,6 +656,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <p><strong>관리자님께</strong></p>
   <p>Claude Agent Office는 직원 PC 안에서만 동작하는 대시보드입니다. 플러그인 <code>claude-office@claude-office</code>는 Claude Code의 hook 이벤트를 같은 PC의 <code>http://127.0.0.1:4317/hooks/event</code>로 보냅니다. 외부로는 아무것도 보내지 않습니다.</p>
   <p><strong>결정을 돌려줍니다.</strong> 플러그인의 <code>PermissionRequest</code> hook은 최대 600초(10분) 동안 응답을 기다렸다가, 직원이 대시보드에서 누른 결정(권한 허용·거부, 질문 답, 예산 계속·중단)을 돌려줍니다. 직원이 누르지 않으면 아무것도 돌려주지 않고 Claude Code의 평범한 권한 창이 결정합니다. 자동 허용은 없습니다. 다른 hook의 timeout은 5초입니다.</p>
+  <p><strong>예산에 닿은 층에서는 확인을 요청합니다.</strong> 그 층의 <code>PreToolUse</code> hook에 <code>"ask"</code>(확인 요청)를 돌려줘, Claude Code가 권한 창을 띄우게 합니다. 허용하는 것이 아니라 묻게 하는 것입니다. <code>PermissionRequest</code> 외에 결정을 돌려주는 hook은 이것 하나입니다.</p>
   <p>관리자 설정(managed settings)에 다음이 필요합니다.</p>
   <table>
     <tr><th>설정</th><th>필요한 값</th><th>언제</th></tr>
@@ -676,7 +677,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   </ul>
   <p>MDM 등 다른 방식으로 정책을 배포한다면 같은 키를 그 방식으로 넣어 주세요. 플러그인 마켓플레이스는 각 직원 PC의 설치 폴더 <code>~/.claude-office/plugin</code>(Windows는 <code>%USERPROFILE%\.claude-office\plugin</code>)에 있습니다.</p>
   <p><strong>이 설정은 베타에서 검증하지 못했습니다. 관리자는 IT 시험 PC에서 먼저 확인해 주세요.</strong> 특히 <code>allowManagedHooksOnly</code>가 켜진 경우 <code>PermissionRequest</code> hook도 막혀 대시보드에서 답할 수 없으며, 이 경우는 검증하지 못했습니다.</p>
-  <p><strong>접속 열쇠 파일</strong>: <code>~/.claude-office/token</code>(Windows는 <code>%USERPROFILE%\.claude-office\token</code>). 무작위 32바이트이고, macOS·Linux에서는 본인만 읽을 수 있게(0600) 둡니다. 대시보드의 쓰기 요청은 이 열쇠의 쿠키, 같은 출처, JSON 형식을 모두 요구합니다. 열쇠 값은 로그와 진단 파일에 남지 않습니다. Windows에서 설치 폴더를 사용자 프로필(<code>%USERPROFILE%</code>) 밖으로 바꾸면, 열쇠 파일을 본인만 읽을 수 있는지 확인할 수 없습니다. 기본 위치를 권합니다.</p>
+  <p><strong>접속 열쇠 파일</strong>: <code>~/.claude-office/token</code>(Windows는 <code>%USERPROFILE%\.claude-office\token</code>). 무작위 32바이트이고, macOS·Linux에서는 본인만 읽을 수 있게(0600) 둡니다. 대시보드의 쓰기 요청은 이 열쇠의 쿠키, 같은 출처, JSON 형식을 모두 요구합니다. 열쇠 값은 로그와 진단 파일에 남지 않습니다. 같은 PC의 명령줄 도구(<code>claude-office doctor</code>, <code>claude-office diag</code>)는 이 열쇠 파일을 읽어 <code>Authorization</code> 헤더로 보냅니다. 열쇠 없이 먼저 물어 이 대시보드로 확인된 서버에만 보냅니다. Windows에서 설치 폴더를 사용자 프로필(<code>%USERPROFILE%</code>) 밖으로 바꾸면, 열쇠 파일을 본인만 읽을 수 있는지 확인할 수 없습니다. 기본 위치를 권합니다.</p>
   <p><strong>열쇠의 남은 위험</strong>: <code>claude-office</code>가 브라우저를 여는 순간, 열쇠가 붙은 주소가 잠깐 프로세스 목록에 보일 수 있습니다(같은 PC의 다른 사용자가 볼 수 있음). 또 브라우저가 열쇠가 붙은 첫 주소를 내부 방문 기록에 남길 수 있습니다. 열쇠를 새로 만들려면 대시보드를 끄고 열쇠 파일(<code>~/.claude-office/token</code>)을 지운 뒤 <code>claude-office</code>를 다시 실행합니다.</p>
   <p><strong>hook 요청은 인증하지 않습니다(판정).</strong> hook은 결정을 "요청"할 뿐이고, 허용을 만들어 내는 길은 열쇠로 인증된 대시보드 하나입니다. 같은 PC의 다른 프로그램이 가짜 hook을 보내면 화면에 가짜 요청이 뜰 수 있지만, 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다. 이것이 남은 위험입니다.</p>
 </div>

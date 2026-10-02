@@ -458,9 +458,52 @@ describe("사용설명서(docs/manual/index.html)", () => {
     });
 
     it("Phase 2로 사실이 바뀐 옛 문장이 남아 있지 않다(B41)", () => {
-      for (const old of ["설정을 읽기만 합니다", "<strong>보기만</strong> 하고 Claude의 동작을 바꾸지 않습니다", "hook에 어떤 결정도 돌려주지 않습니다", "읽기 전용 대시보드", "Claude Code 창으로 가서 답해 주세요", "브라우저 주소 창에 <code>http://127.0.0.1:4317</code>을 입력합니다"]) {
+      for (const old of ["설정을 읽기만 합니다", "<strong>보기만</strong> 하고 Claude의 동작을 바꾸지 않습니다", "hook에 어떤 결정도 돌려주지 않습니다", "읽기 전용 대시보드", "Claude Code 창으로 가서 답해 주세요", "브라우저 주소 창에 <code>http://127.0.0.1:4317</code>을 입력합니다", "대시보드가 이미 다른 창에서 켜져 있을 가능성이 가장 큽니다", "대시보드가 보이면 그대로 쓰면 됩니다", "</code>대로 하던 일을"]) {
         expect(prose, old).not.toContain(old);
       }
+    });
+
+    it("검토 fix round 1(B69): ④ 포트 안내, 예산 두 문장(B35), 부록 A의 ask와 CLI 열쇠", () => {
+      // ④ "포트 … 사용 중"은 이 대시보드(phase2)·베타가 아닐 때만 나온다(server/index.ts portInUseOutcome)
+      const idx = read("server/index.ts");
+      expect(idx).toMatch(/if \(kind === "phase2"\)[\s\S]*if \(kind === "beta"\)[\s\S]*포트 \$\{port\}번이 이미 사용 중입니다/);
+      expect(read("server/diag/doctor.ts")).toContain(': "v1";');
+      const s4 = prose.slice(prose.indexOf("④ 켤 때"), prose.indexOf("</div>", prose.indexOf("④ 켤 때")));
+      expect(s4).toContain("이 안내는 <strong>다른 프로그램이나 예전 뷰어(v1)</strong>가 4317을 쓰고 있을 때만 나옵니다.");
+      // B35
+      const budget = prose.slice(prose.indexOf('<h3 id="budget">'), prose.indexOf("<h3>위쪽 막대의 숫자</h3>"));
+      expect(budget).toContain("Claude Code 창에서 허용해도 '계속'과 같습니다(예산만큼 더 쓰면 다시 묻습니다).");
+      expect(budget).toContain("중단하면 그 도구만 막히고, Claude가 다음 도구를 쓰려 하면 다시 묻습니다.");
+      expect(budget).toContain("<strong>계속</strong>을 누르면 하던 일을 이어 갑니다. 보고서에 적힌 대로(<code>계속을 누르면 이 도구 실행도 함께 허용됩니다</code>)");
+      // 부록 A
+      const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
+      expect(read("server/decisions/protocol.ts")).toContain('hookEventName: "PreToolUse", permissionDecision: "ask"');
+      expect(a).toContain("<code>PreToolUse</code> hook에 <code>\"ask\"</code>(확인 요청)를 돌려줘");
+      expect(a).toContain("<code>PermissionRequest</code> 외에 결정을 돌려주는 hook은 이것 하나입니다.");
+      expect(idx).toMatch(/Authorization: `Bearer \$\{token\}`/);
+      expect(a).toContain("<code>Authorization</code> 헤더로 보냅니다");
+    });
+
+    it("본문의 숫자가 코드와 같다(B69: 200자, 3초, 1년, 50%·20%, 600초·5초)", () => {
+      const num = (src: string, re: RegExp) => Number(re.exec(src)?.[1]?.replace(/_/g, ""));
+      const reasonMax = num(read("server/decisions/protocol.ts"), /export const REASON_MAX = (\d+);/);
+      expect(num(read("web/report/DecisionReport.tsx"), /const REASON_MAX = (\d+);/)).toBe(reasonMax);
+      expect(prose).toContain(`짧게(${reasonMax}자까지)`);
+      const advance = num(read("web/report/DecisionReport.tsx"), /export const ADVANCE_MS = ([\d_]+);/);
+      expect(prose).toContain(`${advance / 1000}초 뒤 다음 결정으로 넘어가거나`);
+      const maxAge = num(read("server/app.ts"), /Max-Age=(\d+)/);
+      expect(maxAge).toBe(365 * 24 * 3600);
+      expect(prose).toContain("이 브라우저에 1년 동안 기억됩니다");
+      const bar = read("web/hud/HeartBar.tsx");
+      const ok = num(bar, /remaining >= (\d+)\) return "ok"/), warn = num(bar, /remaining >= (\d+)\) return "warn"/);
+      expect(prose).toContain(`${ok}% 이상 초록, ${warn}% 이상 노랑, 그 아래는 분홍입니다.`);
+      const hooks = JSON.parse(read("plugins/claude-office/hooks/hooks.json")).hooks as Record<string, Array<{ hooks: Array<{ timeout: number }> }>>;
+      const timeouts = Object.entries(hooks).map(([ev, list]) => [ev, list[0].hooks[0].timeout] as const);
+      const pr = timeouts.find(([ev]) => ev === "PermissionRequest")![1];
+      const others = new Set(timeouts.filter(([ev]) => ev !== "PermissionRequest").map(([, t]) => t));
+      expect(others.size).toBe(1);
+      expect(prose).toContain(`최대 ${pr}초(${pr / 60}분) 동안 응답을 기다렸다가`);
+      expect(prose).toContain(`다른 hook의 timeout은 ${[...others][0]}초입니다.`);
     });
 
     it("열쇠 값 모양(64자 hex)이 없다", () => {
