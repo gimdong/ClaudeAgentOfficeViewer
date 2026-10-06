@@ -163,3 +163,9 @@ export interface DoctorItem { id: string; status: DoctorStatus; title: string; d
 export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<"403" | "415" | "413" | "400", number>; last10min: number }
 /** GET /api/diagnostics. 경로는 "~"로 치환되어 온다 */
 export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView; errorsLastHour: number; logDir: string; diagDir: string }
+
+// ───────── 권한 정책(Phase 3): 서버와 화면이 같이 쓴다 ─────────
+/** 조이기만 한다(스펙 D1). "allow"는 어떤 경로로도 받지 않는다 */
+export type PolicyValue = "ask" | "deny";
+export type PolicyGroup = "bash" | "edit" | "web" | "agent" | "mcp" | "other" | "all";
+export type PolicyRules = Partial<Record<PolicyGroup, PolicyValue>>;
