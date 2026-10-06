@@ -58,6 +58,9 @@
   --room-min-h: 156px;
   --slab-h: 8px;
   --report-w: 440px;
+  /* Phase 3 권한 정책(디자인 phase3 §0) */
+  --policy: var(--violet);
+  --pick: #1c1a2c;
   --alarm-wash: #3a1430; /* phase2 §0: 경광등이 켜진 층의 기둥 */
   --pink-dim: #7a2a50;
   color-scheme: dark; /* 진단 디자인 가정 D1: 스크롤바·기본 컨트롤도 어둡게 */
@@ -394,6 +397,52 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .auth p { margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--muted); }
 .auth-cmd { display: inline-block; margin: 6px 0 0; background: var(--slab); border: 2px solid var(--desk); padding: 8px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--ink); }
 
+/* ───────── 권한 정책: 에이전트 패널 (디자인 phase3 §1·§2·§3) ───────── */
+.desk--policy:hover .nametag { text-decoration: underline; text-decoration-color: var(--policy); text-underline-offset: 2px; }
+.ap { border-left-color: var(--policy); }
+.ap-avatar--icon .icon { width: 28px; height: 28px; color: var(--policy); }
+.ap-meta { margin: 0 0 4px; }
+.ap-chip { border-color: var(--policy); color: var(--policy); }
+.ap-title { overflow-wrap: anywhere; }
+.ap-scope { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+.ap-notes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ap-notes p { margin: 0; }
+.ap-note { font-family: var(--font-text); font-size: 13px; color: var(--ink); border-left: 2px solid var(--policy); padding-left: 10px; }
+.ap-counts { font-size: 12px; color: var(--ink); }
+.ap-counts.zero { color: var(--muted); }
+.ap-sub { font-size: 10px; color: var(--muted); }
+.ap-help { margin: 6px 0 0; font-family: var(--font-text); font-size: 12px; line-height: 1.6; color: var(--muted); }
+.ap-exempt { margin-top: 4px; word-break: keep-all; }
+.ap-tpl, .ap-subs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-subs { margin-top: 8px; }
+.ap-subbtn { max-width: 100%; }
+.ap-subbtn span { overflow: hidden; text-overflow: ellipsis; }
+/* 권한 칸 한 줄: 행과 열을 모두 적는다(FB-6) */
+.pr-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px 84px 52px; grid-template-rows: auto; column-gap: 4px; align-items: center; margin: 0; padding: 4px 0; border: 0; min-width: 0; }
+.pr-row.changed { box-shadow: inset 2px 0 0 var(--yellow); padding-left: 6px; }
+.pr-row--all { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--desk); }
+.pr-name { grid-column: 1; grid-row: 1; font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+.pr-opt--default { grid-column: 2; grid-row: 1; }
+.pr-opt--ask { grid-column: 3; grid-row: 1; }
+.pr-opt--deny { grid-column: 4; grid-row: 1; }
+.pr-opt { position: relative; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px; border: 2px solid var(--desk); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.pr-opt:hover { border-color: var(--cyan); }
+.pr-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.pr-mark { flex: none; width: 6px; height: 6px; box-shadow: inset 0 0 0 1px var(--muted); }
+.pr-opt:has(input:checked) { background: var(--pick); font-weight: 700; }
+.pr-opt--default:has(input:checked) { border-color: var(--ink); color: var(--ink); }
+.pr-opt--ask:has(input:checked) { border-color: var(--yellow); color: var(--yellow); }
+.pr-opt--deny:has(input:checked) { border-color: var(--pink); color: var(--pink); }
+.pr-opt:has(input:checked) .pr-mark { background: currentColor; box-shadow: none; }
+.pr-opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* 아래 고정 저장 영역(§2.4) */
+.ap-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 2px solid var(--desk); background: var(--panel); }
+.ap-line { flex: 1; min-width: 0; font-family: var(--font-text); font-size: 13px; line-height: 1.5; }
+.ap-state.yellow { color: var(--yellow); }
+.ap-state.green { color: var(--green); }
+.ap-state.red { color: var(--red); }
+.ap .ap-save { flex: none; justify-content: center; height: 36px; padding: 0 16px; font-size: 13px; }
+
 /* ───────── 좁은 화면 (디자인 5.6) ───────── */
 @media (max-width: 720px) {
   :root { --shaft-w: 40px; }
@@ -404,6 +453,15 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
   .backdrop { display: none; }
   .diag-panel { width: 100vw; top: 8vh; border-left: 0; border-top: 4px solid var(--cyan); }
   .rp { width: 100vw; top: 8vh; border-left: 0; border-top: 4px solid var(--yellow); }
+  .ap { border-top-color: var(--policy); }
+}
+/* 권한 칸 두 줄 격자(디자인 phase3 §7.5): 이름이 1행 전체, 값 세 개가 2행 */
+@media (max-width: 480px) {
+  .pr-row { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto auto; row-gap: 4px; }
+  .pr-name { grid-column: 1 / 4; grid-row: 1; }
+  .pr-opt--default { grid-column: 1; grid-row: 2; }
+  .pr-opt--ask { grid-column: 2; grid-row: 2; }
+  .pr-opt--deny { grid-column: 3; grid-row: 2; }
 }
 
 /* ───────── 움직임 줄이기 (디자인 10장) ───────── */

@@ -9,6 +9,8 @@ import { useDecisionAnnouncer } from "./useDecisionAnnouncer";
 import { useSnapshot } from "./useSnapshot";
 import { BudgetSettingsContext } from "./budget/BudgetDialog";
 import { useBudgetAlarm } from "./budget/useBudgetAlarm";
+import { AgentPanel } from "./policy/AgentPanel";
+import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
 
@@ -57,7 +59,18 @@ export function App() {
   const { text: announceText, n: announceN, announce } = useLiveRegion(useDecisionAnnouncer(snapshot));
   const { target, handlers } = useBubble();
   const d = useDecisions(snapshot);
+  const policy = usePolicy(snapshot);
   useBudgetAlarm(snapshot, announce);
+  // 서랍은 한 번에 하나(디자인 phase3 §7.1): 새로 연 쪽이 다른 쪽을 포커스 되돌림 없이 닫는다
+  const policyOpen = policy.open !== null;
+  useEffect(() => {
+    if (d.openId !== null) policy.close(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.openId]);
+  useEffect(() => {
+    if (policyOpen) d.close(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policyOpen, policy.open]);
   if (unauthorized) return <AuthScreen />;
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
   // aria-live(role=status)는 같은 노드의 "내용이 바뀔 때" 알린다 — key로 다시 마운트하면 새 영역의
@@ -69,20 +82,32 @@ export function App() {
   return (
     <BudgetSettingsContext.Provider value={{ defaultTokens: snapshot.defaultBudgetTokens, announce }}>
     <OpenDecisionContext.Provider value={d.open}>
+    <OpenPolicyContext.Provider value={policy.openAgent}>
       <div className="app">
         {snapshot.error && (
           <div className="banner" role="alert">
             {snapshot.error}
           </div>
         )}
-        <Hud snapshot={snapshot} live={live} onOpenDecision={d.openOldest} reportOpen={d.openId !== null} onDiagOpen={() => d.close(false)} />
+        <Hud
+          snapshot={snapshot}
+          live={live}
+          onOpenDecision={d.openOldest}
+          reportOpen={d.openId !== null || policyOpen}
+          onDiagOpen={() => {
+            d.close(false);
+            policy.close(false);
+          }}
+        />
         <Building sessions={snapshot.sessions} bubble={handlers} />
         <ActivityBubble target={target} sessions={snapshot.sessions} />
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
+        <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />
         <div className="sr-only" role="status">
           {shown}
         </div>
       </div>
+    </OpenPolicyContext.Provider>
     </OpenDecisionContext.Provider>
     </BudgetSettingsContext.Provider>
   );

@@ -7,6 +7,8 @@ import { PixelSprite } from "../pixel/PixelSprite";
 import { characterRows, QMARK, QRING, spriteRects } from "../pixel/sprites";
 import { remainingSeconds } from "../report/text";
 import { OpenDecisionContext } from "../report/useDecisions";
+import { targetKeyOf } from "../policy/text";
+import { OpenPolicyContext } from "../policy/usePolicy";
 import { StatusBubble } from "./StatusBubble";
 
 interface DeskProps {
@@ -30,6 +32,7 @@ function useUrgent(deadline: string | undefined): boolean {
 
 export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
   const openDecision = useContext(OpenDecisionContext);
+  const openPolicy = useContext(OpenPolicyContext);
   const urgent = useUrgent(member.state === "decision" ? member.decision?.deadline : undefined);
   const role = roleOf(member.name);
   const colors = { h: NEON.hair, s: NEON.skin, e: NEON.eye, c: shirtColor(role, member.color), p: NEON.pants, g: NEON.glasses, t: NEON.pink };
@@ -126,7 +129,29 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
       </button>
     );
   }
-  // 누를 수 없는 책상(평소, 또는 id 없는 결정)은 v1과 같은 div로 둔다(디자인 6장 끝 표, Ruling P7)
+  if (openPolicy) {
+    // Phase 3: 결정이 없는 책상은 에이전트 패널을 여는 버튼이다(디자인 phase3 §6.1, Ruling B83)
+    const key = targetKeyOf(member);
+    return (
+      <button
+        type="button"
+        className={`${cls} desk--policy`}
+        data-testid={`desk-${member.name}`}
+        data-policy-key={key}
+        aria-haspopup="dialog"
+        aria-label={`${member.name}, ${decision ? "결정 필요" : stateLabel(member.state)}. 권한 정하기`}
+        onClick={(e) => openPolicy(key, e.currentTarget)}
+        {...handlers}
+      >
+        {svg}
+        <span className="nametag">
+          {member.name}
+          <span className="open-hint"> · 열기</span>
+        </span>
+      </button>
+    );
+  }
+  // 누를 수 없는 책상(컨텍스트 없는 렌더, 또는 id 없는 결정)은 v1과 같은 div로 둔다(디자인 6장 끝 표, Ruling P7)
   return (
     <div
       className={cls}
