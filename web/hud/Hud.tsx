@@ -8,6 +8,7 @@ import { formatTokens, remainingPct } from "../format";
 import { DecisionChip } from "./DecisionChip";
 import { Elevator } from "./Elevator";
 import { HeartBar } from "./HeartBar";
+import { PolicyChip } from "./PolicyChip";
 import { TokenCounter } from "./TokenCounter";
 
 export function Hud({
@@ -16,6 +17,10 @@ export function Hud({
   onOpenDecision,
   reportOpen = false,
   onDiagOpen,
+  policyCount = 0,
+  policyOpen = false,
+  policyUnreadable = false,
+  onPolicyToggle,
 }: {
   snapshot: Snapshot;
   live: boolean;
@@ -25,6 +30,11 @@ export function Hud({
   reportOpen?: boolean;
   /** 진단 서랍을 열 때 결정 보고서를 닫게 알린다 */
   onDiagOpen?(): void;
+  /** 권한 정책 버튼(phase3 §5): 저장된 대상 수, 목록 서랍이 열렸는지, 정책 파일을 읽지 못했는지(B101) */
+  policyCount?: number;
+  policyOpen?: boolean;
+  policyUnreadable?: boolean;
+  onPolicyToggle?(opener: HTMLElement): void;
 }) {
   const { usage, budget, limits } = snapshot;
   const five = budget.fiveHour ? remainingPct(usage.last5h.total, budget.fiveHour) : null;
@@ -77,6 +87,7 @@ export function Hud({
       <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
       <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
       <DecisionChip snapshot={snapshot} onOpen={onOpenDecision} />
+      <PolicyChip count={policyCount} open={policyOpen} unreadable={policyUnreadable} onToggle={(el) => onPolicyToggle?.(el)} />
       <DiagnosticsChip
         ref={chip}
         errorsLastHour={diag.data?.errorsLastHour ?? 0}

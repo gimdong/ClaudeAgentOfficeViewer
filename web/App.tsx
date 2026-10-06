@@ -10,6 +10,7 @@ import { useSnapshot } from "./useSnapshot";
 import { BudgetSettingsContext } from "./budget/BudgetDialog";
 import { useBudgetAlarm } from "./budget/useBudgetAlarm";
 import { AgentPanel } from "./policy/AgentPanel";
+import { PolicyList } from "./policy/PolicyList";
 import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
@@ -98,11 +99,16 @@ export function App() {
             d.close(false);
             policy.close(false);
           }}
+          policyCount={Object.keys(snapshot.policy?.targets ?? {}).length}
+          policyOpen={policy.open?.view === "list"}
+          policyUnreadable={snapshot.policy?.unreadable === true}
+          onPolicyToggle={(el) => (policy.open?.view === "list" ? policy.close() : policy.openList(el))}
         />
         <Building sessions={snapshot.sessions} bubble={handlers} />
         <ActivityBubble target={target} sessions={snapshot.sessions} />
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
         <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />
+        <PolicyList policy={policy} snapshot={snapshot} announce={announce} />
         <div className="sr-only" role="status">
           {shown}
         </div>

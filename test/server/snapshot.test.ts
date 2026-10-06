@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm, utimes } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
@@ -432,6 +432,19 @@ describe("SnapshotBuilder + 권한 정책(Phase 3 스펙 7.4)", () => {
     gate.preToolUse(pre({}))?.respond();
     const snap = await build();
     expect(snap.policy).toEqual({ targets: { lead: { bash: "deny" } }, counts: { lead: { denied: 1, asked: 0 } } });
+  });
+
+  it("(h) unreadable이면 대상이 없어도 policy: { targets: {}, counts: {}, unreadable: true }, 아니면 unreadable 키가 없다(B101)", async () => {
+    await seed();
+    await writeFile(join(dir, "policy.json"), "{oops");
+    store = new PolicyStore(join(dir, "policy.json"));
+    store.load();
+    gate = new PolicyGate(store, { now: () => clock });
+    expect((await build()).policy).toEqual({ targets: {}, counts: {}, unreadable: true });
+    store.set("lead", { bash: "deny" });
+    const snap = await build();
+    expect(snap.policy).toEqual({ targets: { lead: { bash: "deny" } }, counts: {} });
+    expect("unreadable" in snap.policy!).toBe(false);
   });
 
   it("(g) 스냅샷 JSON에 가짜 명령 원문이 없다", async () => {

@@ -31,6 +31,8 @@ async function request(method: "PUT" | "DELETE", target: string, body: object): 
 export function usePolicy(_snapshot: Snapshot | null) {
   const [open, setOpen] = useState<PolicyOpen>(null);
   const opener = useRef<HTMLElement | null>(null);
+  /** 목록의 [고치기]로 연 대상. ‹로 목록에 돌아오면 그 행의 [고치기]에 포커스를 둔다(§7.2) */
+  const listReturn = useRef<string | null>(null);
 
   const openAgent = useCallback((target: string, el?: HTMLElement | null, back?: Back) => {
     if (el !== undefined) opener.current = el;
@@ -62,7 +64,7 @@ export function usePolicy(_snapshot: Snapshot | null) {
   const save = useCallback((target: string, rules: PolicyRules) => request("PUT", target, { rules }), []);
   const remove = useCallback((target: string) => request("DELETE", target, {}), []);
 
-  return { open, openAgent, goBack, openList, close, save, remove };
+  return { open, openAgent, goBack, openList, close, save, remove, listReturn };
 }
 
 export type Policy = ReturnType<typeof usePolicy>;

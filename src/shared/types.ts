@@ -181,4 +181,5 @@ export type PolicyGroup = "bash" | "edit" | "web" | "agent" | "mcp" | "other" | 
 export type PolicyRules = Partial<Record<PolicyGroup, PolicyValue>>;
 export interface MemberPolicy { source: "own" | "others"; rules: PolicyRules; denied: number; asked: number }
 export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string }
-export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }> }
+/** unreadable: 저장해 둔 정책 파일을 읽지 못했다(Ruling B101). 이때는 대상·횟수가 없어도 싣는다 */
+export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }>; unreadable?: true }

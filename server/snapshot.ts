@@ -30,7 +30,7 @@ export interface BuilderOptions {
   /** 층 예산(Phase 2 스펙 5장). 빌드마다 사용량을 관문에 넣고 처음 본 세션을 저장소에 알린다 */
   budget?: { gate: Pick<BudgetGate, "setUsage" | "usage" | "view">; store: Pick<BudgetStore, "touch" | "defaultTokens"> };
   /** 권한 정책(Phase 3 스펙 7.4). 구성원마다 걸린 규칙·횟수·방금 막힘을 싣고, 스냅샷에 정책 전체를 싣는다(Ruling B77) */
-  policy?: { store: Pick<PolicyStore, "resolve" | "all">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -169,7 +169,9 @@ export class SnapshotBuilder {
     const p = this.opts.policy;
     const targets = p?.store.all().targets ?? {};
     const counts = p?.gate.counts() ?? {};
-    const policy = Object.keys(targets).length || Object.keys(counts).length ? { policy: { targets, counts } } : {};
+    // 읽지 못한 정책 파일은 대상이 없어도 알린다(Ruling B101). 이름·내용 없이 표시 하나
+    const unreadable = p?.store.unreadable() ?? false;
+    const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
     return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy };
   }

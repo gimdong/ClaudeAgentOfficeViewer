@@ -82,6 +82,8 @@ export const ICONS = {
   fold: [".......", "xxxxxxx", ".xxxxx.", "..xxx..", "...x...", ".......", "......."],
   close: ["x.....x", ".x...x.", "..x.x..", "...x...", "..x.x..", ".x...x.", "x.....x"],
   prev: ["....x..", "...xx..", "..xxx..", ".xxxx..", "..xxx..", "...xx..", "....x.."],
+  /** 자물쇠: x 몸통·고리, a 열쇠 구멍(디자인 phase3 §0) */
+  lock: ["..xxx..", ".x...x.", ".x...x.", "xxxxxxx", "xxxaxxx", "xxxaxxx", "xxxxxxx"],
   next: ["..x....", "..xx...", "..xxx..", "..xxxx.", "..xxx..", "..xx...", "..x...."],
   // phase2 §0: 설정 톱니, 경광등(x 등, a 반사광, b 받침 — 받침은 Icon이 아니라 Siren이 색을 준다)
   settings: ["...x...", ".xxxxx.", ".xx.xx.", "xx...xx", ".xx.xx.", ".xxxxx.", "...x..."],

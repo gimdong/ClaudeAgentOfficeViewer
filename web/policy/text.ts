@@ -89,3 +89,50 @@ export function summaryOf(rules: PolicyRules): string {
 
 export const countsLine = (denied: number, asked: number): string =>
   `켠 뒤로 금지 ${denied.toLocaleString("en-US")}번 · 질문 ${asked.toLocaleString("en-US")}번`;
+
+/** 정책 목록 서랍·HUD 버튼 문구(디자인 phase3 §8.4·§8.5·§8.7, B104로 확정) */
+export const LIST_TEXT = {
+  title: "권한 정책",
+  limitLine: "대시보드가 켜져 있을 때만 적용됩니다.",
+  unreadHead: "정책 파일을 읽지 못함",
+  unreadBody: "저장해 둔 정책 파일을 읽지 못했습니다. 지금은 정책이 적용되지 않습니다. 정책을 다시 정해 저장하면 예전 파일은 policy.json.broken으로 보관됩니다.",
+  notNow: "지금 없음",
+  edit: "고치기",
+  del: "지우기",
+  empty: "아직 이름으로 정한 정책이 없습니다. 캐릭터를 누르거나 [대상 추가]로 만들 수 있습니다.",
+  confirmNamed: '이 정책을 지울까요? Claude가 다음에 도구를 쓸 때부터 "그 밖의 모든"을 따릅니다.',
+  confirmFixed: "이 정책을 지울까요? Claude가 다음에 도구를 쓸 때부터 원래 규칙(기본)대로 합니다.",
+  cancel: "취소",
+  deleting: "지우는 중…",
+  deleteFailed: "지우지 못했습니다. 서버 연결을 확인하고 다시 시도해 주세요.",
+  add: "대상 추가",
+  kind: "종류",
+  kindAgent: "팀원",
+  kindSub: "서브에이전트",
+  nameAgent: "팀원 이름",
+  nameSub: "서브에이전트 종류",
+  phAgent: "예: reviewer",
+  phSub: "예: Explore",
+  helpAgent: "팀원 이름은 화면의 이름표와 대소문자까지 같게 적어 주세요.",
+  helpSub: "서브에이전트 종류는 Explore처럼 대소문자까지 같게 적어 주세요.",
+  open: "열기",
+  errEmpty: "이름을 입력해 주세요.",
+  errLong: "이름은 100자까지 쓸 수 있습니다.",
+  errControl: "이름에 줄바꿈이나 특수 제어 문자는 넣을 수 없습니다.",
+  errReserved: "이 이름은 쓸 수 없습니다. 다른 이름을 입력해 주세요.",
+} as const;
+
+/** [대상 추가]의 이름 검사. 서버 isTargetKey와 같은 규칙이고(서버가 최종 검사), 앞뒤 빈칸은 잘라서 받는다 */
+export function parseNewTarget(kind: "agent" | "sub", name: string): { key: string } | { error: string } {
+  const n = name.trim();
+  if (!n) return { error: LIST_TEXT.errEmpty };
+  if (/\p{Cc}/u.test(n)) return { error: LIST_TEXT.errControl };
+  if (RESERVED.has(n)) return { error: LIST_TEXT.errReserved };
+  if (graphemes(n).length > MAX_NAME) return { error: LIST_TEXT.errLong };
+  return { key: `${kind}:${n}` };
+}
+
+/** HUD 버튼 접근 이름(§8.7) */
+export function chipLabel(count: number, unreadable: boolean): string {
+  return ["권한 정책 열기", ...(count > 0 ? [`대상 ${count}개`] : []), ...(unreadable ? ["정책 파일을 읽지 못함"] : [])].join(", ");
+}

@@ -84,4 +84,15 @@ describe("Hud", () => {
     expect(meter.getAttribute("aria-valuenow")).toBe("3");
     expect(within(meter.parentElement!).getByText("SPEND")).toBeTruthy();
   });
+
+  it("권한 정책 버튼(phase3 §5): 결정 칩과 진단 칩 사이, 개수·경고는 props를 따른다", () => {
+    const opened: HTMLElement[] = [];
+    render(<Hud snapshot={makeSnapshot()} live policyCount={3} policyUnreadable onPolicyToggle={(el) => opened.push(el)} />);
+    const chip = screen.getByRole("button", { name: "권한 정책 열기, 대상 3개, 정책 파일을 읽지 못함" });
+    expect(chip.nextElementSibling?.className).toContain("diag-chip");
+    expect(chip.querySelector(".pc-warn")).not.toBeNull();
+    chip.click();
+    expect(opened).toEqual([chip]);
+  });
 });
+
