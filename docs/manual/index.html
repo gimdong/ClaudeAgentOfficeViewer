@@ -276,6 +276,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <div class="box caution">터미널 창을 닫으면 대시보드도 꺼집니다. 대시보드를 보는 동안에는 창을 열어 두세요(작게 줄여 두어도 됩니다).</div>
 <h3>끄기</h3>
 <p>대시보드를 켠 터미널 창에서 <kbd>Ctrl</kbd>+<kbd>C</kbd>를 누르거나, 그 창을 닫습니다. Claude Code는 계속 쓸 수 있습니다.</p>
+<p id="off-hook-error">대시보드를 끈 채 Claude Code를 쓰면 Claude Code 창에 <code>PreToolUse:Bash hook error</code>와 <code>connect ECONNREFUSED 127.0.0.1:4317</code> 같은 표시가 보일 수 있습니다. 대시보드에 닿지 못했다는 뜻일 뿐이고, Claude Code는 그대로 일합니다. 이때는 <a href="#policy">권한 정책</a>도 적용되지 않습니다.</p>
 
 <!-- ───────────────────────────── 5 ───────────────────────────── -->
 <h2 id="s5">5. 화면 보는 법</h2>
@@ -475,7 +476,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li>정책이 걸린 캐릭터의 책상에는 자물쇠가 붙습니다.</li>
   <li>패널에 <code>켠 뒤로 금지 3번 · 질문 5번</code>처럼 정책이 막거나 물은 횟수가 보입니다. 대시보드를 다시 켜면 0부터 셉니다.</li>
   <li>정책이 막으면 30초 동안 자물쇠가 분홍색으로 바뀌고 자물쇠 옆에 <strong>느낌표</strong>가 붙습니다. 그동안 말풍선(캐릭터에 마우스를 올리면 보임)은 지금 하는 일 대신 <code>정책으로 막힘: 명령 실행</code>처럼 무엇이 막혔는지 보여 줍니다. 손은 들지 않습니다(여러분이 답할 것이 없습니다).</li>
-  <li>막힌 에이전트는 이런 문장을 받습니다. Claude Code가 앞에 <code>PreToolUse:Bash hook error: </code> 같은 말을 붙여 보여 줄 수 있지만, 고장이 아니라 정책이 막은 것입니다.
+  <li>막힌 에이전트는 이런 문장을 받습니다. Claude Code가 앞에 <code>PreToolUse:Bash hook error: </code> 같은 말을 붙여 보여 줄 수 있지만, 고장이 아니라 정책이 막은 것입니다. 다만 그 뒤에 <code>connect ECONNREFUSED</code>가 붙어 있으면 정책이 막은 것이 아니라 대시보드가 꺼져 있는 것이고, 도구는 그대로 실행됩니다(4장 "끄기").
     <pre class="out">대시보드 권한 정책: reviewer에게는 "명령 실행 금지"가 정해져 있어 이 도구를 쓸 수 없습니다. 꼭 필요하면 사용자에게 알려 주세요.</pre>
     팀원은 보통 리드에게 알리고, 리드가 여러분에게 전합니다.</li>
 </ul>
@@ -627,7 +628,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <h3 id="policy-not-applied">정책을 정했는데 안 막혀요</h3>
 <p>위에서부터 하나씩 확인해 주세요.</p>
 <ol class="steps">
-  <li><strong>대시보드가 켜져 있나요?</strong> 정책은 대시보드가 켜져 있을 때만 적용됩니다. 위쪽 막대가 <strong>● LIVE</strong>인지 보세요. 대시보드를 끈 사이에 한 일은 막지 못합니다.</li>
+  <li><strong>대시보드가 켜져 있나요?</strong> 정책은 대시보드가 켜져 있을 때만 적용됩니다. 위쪽 막대가 <strong>● LIVE</strong>인지 보세요. Claude Code 창에 <code>connect ECONNREFUSED 127.0.0.1:4317</code>이 보였다면 그때 대시보드가 꺼져 있었던 것입니다. 대시보드를 끈 사이에 한 일은 막지 못합니다.</li>
   <li><strong>[저장]을 눌렀나요?</strong> 패널에서 고르기만 하고 닫으면 적용되지 않습니다. 정책 목록에 그 이름과 요약이 보이면 저장된 것입니다. 저장할 때 이미 실행 중이던 도구는 막지 않습니다. 다음 도구부터입니다.</li>
   <li><strong>정책 목록이 통째로 비었나요?</strong> 정해 둔 정책 파일이 깨졌거나 읽을 권한이 없으면(파일을 손으로 고친 경우 등) 대시보드는 정책이 없는 상태로 켜집니다. 이때는 정책 목록 맨 위에 정책 파일을 읽지 못했다는 경고가 보이고, 위쪽 막대의 <strong>권한 정책</strong> 단추에도 표시가 붙습니다. 환경 점검(doctor)에서는 이렇게 나옵니다.
     <pre class="out">⚠️ 프로그램 파일: 권한 정책 파일을 읽지 못함

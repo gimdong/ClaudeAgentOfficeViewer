@@ -701,6 +701,16 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(s5).toContain(`<code>${why}</code>`);
     });
 
+    it("대시보드가 꺼져 있을 때의 hook 오류 표시(Task 12 P7: 막히지 않고 ECONNREFUSED가 보임)", () => {
+      const off = "<code>connect ECONNREFUSED 127.0.0.1:4317</code>";
+      const s4 = between('<h2 id="s4">', '<h2 id="s5">');
+      expect(s4).toContain(`<code>PreToolUse:Bash hook error</code>와 ${off} 같은 표시가 보일 수 있습니다. 대시보드에 닿지 못했다는 뜻일 뿐이고, Claude Code는 그대로 일합니다.`);
+      expect(s5).toContain("뒤에 <code>connect ECONNREFUSED</code>가 붙어 있으면 정책이 막은 것이 아니라 대시보드가 꺼져 있는 것이고, 도구는 그대로 실행됩니다");
+      expect(between('<h3 id="policy-not-applied">', "<h3")).toContain(`Claude Code 창에 ${off}이 보였다면 그때 대시보드가 꺼져 있었던 것입니다.`);
+      // 플러그인 hook 주소의 포트가 4317이다
+      expect(read("plugins/claude-office/hooks/hooks.json")).toContain("http://127.0.0.1:4317/hooks/event");
+    });
+
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
       for (const old of ["외에 결정을 돌려주는 hook은 이것 하나입니다.", "여러분이 대시보드에서 직접 누른 답(허용·거부 등)만 Claude Code로 돌려보냅니다."]) expect(prose, old).not.toContain(old);
     });
