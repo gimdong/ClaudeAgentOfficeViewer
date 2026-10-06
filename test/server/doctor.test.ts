@@ -309,7 +309,7 @@ describe("runDoctor", () => {
 });
 
 describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () => {
-  const NOTE = " 권한 정책이 적용되지 않고 있습니다.";
+  const NOTE = "권한 정책이 적용되지 않고 있습니다. ";
   const FAKE_NAME = "FAKE-NAME-rev";
   const withPolicy = () => writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { [`agent:${FAKE_NAME}`]: { bash: "deny" } } }));
   const pluginOn = () => h.write(".claude/settings.json", { enabledPlugins: { "claude-office@claude-office": true } });
@@ -320,11 +320,12 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
 
   beforeEach(() => mkdir(h.path("prefix"), { recursive: true }));
 
-  it("정책이 있고 받은 이벤트가 0건이면 hooks 안내 끝에 문장이 붙는다", async () => {
+  it("정책이 있고 받은 이벤트가 0건이면 hooks 안내 앞에 문장이 붙는다(B98, 부록 A 안내는 끝 그대로)", async () => {
     await withPolicy();
     await pluginOn();
     const items = await runDoctor(deps({ hooks: zero }));
-    expect(pick(items, "hooks").fix.endsWith(NOTE)).toBe(true);
+    const fix = pick(items, "hooks").fix;
+    expect(fix).toBe(`${NOTE}Claude Code 세션에서 아무 작업이나 해 보세요. 그래도 0건이면 플러그인과 회사 관리자 설정 항목을 확인해 주세요. 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.`);
     expect(noted(items)).toEqual(["hooks"]);
   });
 
@@ -333,20 +334,20 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     await pluginOn();
     const items = await runDoctor(deps({ hooks: off, probePort: async () => "free" }));
     expect(pick(items, "hooks")).toMatchObject({ detail: "서버가 꺼져 있어 확인하지 못했습니다" });
-    expect(pick(items, "hooks").fix.endsWith(NOTE)).toBe(true);
+    expect(pick(items, "hooks").fix).toBe(`${NOTE}대시보드를 켠 뒤 다시 확인해 주세요.`);
     expect(noted(items)).toEqual(["hooks"]);
   });
 
-  it("정책이 있고 플러그인이 꺼져 있으면 붙는다(hooks가 ok면 plugin 안내에)", async () => {
+  it("플러그인이 warn이어도 이벤트가 들어오면 붙지 않는다(B98: 다른 곳에서 켠 플러그인)", async () => {
     await withPolicy();
-    const okHooks = await runDoctor(deps());
-    expect(pick(okHooks, "hooks").status).toBe("ok");
-    expect(pick(okHooks, "plugin").fix.endsWith(NOTE)).toBe(true);
-    expect(noted(okHooks)).toEqual(["plugin"]);
-    // hooks 안내가 출력되면(warn) 거기에 한 번만
-    const rejected = await runDoctor(deps({ hooks: async () => stats({ total: 3, last10min: 3, rejected: { "403": 1, "415": 0, "413": 0, "400": 0 } }) }));
-    expect(pick(rejected, "hooks").fix.endsWith(NOTE)).toBe(true);
-    expect(noted(rejected)).toEqual(["hooks"]);
+    const items = await runDoctor(deps());
+    expect(pick(items, "plugin").status).toBe("warn");
+    expect(pick(items, "hooks").status).toBe("ok");
+    expect(noted(items)).toEqual([]);
+    // 거부된 요청이 있어도(이벤트는 닿음) 붙지 않는다
+    expect(noted(await runDoctor(deps({ hooks: async () => stats({ total: 3, last10min: 3, rejected: { "403": 1, "415": 0, "413": 0, "400": 0 } }) })))).toEqual([]);
+    // 정말 꺼져 이벤트가 0건이면 hooks 안내에 붙는다
+    expect(noted(await runDoctor(deps({ hooks: zero })))).toEqual(["hooks"]);
   });
 
   it("정책이 없으면 어떤 경우에도 붙지 않는다", async () => {
@@ -376,7 +377,7 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     const dir = h.path("logs-doctor");
     setLogger(new Logger({ dir, now: () => NOW }));
     try {
-      for (let i = 0; i < 3; i++) await runDoctor(deps());
+      for (let i = 0; i < 3; i++) await runDoctor(deps({ hooks: zero }));
       const lines = readdirSync(dir).flatMap((f) => readFileSync(join(dir, f), "utf8").split("\n").filter(Boolean));
       expect(lines.filter((l) => JSON.parse(l).src === "policy")).toHaveLength(1);
     } finally {
