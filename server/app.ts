@@ -359,7 +359,7 @@ export function createApp(
         if (!target || !rules) return void res.status(400).json({});
         const r = policy.set(target, rules);
         // 상한 초과는 화면이 상한 안내를 보이게 이유를 싣는다(Ruling B95). 그 밖의 400에는 싣지 않는다
-        if (!r.ok) return void res.status(400).json({ reason: r.reason });
+        if (!r.ok) return void res.status(400).json(r.reason === "limit" ? { reason: "limit" } : {});
         changed();
         res.status(200).json({ saved: r.saved });
       },

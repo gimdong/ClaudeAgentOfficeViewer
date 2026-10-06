@@ -189,6 +189,58 @@ describe("PolicyStore", () => {
     expect(JSON.parse(policyWarns()[0]).data).toEqual({ ignored: 3 });
   });
 
+  it("대상이 200개를 넘는 파일에서도 lead와 others는 버리지 않는다(B96)", () => {
+    const targets: Record<string, object> = {};
+    for (let i = 0; i < 205; i++) targets[`agent:a${i}`] = { bash: "deny" };
+    targets.others = { all: "deny" };
+    targets.lead = { bash: "ask" };
+    writeFileSync(fileOf(), JSON.stringify({ version: 1, targets }));
+    const s = store();
+    expect({ ...s.rulesOf("others") }).toEqual({ all: "deny" });
+    expect({ ...s.rulesOf("lead") }).toEqual({ bash: "ask" });
+    expect(s.summary().targets).toBe(MAX_TARGETS);
+    expect(s.rulesOf("agent:a197")).toBeDefined();
+    expect(s.rulesOf("agent:a198")).toBeUndefined();
+    expect(JSON.parse(policyWarns()[0]).data).toEqual({ ignored: 7 });
+  });
+
+  it("읽을 수 없는 파일(권한 없음)도 깨진 파일로 보고 덮어쓰기 전에 .broken으로 옮긴다(B96)", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const text = '{"version":1,"targets":{"others":{"all":"deny"}}}';
+    writeFileSync(fileOf(), text);
+    chmodSync(fileOf(), 0o000);
+    const s = store();
+    expect(s.all().targets).toEqual({});
+    expect(policyWarns()).toHaveLength(1);
+    s.set("lead", { bash: "ask" });
+    const broken = `${fileOf()}.broken`;
+    expect(existsSync(broken)).toBe(true);
+    chmodSync(broken, 0o600);
+    expect(readFileSync(broken, "utf8")).toBe(text);
+    expect(read()).toEqual({ version: 1, targets: { lead: { bash: "ask" } } });
+  });
+
+  it("파일이 없을 때(ENOENT)는 깨진 파일이 아니다", () => {
+    const s = store();
+    s.set("lead", { bash: "ask" });
+    expect(existsSync(`${fileOf()}.broken`)).toBe(false);
+  });
+
+  it("set은 스스로 검사한다(B96)", () => {
+    const s = store();
+    s.set("others", { web: "ask" });
+    const before = readFileSync(fileOf(), "utf8");
+    expect(s.set("lead", { bash: "allow" } as never)).toEqual({ ok: false, reason: "invalid" });
+    expect(s.set("lead", { shell: "deny" } as never)).toEqual({ ok: false, reason: "invalid" });
+    expect(s.set("lead", { bash: "deny", edit: "allow" } as never)).toEqual({ ok: false, reason: "invalid" });
+    expect(s.set("__proto__", { bash: "deny" })).toEqual({ ok: false, reason: "invalid" });
+    expect(s.set("agent:", { bash: "deny" })).toEqual({ ok: false, reason: "invalid" });
+    expect(s.rulesOf("lead")).toBeUndefined();
+    expect(Object.keys(s.all().targets)).toEqual(["others"]);
+    expect(readFileSync(fileOf(), "utf8")).toBe(before);
+    expect(before.includes("allow")).toBe(false);
+  });
+
   it("빈 rules로 set하면 그 대상을 지운다, remove는 없는 대상에도 ok", () => {
     const s = store();
     s.set("agent:x", { bash: "deny" });

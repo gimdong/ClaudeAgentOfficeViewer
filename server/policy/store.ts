@@ -12,7 +12,8 @@ export const MAX_NAME = 100;
 
 export type TargetKind = "lead" | "agent" | "sub" | "others";
 export interface PolicyFile { version: 1; targets: Record<string, PolicyRules> }
-export type SetResult = { ok: true; saved: boolean } | { ok: false; reason: "limit" };
+/** invalid: 키나 규칙이 틀림(Ruling B96 — API도 같은 검사를 하지만 저장소가 마지막 문이다) */
+export type SetResult = { ok: true; saved: boolean } | { ok: false; reason: "limit" | "invalid" };
 
 const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -70,7 +71,10 @@ export class PolicyStore {
     try {
       text = readFileSync(this.file, "utf8");
     } catch (e) {
-      if ((e as { code?: string }).code !== "ENOENT") getLogger().warn("policy", "policy unreadable, starting empty", { error: errInfo(e) });
+      if ((e as { code?: string }).code === "ENOENT") return;
+      // 권한 없음(EACCES) 등: 내용을 모르므로 깨진 파일과 같이 다음 저장 전에 .broken으로 옮긴다(Ruling B96)
+      this.broken = true;
+      getLogger().warn("policy", "policy unreadable, starting empty", { error: errInfo(e) });
       return;
     }
     let raw: unknown;
@@ -83,7 +87,10 @@ export class PolicyStore {
       return;
     }
     let ignored = 0;
-    for (const [key, v] of Object.entries(raw.targets as Record<string, unknown>)) {
+    // 상한을 넘는 파일에서도 lead·others는 먼저 담는다 — 뒤에 적혔다고 버리면 others의 deny가 사라진다(Ruling B96)
+    const entries = Object.entries(raw.targets as Record<string, unknown>);
+    const fixed = (k: string) => k === "lead" || k === "others";
+    for (const [key, v] of [...entries.filter(([k]) => fixed(k)), ...entries.filter(([k]) => !fixed(k))]) {
       if (!isTargetKey(key) || !isPlain(v) || this.targets.size >= MAX_TARGETS) {
         ignored++;
         continue;
@@ -114,9 +121,10 @@ export class PolicyStore {
     return { version: 1, targets };
   }
 
-  /** 키·규칙 검증은 부르는 쪽(API)이 isTargetKey·parseRules로 한다. 빈 rules면 지운다 */
+  /** 키나 규칙이 틀리면 invalid(메모리·파일 그대로). 빈 rules면 지운다 */
   set(key: string, rules: PolicyRules): SetResult {
-    const copy = Object.assign(Object.create(null) as PolicyRules, rules);
+    const copy = isTargetKey(key) ? parseRules(rules) : null;
+    if (!copy) return { ok: false, reason: "invalid" };
     if (ruleCount(copy) === 0) return this.remove(key);
     if (!this.targets.has(key) && this.targets.size >= MAX_TARGETS) return { ok: false, reason: "limit" };
     this.targets.set(key, copy);
