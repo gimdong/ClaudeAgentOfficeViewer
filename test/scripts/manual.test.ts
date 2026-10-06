@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
+import { EXEMPT_TOOLS, GROUP_KEYS, GROUPS, VALUE_LABELS, ruleLabel } from "../../server/policy/tools";
+import { policyAskReason, policyDenyReason } from "../../server/decisions/protocol";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -492,7 +494,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
       const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
       expect(read("server/decisions/protocol.ts")).toContain('hookEventName: "PreToolUse", permissionDecision: "ask"');
       expect(a).toContain("<code>PreToolUse</code> hook에 <code>\"ask\"</code>(확인 요청)를 돌려줘");
-      expect(a).toContain("<code>PermissionRequest</code> 외에 결정을 돌려주는 hook은 이것 하나입니다.");
+      // B91(사전 승인): 정책의 deny·ask도 PreToolUse로 돌려주므로 "이것 하나"는 틀린 말이 됐다
+      expect(a).toContain("<code>PermissionRequest</code> 외에 결정을 돌려주는 hook은 이 <code>PreToolUse</code> 하나이고, 여기서 돌려주는 것은 이 예산 확인과 아래 에이전트별 권한 정책(<code>\"deny\"</code>·<code>\"ask\"</code>)뿐입니다.");
       expect(idx).toMatch(/Authorization: `Bearer \$\{token\}`/);
       expect(a).toContain("<code>Authorization</code> 헤더로 보냅니다");
       // #182 보충: doctor의 "ours"에는 인증 없는 베타 서버도 들어간다. 4317을 먼저 차지한 프로그램은 흉내 낼 수 있다
@@ -553,6 +556,92 @@ describe("사용설명서(docs/manual/index.html)", () => {
 
     it("열쇠 값 모양(64자 hex)이 없다", () => {
       expect(html).not.toMatch(/[0-9a-f]{64}/i);
+    });
+  });
+
+  describe("Phase 3 권한 정책(서버 문구와 대조, B91·B94·B98)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    // 절이 없으면 빈 문자열(아래 단언이 실패한다). describe 본문에서 던지면 파일 전체가 수집되지 않으므로 단언하지 않는다
+    const between = (from: string, to: string) => {
+      const at = prose.indexOf(from);
+      return at < 0 ? "" : prose.slice(at, prose.indexOf(to, at + from.length));
+    };
+    const s5 = between('<h3 id="policy">', "<h3>위쪽 막대의 숫자</h3>");
+    const s8 = between('<h2 id="s8">', '<h2 id="s9">');
+    const off = /const POLICY_OFF = "([^"]+)";/.exec(read("server/diag/doctor.ts"))![1];
+    // 스펙 8장 한계의 대표 문장(5는 고객이 할 일이 없어 부록 A에만, B91)
+    const LIMITS = {
+      1: "대시보드가 켜져 있을 때만 적용됩니다.",
+      2: "같은 이름이면 다른 프로젝트·다른 세션에서도 같은 정책입니다.",
+      3: "도구 이름으로만 가릅니다.",
+      4: "이미 실행 중인 도구에는 적용되지 않습니다.",
+      5: "가짜 hook은 정책을 느슨하게 만들 수 없습니다",
+      6: "플러그인이 설치되지 않았거나 회사 관리자 설정이 hook을 막으면 적용되지 않습니다.",
+    };
+
+    it("5장 첫 문단이 한계 1(켜져 있을 때만, 보안 장치가 아니라 실수 방지 장치)이다", () => {
+      const first = s5.slice(0, s5.indexOf("</div>"));
+      for (const t of [LIMITS[1], "<strong>보안 장치가 아니라</strong>", "<strong>실수 방지 장치</strong>"]) expect(first, t).toContain(t);
+    });
+
+    it("한계 1·2·3·4·6은 5장에, 여섯 가지 전부는 부록 A에 있다(B91)", () => {
+      const list = (sec: string) => sec.slice(sec.indexOf('<ul class="policy-limits">'), sec.indexOf("</ul>", sec.indexOf('<ul class="policy-limits">')));
+      for (const n of [1, 2, 3, 4, 6] as const) expect(list(s5), `5장 한계 ${n}`).toContain(LIMITS[n]);
+      expect(s5).not.toContain(LIMITS[5]);
+      for (const n of [1, 2, 3, 4, 5, 6] as const) expect(list(s8), `부록 A 한계 ${n}`).toContain(LIMITS[n]);
+    });
+
+    it("묶음 일곱 개와 값 이름이 server/policy/tools.ts와 같다", () => {
+      const table = s5.slice(s5.indexOf('<table class="policy-groups">'), s5.indexOf("</table>"));
+      expect([...table.matchAll(/<tr><td>([^<]+)<\/td>/g)].map((m) => m[1])).toEqual(GROUP_KEYS.map((k) => GROUPS[k].label));
+      for (const v of ["기본", VALUE_LABELS.ask, VALUE_LABELS.deny]) expect(s5, v).toContain(`<code>${v}</code>`);
+      // 템플릿 요약과 목록 요약이 ruleLabel 글자와 같다
+      expect(s5).toContain(`<code>${ruleLabel("bash", "deny")} · ${ruleLabel("edit", "deny")}</code>`);
+    });
+
+    it("Claude가 받는 이유 문구가 protocol.ts와 같다(B92) — Claude Code가 붙이는 앞말(B94)도 적는다", () => {
+      expect(s5).toContain(`<pre class="out">${policyDenyReason("reviewer", ruleLabel("bash", "deny"))}</pre>`);
+      expect(s5).toContain(`<pre class="out">${policyAskReason("리드", ruleLabel("bash", "ask"))}</pre>`);
+      expect(s5).toContain("<code>PreToolUse:Bash hook error: </code>");
+      expect(s5).toContain("<code>from the reviewer agent</code>");
+    });
+
+    it("빼는 도구 여덟 개가 EXEMPT_TOOLS와 같고, TaskStop·ToolSearch는 그 밖의 도구다(B94)", () => {
+      expect(EXEMPT_TOOLS.size).toBe(8);
+      expect(s8).toContain(`: ${[...EXEMPT_TOOLS].map((t) => `<code>${t}</code>`).join(", ")}.</p>`);
+      const other = s5.slice(s5.indexOf(`<tr><td>${GROUPS.other.label}</td>`), s5.indexOf("</tr>", s5.indexOf(`<tr><td>${GROUPS.other.label}</td>`)));
+      for (const t of ["ToolSearch", "TaskStop"]) {
+        expect(EXEMPT_TOOLS.has(t), t).toBe(false);
+        expect(other, t).toContain(`<code>${t}</code>`);
+      }
+    });
+
+    it("doctor 덧붙임 문장이 doctor.ts와 같다(B98: hooks 안내 맨 앞)", () => {
+      const doctor = read("server/diag/doctor.ts");
+      expect(s5).toContain(`<code>${off.trim()}</code>`);
+      const zeroFix = /"받은 이벤트 0건", "([^"]+)"\)/.exec(doctor)![1];
+      const appx = /const APPENDIX_A = "([^"]+)";/.exec(doctor)![1];
+      const sym = between('<h3 id="policy-not-applied">', "<h3");
+      expect(sym).toContain(`<pre class="out">⚠️ 실시간 이벤트: 받은 이벤트 0건\n  → ${off}${zeroFix}${appx}</pre>`);
+    });
+
+    it("6장에 새 증상 두 절이 있다", () => {
+      const s6 = between('<h2 id="s6">', '<h2 id="s7">');
+      expect(s6).toContain('<h3 id="policy-not-applied">정책을 정했는데 안 막혀요</h3>');
+      expect(s6).toContain('<h3 id="policy-stuck">에이전트가 갑자기 아무것도 못 해요</h3>');
+      const stuck = between('<h3 id="policy-stuck">', "<h3");
+      for (const t of ["자물쇠", "정책으로 막힘: …", "그 밖의 모든 팀원·서브에이전트", "<code>제한 없음</code>", "[저장]"]) expect(stuck, t).toContain(t);
+    });
+
+    it("부록 A: 저장 위치·0600·.broken·로그·진단 파일·allow 없음·별도 창 확인 전, 7장: 제거가 policy.json도 지운다", () => {
+      for (const t of ["<code>~/.claude-office/policy.json</code>", "(0600)", "<code>policy.json.broken</code>", "에이전트 이름과 도구 입력은 남지 않습니다", "진단 파일에는 개수", "허용(<code>\"allow\"</code>)은 어떤 경로로도 돌려주지 않습니다", "확인 전입니다"]) expect(s8, t).toContain(t);
+      expect(read("packaging/claude-office.sh")).toMatch(/rm -rf [^\n]*"\$PREFIX\/policy\.json" "\$PREFIX\/policy\.json\.broken"/);
+      expect(between('<h2 id="s7">', '<h2 id="s8">')).toContain("권한 정책 파일(<code>policy.json</code>)도 함께 지워집니다.");
+    });
+
+    it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
+      for (const old of ["외에 결정을 돌려주는 hook은 이것 하나입니다.", "여러분이 대시보드에서 직접 누른 답(허용·거부 등)만 Claude Code로 돌려보냅니다."]) expect(prose, old).not.toContain(old);
     });
   });
 
