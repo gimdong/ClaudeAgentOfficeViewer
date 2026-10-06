@@ -28,7 +28,8 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
   const [confirm, setConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
-  const [failed, setFailed] = useState<string | null>(null);
+  /** 지우기 실패(또는 지금만 적용됨, B87·B106) 문구와 그 대상 */
+  const [failed, setFailed] = useState<{ key: string; text: string } | null>(null);
   const [adding, setAdding] = useState<"closed" | "open" | "limit">("closed");
   const [kind, setKind] = useState<"agent" | "sub">("agent");
   const [name, setName] = useState("");
@@ -106,7 +107,11 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
     deletingRef.current = false;
     setDeleting(false);
     setConfirm(null);
-    if (r === "saved" || r === "not-persisted") {
+    if (r === "not-persisted") {
+      // 메모리에서는 지워졌지만 파일에 남았다: 지웠다고 하지 않는다(B106). 행이 사라지면 목록 아래에 남는다
+      setFailed({ key, text: TEXT.notPersisted });
+      focusNext.current = { to: "edit", key };
+    } else if (r === "saved") {
       setFailed(null);
       announce(`${targetLabel(key)} 권한 정책을 지웠습니다`);
       // 포커스는 다음 행 → 이전 행의 [고치기] → [대상 추가](§4.3). lead·others 행은 지워도 남는다
@@ -115,7 +120,7 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
       const next = fixed ? key : (keys[i + 1] ?? keys[i - 1]);
       focusNext.current = next ? { to: "edit", key: next } : "add";
     } else {
-      setFailed(key);
+      setFailed({ key, text: LIST_TEXT.deleteFailed });
       focusNext.current = { to: "del", key };
     }
   };
@@ -211,15 +216,20 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
                     </>
                   )}
                 </div>
-                {failed === k && (
+                {failed?.key === k && (
                   <p className="pl-err" role="alert">
-                    {LIST_TEXT.deleteFailed}
+                    {failed.text}
                   </p>
                 )}
               </li>
             );
           })}
         </ul>
+        {failed && !keys.includes(failed.key) && (
+          <p className="pl-err pl-err--list" role="alert">
+            {failed.text}
+          </p>
+        )}
         {namedCount === 0 && <p className="pl-empty">{LIST_TEXT.empty}</p>}
         {adding === "open" ? (
           <div className="pl-add">

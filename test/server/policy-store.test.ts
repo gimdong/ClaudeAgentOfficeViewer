@@ -245,6 +245,47 @@ describe("PolicyStore", () => {
     });
   });
 
+  it("깨진 파일인데 저장에 실패하면 unreadable이 남고, 다시 저장하면 .broken은 원래 내용 그대로(B106)", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const ro = join(dir, "ro");
+    mkdirSync(ro);
+    const file = join(ro, "policy.json");
+    writeFileSync(file, "{oops");
+    chmodSync(ro, 0o555);
+    try {
+      const s = store(file);
+      expect(s.unreadable()).toBe(true);
+      expect(s.set("lead", { bash: "ask" })).toEqual({ ok: true, saved: false });
+      expect(s.unreadable()).toBe(true);
+      chmodSync(ro, 0o755);
+      expect(s.set("lead", { bash: "deny" })).toEqual({ ok: true, saved: true });
+      expect(s.unreadable()).toBe(false);
+      expect(readFileSync(`${file}.broken`, "utf8")).toBe("{oops");
+    } finally {
+      chmodSync(ro, 0o755);
+    }
+  });
+
+  it("옮긴 뒤 쓰기만 실패했으면 다음 저장은 .broken을 덮지 않고 조용히 넘어간다(B106)", () => {
+    writeFileSync(fileOf(), "{oops");
+    const s = store();
+    // 첫 저장: 옮기기는 되고 쓰기만 실패하게 한다(임시 파일 rename을 한 번 막음)
+    const orig = renames.length;
+    const spy = vi.spyOn(JSON, "stringify").mockImplementationOnce(() => {
+      throw new Error("write");
+    });
+    expect(s.set("lead", { bash: "ask" })).toEqual({ ok: true, saved: false });
+    spy.mockRestore();
+    expect(readFileSync(`${fileOf()}.broken`, "utf8")).toBe("{oops");
+    expect(s.unreadable()).toBe(true);
+    const warnsBefore = policyWarns().length;
+    expect(s.set("lead", { bash: "deny" })).toEqual({ ok: true, saved: true });
+    expect(readFileSync(`${fileOf()}.broken`, "utf8")).toBe("{oops");
+    expect(s.unreadable()).toBe(false);
+    expect(policyWarns().length).toBe(warnsBefore); // 이미 옮긴 파일이 없다는 것은 경고가 아니다
+    expect(renames.length).toBeGreaterThan(orig);
+  });
+
   it("파일이 없을 때(ENOENT)는 깨진 파일이 아니다", () => {
     const s = store();
     s.set("lead", { bash: "ask" });

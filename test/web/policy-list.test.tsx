@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DecisionView, Member, PolicyRules, Snapshot } from "../../src/shared/types";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
+import { isTargetKey } from "../../server/policy/store";
 
 const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: true, unauthorized: false, markUnauthorized: () => {} } }));
 vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import("../../web/useSnapshot")>()), useSnapshot: () => state.value }));
@@ -190,6 +191,50 @@ describe("목록 서랍(§4)", () => {
     await act(async () => finish(null));
     await flush();
     expect(policyCalls()).toHaveLength(1);
+  });
+
+  it("지우기가 지금만 적용됨(saved: false)이면 지웠다고 하지 않고 B87 문구를 alert로(B106)", async () => {
+    reply = { status: 200, body: { saved: false } };
+    show(snap({ targets: { lead: { bash: "deny" } } }));
+    render(<App />);
+    openList();
+    fireEvent.click(within(row("리드")).getByRole("button", { name: "리드 정책 지우기" }));
+    fireEvent.click(within(row("리드")).getByRole("button", { name: "지우기" }));
+    await flush();
+    expect(within(row("리드")).getByRole("alert").textContent).toBe(TEXT.notPersisted);
+    expect(status()).not.toBe("리드 권한 정책을 지웠습니다");
+    // 행이 사라진 대상(메모리에서는 지워짐)이어도 목록에 그 문구가 남는다
+    cleanup();
+    show(snap({ targets: { "agent:ghost": { bash: "deny" } } }));
+    const { rerender } = render(<App />);
+    openList();
+    fireEvent.click(within(row("ghost")).getByRole("button", { name: "ghost 정책 지우기" }));
+    fireEvent.click(within(row("ghost")).getByRole("button", { name: "지우기" }));
+    await flush();
+    show(snap());
+    rerender(<App />);
+    expect(within(list()).getByRole("alert").textContent).toBe(TEXT.notPersisted);
+  });
+
+  it("목록 경유 패널을 닫은 뒤 다시 목록을 열면 제목에 포커스(B106)", () => {
+    show(snap({ targets: { "agent:ghost": { bash: "deny" } } }));
+    render(<App />);
+    openList();
+    fireEvent.click(within(row("ghost")).getByRole("button", { name: "ghost 정책 고치기" }));
+    fireEvent.click(within(document.getElementById("agent-panel")!).getByRole("button", { name: "닫기" }));
+    openList();
+    expect(document.activeElement?.id).toBe("pl-title");
+  });
+
+  it("parseNewTarget은 서버 isTargetKey와 같은 규칙이다(B106)", () => {
+    const names = ["rev", "Explore", "검토 담당", "a:b", "a/b", "100%", "가".repeat(100), "가".repeat(101), "👩‍👩‍👧", "__proto__", "constructor", "prototype", "a\tb", "a\u0000b", "a\u200bb", "", "x".repeat(100)];
+    for (const kind of ["agent", "sub"] as const) {
+      for (const n of names) {
+        const r = parseNewTarget(kind, n);
+        expect("key" in r, `${kind}:${JSON.stringify(n)}`).toBe(isTargetKey(`${kind}:${n}`));
+        if ("key" in r) expect(r.key).toBe(`${kind}:${n}`);
+      }
+    }
   });
 
   it("리드·그 밖의 모든을 지울 때는 다른 확인 문구", () => {

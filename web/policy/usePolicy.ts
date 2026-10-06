@@ -53,6 +53,8 @@ export function usePolicy(_snapshot: Snapshot | null) {
     (restoreFocus = true) => {
       const target = open?.view === "agent" ? open.target : null;
       setOpen(null);
+      // 다음에 목록을 열면 제목부터(B106). ‹로 돌아올 때만 그 행의 [고치기]
+      listReturn.current = null;
       if (!restoreFocus) return;
       const desk = target ? [...document.querySelectorAll<HTMLElement>("[data-policy-key]")].find((e) => e.dataset.policyKey === target) : undefined;
       const back = (opener.current?.isConnected ? opener.current : null) ?? desk ?? document.querySelector<HTMLElement>(".policy-chip");

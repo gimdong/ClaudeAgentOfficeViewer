@@ -152,15 +152,17 @@ export class PolicyStore {
       try {
         renameSync(this.file, `${this.file}.broken`);
       } catch (e) {
-        getLogger().warn("policy", "broken policy file not kept", { error: errInfo(e) });
+        // ENOENT: 앞선 저장이 이미 옮겼다(그 뒤 쓰기만 실패). 그 .broken을 덮지 않고 넘어간다(Ruling B106)
+        if ((e as { code?: string }).code !== "ENOENT") getLogger().warn("policy", "broken policy file not kept", { error: errInfo(e) });
       }
-      this.broken = false;
     }
     const tmp = `${this.file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       writeFileSync(tmp, JSON.stringify(this.all()), { mode: 0o600 });
       renameSync(tmp, this.file);
+      // 새 파일을 쓴 뒤에만 "읽지 못함"을 내린다. 쓰기에 실패하면 화면의 경고가 남아야 한다(B106)
+      this.broken = false;
       return true;
     } catch (e) {
       getLogger().warn("policy", "policy save failed", { error: errInfo(e) });
