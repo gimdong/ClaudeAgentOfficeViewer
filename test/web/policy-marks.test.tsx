@@ -87,6 +87,13 @@ describe("자물쇠(§6.2)", () => {
     expect(denied.getAttribute("data-shape")).toBe("denied");
     expect(normal.getAttribute("data-shape")).toBe("normal");
     expect(denied.querySelectorAll("rect").length).not.toBe(normal.querySelectorAll("rect").length);
+    // 느낌표는 왼쪽(x 16), 몸통은 평소와 같은 x 18–22(B107)
+    const xs = (g: Element) => {
+      const dx = Number(/translate\(([-\d.]+),/.exec(g.querySelector("g")?.getAttribute("transform") ?? "")?.[1] ?? 0);
+      return [...g.querySelectorAll("rect")].map((r) => dx + Number(r.getAttribute("x")));
+    };
+    expect([Math.min(...xs(denied)), Math.max(...xs(denied))]).toEqual([16, 22]);
+    expect([Math.min(...xs(normal)), Math.max(...xs(normal))]).toEqual([18, 22]);
     expect(desk.className).not.toContain("desk--decision");
     expect(desk.querySelector(".qmark")).toBeNull();
   });

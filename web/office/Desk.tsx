@@ -92,9 +92,9 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
         </g>
       )}
       {locked && (
-        // 자물쇠(phase3 §6.2): 오른쪽 위 (18, 3). 방금 막힘은 분홍 + 느낌표 한 줄을 붙인 다른 모양(§6.3)
+        // 자물쇠(phase3 §6.2): 오른쪽 위 (18, 3). 방금 막힘은 분홍 + 왼쪽 느낌표를 붙인 7×6을 (16, 3)에(§6.3, B107)
         <g data-testid="lock" className="lock" data-shape={denied ? "denied" : "normal"}>
-          <PixelSprite rects={spriteRects(denied ? LOCK_DESK_DENIED : LOCK_DESK, { x: denied ? NEON.pink : NEON.violet, a: NEON.monitor })} x={18} y={3} />
+          <PixelSprite rects={spriteRects(denied ? LOCK_DESK_DENIED : LOCK_DESK, { x: denied ? NEON.pink : NEON.violet, a: NEON.monitor })} x={denied ? 16 : 18} y={3} />
         </g>
       )}
       <rect x={15} y={17} width={2} height={2} fill={NEON.monitor} />

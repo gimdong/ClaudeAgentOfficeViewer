@@ -219,7 +219,8 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
   const agentMember = session?.members.find((m) => m.name === v.agent);
   const policyKey = agentMember ? targetKeyOf(agentMember) : v.agent === "team-lead" ? "lead" : targetKeyOf({ name: v.agent, role: v.agent });
   const openPermissions = () => {
-    // 보고서를 먼저 닫고 패널을 연다 — 순서가 바뀌면 서랍 서로 닫기가 패널까지 닫는다. 연 요소는 그 에이전트의 책상(닫을 때 data-policy-key로 찾는다)
+    // 보고서 닫기와 패널 열기를 한 핸들러에서 함께 바꾼다 — React가 한 번에 그려 서랍 서로 닫기 effect는 최종 상태만 본다(B108).
+    // 연 요소는 그 에이전트의 책상(닫을 때 data-policy-key로 찾는다)
     d.close(false);
     openPolicy?.(policyKey, null);
   };

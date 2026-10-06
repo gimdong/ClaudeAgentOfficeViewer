@@ -58,9 +58,10 @@ export function spriteRects(rows: string[], colors: Record<string, string>): Rec
 }
 
 // 노란 ? (6×8, 디자인 4.3). y 밝은 면, Y 음영
-/** 책상 위 자물쇠(디자인 phase3 §0·§6.2). x 몸통·고리, a 열쇠 구멍. 방금 막힘은 오른쪽에 느낌표 한 줄을 붙인 6×6(색에만 의존하지 않기) */
+/** 책상 위 자물쇠(디자인 phase3 §0·§6.2). x 몸통·고리, a 열쇠 구멍. (18, 3)에 그린다 */
 export const LOCK_DESK = [".xxx.", "x...x", "xxxxx", "xxaxx", "xxaxx", "xxxxx"];
-export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.", "xxxxxx"];
+/** 방금 막힘(§6.3): 왼쪽에 느낌표 한 줄 + 빈 열을 붙인 7×6, (16, 3)에 그린다 — 몸통은 평소와 같은 x 18–22(B107, 색에만 의존하지 않기) */
+export const LOCK_DESK_DENIED = ["x..xxx.", "x.x...x", "x.xxxxx", "x.xxaxx", "..xxaxx", "x.xxxxx"];
 export const QMARK = [".yyyy.", "yy..yy", "yy..yY", "...yyY", "..yyY.", "..yY..", "......", "..yY.."];
 
 // 호버·포커스일 때만 보이는 점선 링 (10×10)
