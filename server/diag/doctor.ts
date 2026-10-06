@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HookStatsView } from "../events/stats";
 import type { OfficePaths } from "../paths";
+import { PolicyStore } from "../policy/store";
 import type { DoctorItem, DoctorStatus } from "../../src/shared/types";
 
 export type Status = DoctorStatus;
@@ -41,6 +42,8 @@ const UPDATE_FIX = "터미널에서 claude plugin update claude-office@claude-of
 // 관리자 정책은 파일 말고 다른 방식(MDM 등)으로도 배포될 수 있어, 파일이 없다고 문제 없다고 단정하지 않는다
 const MANAGED_MISSING = "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)";
 const APPENDIX_A = " 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.";
+/** 정책이 있는데 hook이 대시보드에 닿지 않을 때(스펙 9장). 항목을 늘리지 않고 안내 끝에 붙인다 */
+const POLICY_OFF = " 권한 정책이 적용되지 않고 있습니다.";
 
 /** 플러그인 hooks.json의 PermissionRequest timeout(초). 대시보드에서 답할 시간(스펙 3.1) */
 const PERMISSION_TIMEOUT_S = 600;
@@ -294,7 +297,25 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
   const managed = items.find((i) => i.id === "managed");
   const hooks = items.find((i) => i.id === "hooks");
   if (managed?.detail === MANAGED_MISSING && hooks && hooks.detail === "받은 이벤트 0건") hooks.fix += APPENDIX_A;
+  // 정책 파일은 읽기만 한다(대상 수만 쓰고 이름은 결과에 넣지 않는다). 깨졌으면 load가 빈 정책으로 둔다
+  const plugin = items.find((i) => i.id === "plugin");
+  const notReaching = hooks?.detail === "받은 이벤트 0건" || hooks?.detail === "서버가 꺼져 있어 확인하지 못했습니다" || plugin?.status !== "ok";
+  if (notReaching && policyTargets(d.paths.policyFile) > 0) {
+    // fix는 ok가 아닐 때만 출력되므로, hooks가 ok면(플러그인만 꺼짐) plugin 안내에 붙인다
+    const at = hooks && hooks.status !== "ok" ? hooks : plugin;
+    if (at) at.fix += POLICY_OFF;
+  }
   return items;
+}
+
+function policyTargets(file: string): number {
+  try {
+    const s = new PolicyStore(file);
+    s.load();
+    return s.summary().targets;
+  } catch {
+    return 0;
+  }
 }
 
 const MARK: Record<Status, string> = { ok: "✅", warn: "⚠️", fail: "❌" };

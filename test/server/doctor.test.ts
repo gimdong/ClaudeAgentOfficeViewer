@@ -308,6 +308,95 @@ describe("runDoctor", () => {
   });
 });
 
+describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () => {
+  const NOTE = " 권한 정책이 적용되지 않고 있습니다.";
+  const FAKE_NAME = "FAKE-NAME-rev";
+  const withPolicy = () => writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { [`agent:${FAKE_NAME}`]: { bash: "deny" } } }));
+  const pluginOn = () => h.write(".claude/settings.json", { enabledPlugins: { "claude-office@claude-office": true } });
+  const zero = async () => stats();
+  const off = async () => null;
+  const pick = (items: DoctorItem[], id: string) => items.find((i) => i.id === id)!;
+  const noted = (items: DoctorItem[]) => items.filter((i) => i.fix.includes("권한 정책")).map((i) => i.id);
+
+  beforeEach(() => mkdir(h.path("prefix"), { recursive: true }));
+
+  it("정책이 있고 받은 이벤트가 0건이면 hooks 안내 끝에 문장이 붙는다", async () => {
+    await withPolicy();
+    await pluginOn();
+    const items = await runDoctor(deps({ hooks: zero }));
+    expect(pick(items, "hooks").fix.endsWith(NOTE)).toBe(true);
+    expect(noted(items)).toEqual(["hooks"]);
+  });
+
+  it("정책이 있고 서버가 꺼져 있으면 붙는다", async () => {
+    await withPolicy();
+    await pluginOn();
+    const items = await runDoctor(deps({ hooks: off, probePort: async () => "free" }));
+    expect(pick(items, "hooks")).toMatchObject({ detail: "서버가 꺼져 있어 확인하지 못했습니다" });
+    expect(pick(items, "hooks").fix.endsWith(NOTE)).toBe(true);
+    expect(noted(items)).toEqual(["hooks"]);
+  });
+
+  it("정책이 있고 플러그인이 꺼져 있으면 붙는다(hooks가 ok면 plugin 안내에)", async () => {
+    await withPolicy();
+    const okHooks = await runDoctor(deps());
+    expect(pick(okHooks, "hooks").status).toBe("ok");
+    expect(pick(okHooks, "plugin").fix.endsWith(NOTE)).toBe(true);
+    expect(noted(okHooks)).toEqual(["plugin"]);
+    // hooks 안내가 출력되면(warn) 거기에 한 번만
+    const rejected = await runDoctor(deps({ hooks: async () => stats({ total: 3, last10min: 3, rejected: { "403": 1, "415": 0, "413": 0, "400": 0 } }) }));
+    expect(pick(rejected, "hooks").fix.endsWith(NOTE)).toBe(true);
+    expect(noted(rejected)).toEqual(["hooks"]);
+  });
+
+  it("정책이 없으면 어떤 경우에도 붙지 않는다", async () => {
+    for (const o of [{ hooks: zero }, { hooks: off }, {}] as Array<Partial<DoctorDeps>>) expect(noted(await runDoctor(deps(o)))).toEqual([]);
+    // 대상이 하나도 없는 파일도 정책 없음
+    await writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: {} }));
+    expect(noted(await runDoctor(deps({ hooks: zero })))).toEqual([]);
+  });
+
+  it("정책이 있어도 hooks·plugin이 정상이면 붙지 않는다", async () => {
+    await withPolicy();
+    await pluginOn();
+    expect(noted(await runDoctor(deps()))).toEqual([]);
+  });
+
+  it("정책 파일이 깨졌으면 대상 0개로 본다(던지지 않는다)", async () => {
+    await writeFile(paths.policyFile, "{oops");
+    const items = await runDoctor(deps({ hooks: zero }));
+    expect(items).toHaveLength(12);
+    expect(noted(items)).toEqual([]);
+  });
+
+  it("깨진 정책 파일로 여러 번 돌려도 policy 로그는 10분에 한 줄(로거의 반복 억제)", async () => {
+    await writeFile(paths.policyFile, "{oops");
+    const { Logger, setLogger } = await import("../../server/log");
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const dir = h.path("logs-doctor");
+    setLogger(new Logger({ dir, now: () => NOW }));
+    try {
+      for (let i = 0; i < 3; i++) await runDoctor(deps());
+      const lines = readdirSync(dir).flatMap((f) => readFileSync(join(dir, f), "utf8").split("\n").filter(Boolean));
+      expect(lines.filter((l) => JSON.parse(l).src === "policy")).toHaveLength(1);
+    } finally {
+      setLogger(new Logger({ dir: "" }));
+    }
+  });
+
+  it("항목은 여전히 12개이고 순서가 같다", async () => {
+    await withPolicy();
+    expect((await runDoctor(deps({ hooks: zero }))).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_timeout", "managed", "proxy", "hooks", "statusline"]);
+  });
+
+  it("doctor 결과에 대상 이름이 없다", async () => {
+    await withPolicy();
+    const text = JSON.stringify(await runDoctor(deps({ hooks: zero })));
+    const leaked = text.includes(FAKE_NAME);
+    expect(leaked).toBe(false);
+  });
+});
+
 describe("defaultProbePort", () => {
   it("연결은 되는데 답이 없으면 timeout", async () => {
     const { createServer } = await import("node:net");

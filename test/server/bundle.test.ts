@@ -9,6 +9,8 @@ import type { Snapshot } from "../../src/shared/types";
 import { emptySnapshot } from "../../server/snapshot";
 import { DecisionQueue } from "../../server/decisions/queue";
 import { Logger, setLogger } from "../../server/log";
+import { PolicyStore } from "../../server/policy/store";
+import { PolicyGate } from "../../server/policy/gate";
 
 const NOW = Date.UTC(2026, 9, 1, 3);
 const HOME = "/Users/fakeuser";
@@ -198,6 +200,37 @@ describe("권한 정책 통계(Phase 3)", () => {
   it("policy 통계가 입력 그대로 들어간다", async () => {
     const policy = { targets: 3, rulesByKind: { lead: 1, agent: 2, sub: 0, others: 1 }, decisions: { deny: 4, ask: 2 } };
     expect((await base({ policy })).policy).toEqual(policy);
+  });
+
+  it("진단 파일 전체에 대상 이름과 도구 입력이 없다(실제 PolicyStore·PolicyGate·Logger)", async () => {
+    const NAME = "FAKE-NAME-rev";
+    const TYPE = "FAKE-TYPE-X";
+    const CMD = "FAKE-CMD-policy-777";
+    setLogger(new Logger({ dir: logDir, now: () => NOW, home: HOME }));
+    try {
+      const store = new PolicyStore(join(outDir, "policy.json"));
+      store.set(`agent:${NAME}`, { bash: "deny", web: "ask" });
+      store.set(`sub:${TYPE}`, { edit: "deny" });
+      const gate = new PolicyGate(store, { now: () => NOW });
+      const pre = (tool: string, who: Record<string, string>) => ({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: tool, tool_input: { command: CMD, file_path: `/tmp/${CMD}` }, ...who });
+      const teammate = { agent_id: `a${NAME}-1`, agent_type: NAME };
+      const sub = { agent_id: "a1b2c3d4e5f6a7b8", agent_type: TYPE };
+      for (const [tool, who, decision] of [["Bash", teammate, "deny"], ["WebFetch", teammate, "ask"], ["Edit", sub, "deny"]] as const) {
+        const v = gate.preToolUse(pre(tool, who));
+        expect(v?.decision, tool).toBe(decision);
+        v!.respond();
+      }
+      const b = await base({ policy: { ...store.summary(), decisions: gate.totals() } });
+      expect(b.policy).toEqual({ targets: 2, rulesByKind: { lead: 0, agent: 2, sub: 1, others: 0 }, decisions: { deny: 2, ask: 1 } });
+      const text = JSON.stringify(b);
+      expect(text.includes('"src\\":\\"policy\\"')).toBe(true); // 정책 로그 줄이 실제로 들어갔다
+      for (const bad of [NAME, TYPE, CMD]) {
+        const leaked = text.includes(bad);
+        expect(leaked, bad).toBe(false);
+      }
+    } finally {
+      setLogger(new Logger({ dir: "" }));
+    }
   });
 
   it("policy를 주지 않으면 0으로 채운다", async () => {
