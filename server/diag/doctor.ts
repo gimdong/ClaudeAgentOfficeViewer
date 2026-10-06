@@ -35,6 +35,8 @@ const HOOK_PORT = 4317;
 const HOOK_URL = `http://127.0.0.1:${HOOK_PORT}/hooks/event`;
 const PLUGIN_ID = "claude-office@claude-office";
 const INSTALL_FIX = "설치 스크립트를 다시 실행해 플러그인 설치에 y로 답하거나, 터미널에서 claude plugin install claude-office@claude-office 를 실행해 주세요.";
+// 이미 설치된 플러그인은 install로는 등록이 바뀌지 않는다(FB-4) — update가 등록 버전을 새로 적는다
+const UPDATE_FIX = "터미널에서 claude plugin update claude-office@claude-office 를 실행한 뒤 Claude Code를 다시 열어 주세요.";
 
 // 관리자 정책은 파일 말고 다른 방식(MDM 등)으로도 배포될 수 있어, 파일이 없다고 문제 없다고 단정하지 않는다
 const MANAGED_MISSING = "파일 없음(회사가 다른 방식으로 정책을 배포했을 수 있음)";
@@ -183,29 +185,35 @@ const checks: Check[] = [
       return item("token", "warn", title, "있음(권한 확인 필요)", "claude-office를 다시 켜면 권한이 바로잡힙니다(본인만 읽을 수 있게).");
     return item("token", "ok", title, "있음");
   },
-  // 플러그인의 PermissionRequest hook이 600초 기다리는지. 캐시에서 가장 최근 버전 폴더의 hooks.json을 본다
+  // 플러그인의 PermissionRequest hook이 600초 기다리는지. Claude Code가 실제로 쓰는 등록 경로(installed_plugins.json의
+  // installPath)를 먼저 보고, 등록이 없을 때만 캐시에서 가장 최근 버전 폴더를 본다(FB-4: 업그레이드 뒤 등록이 옛 버전에 남음)
   async (d) => {
     const title = "결정 대기 시간";
-    const root = join(d.claudeHome, "plugins", "cache", "claude-office", "claude-office");
-    let newest: string | null = null;
-    let newestAt = -Infinity;
-    try {
-      for (const v of await readdir(root)) {
-        const at = (await stat(join(root, v))).mtimeMs;
-        if (existsSync(join(root, v, "hooks", "hooks.json")) && at > newestAt) {
-          newest = v;
-          newestAt = at;
+    let hooksDir: string | null = null;
+    const reg = (await readJson(join(d.claudeHome, "plugins", "installed_plugins.json"))) as { plugins?: Record<string, Array<{ installPath?: unknown }>> } | null;
+    const installPath = reg?.plugins?.[PLUGIN_ID]?.[0]?.installPath;
+    if (typeof installPath === "string" && existsSync(join(installPath, "hooks", "hooks.json"))) hooksDir = installPath;
+    if (!hooksDir) {
+      const root = join(d.claudeHome, "plugins", "cache", "claude-office", "claude-office");
+      let newestAt = -Infinity;
+      try {
+        for (const v of await readdir(root)) {
+          const at = (await stat(join(root, v))).mtimeMs;
+          if (existsSync(join(root, v, "hooks", "hooks.json")) && at > newestAt) {
+            hooksDir = join(root, v);
+            newestAt = at;
+          }
         }
+      } catch {
+        /* 캐시 폴더 없음 */
       }
-    } catch {
-      /* 캐시 폴더 없음 */
     }
-    if (!newest) return item("hook_timeout", "warn", title, "플러그인 캐시 없음", INSTALL_FIX);
-    const parsed = (await readJson(join(root, newest, "hooks", "hooks.json"))) as { hooks?: { PermissionRequest?: Array<{ hooks?: Array<{ timeout?: unknown }> }> } } | null;
+    if (!hooksDir) return item("hook_timeout", "warn", title, "플러그인 캐시 없음", INSTALL_FIX);
+    const parsed = (await readJson(join(hooksDir, "hooks", "hooks.json"))) as { hooks?: { PermissionRequest?: Array<{ hooks?: Array<{ timeout?: unknown }> }> } } | null;
     const t = parsed?.hooks?.PermissionRequest?.[0]?.hooks?.[0]?.timeout;
     if (t === PERMISSION_TIMEOUT_S) return item("hook_timeout", "ok", title, `${PERMISSION_TIMEOUT_S}초`);
     // 숫자일 때만 "초"를 붙인다(hooks.json이 깨졌거나 PermissionRequest 항목이 없으면 "알 수 없음")
-    return item("hook_timeout", "warn", title, `${typeof t === "number" ? `${t}초` : "알 수 없음"} — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, INSTALL_FIX);
+    return item("hook_timeout", "warn", title, `${typeof t === "number" ? `${t}초` : "알 수 없음"} — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, UPDATE_FIX);
   },
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);

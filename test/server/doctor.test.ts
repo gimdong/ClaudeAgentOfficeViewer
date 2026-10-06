@@ -195,7 +195,27 @@ describe("runDoctor", () => {
     await h.write(file, { hooks: { PreToolUse: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: 5 }] }] } });
     const missing = await item("hook_timeout");
     expect(missing).toMatchObject({ status: "warn", detail: "알 수 없음 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요" });
-    expect(missing.fix).toContain("claude plugin install claude-office@claude-office");
+    expect(missing.fix).toContain("claude plugin update claude-office@claude-office");
+  });
+
+  it("hook_timeout: 등록된 installPath를 캐시의 최근 폴더보다 먼저 본다(FB-4: 업그레이드 뒤 등록이 옛 버전에 남음)", async () => {
+    const dir = (v: string) => `.claude/plugins/cache/claude-office/claude-office/${v}`;
+    const hooks = (t: number) => ({ hooks: { PermissionRequest: [{ matcher: "*", hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: t }] }] } });
+    const register = (v: string) => h.write(".claude/plugins/installed_plugins.json", { version: 2, plugins: { "claude-office@claude-office": [{ scope: "user", installPath: h.path(dir(v)), version: v }] } });
+    await h.write(`${dir("2.0.0-beta.1")}/hooks/hooks.json`, hooks(5));
+    await h.write(`${dir("2.1.0-dev")}/hooks/hooks.json`, hooks(600));
+    // 새 폴더가 더 최근이어도 등록이 옛 버전이면 Claude Code는 옛 hook(5초)을 쓴다
+    const past = new Date(NOW - 3_600_000);
+    utimesSync(h.path(dir("2.0.0-beta.1")), past, past);
+    await register("2.0.0-beta.1");
+    const stale = await item("hook_timeout");
+    expect(stale).toMatchObject({ status: "warn", detail: "5초 — 대시보드에서 답하려면 플러그인을 업데이트해 주세요" });
+    expect(stale.fix).toContain("claude plugin update claude-office@claude-office");
+    // 등록을 갱신하면 폴더 시각과 무관하게 600초
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(h.path(dir("2.0.0-beta.1")), later, later);
+    await register("2.1.0-dev");
+    expect(await item("hook_timeout")).toMatchObject({ status: "ok", detail: "600초" });
   });
 
   it("managed: 파일 없음 ok, 훅 차단 fail, 허용 목록 확인", async () => {
