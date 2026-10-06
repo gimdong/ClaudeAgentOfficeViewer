@@ -316,7 +316,7 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
   const zero = async () => stats();
   const off = async () => null;
   const pick = (items: DoctorItem[], id: string) => items.find((i) => i.id === id)!;
-  const noted = (items: DoctorItem[]) => items.filter((i) => i.fix.includes("권한 정책")).map((i) => i.id);
+  const noted = (items: DoctorItem[]) => items.filter((i) => i.fix.includes(NOTE)).map((i) => i.id);
 
   beforeEach(() => mkdir(h.path("prefix"), { recursive: true }));
 
@@ -398,6 +398,53 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     const text = JSON.stringify(await runDoctor(deps({ hooks: zero })));
     const leaked = text.includes(FAKE_NAME);
     expect(leaked).toBe(false);
+  });
+});
+
+describe("읽지 못한 정책 파일(B101)", () => {
+  const NOTE = '저장해 둔 권한 정책 파일을 읽지 못했습니다. 대시보드는 정책이 없는 상태로 켜집니다. 위쪽 막대의 "권한 정책"에서 다시 정해 주세요.';
+  const AT = "app"; // 제거 요약에서 policy.json은 "프로그램 파일"에 든다
+  const marked = (items: DoctorItem[]) => items.filter((i) => i.fix.includes("권한 정책 파일")).map((i) => i.id);
+  beforeEach(() => mkdir(h.path("prefix"), { recursive: true }));
+
+  it("깨진 파일이면 프로그램 파일 항목이 warn이 되고 안내가 나온다(파일은 바꾸지 않는다)", async () => {
+    await writeFile(paths.policyFile, "{oops");
+    const items = await runDoctor(deps());
+    expect(items).toHaveLength(12);
+    expect(items.find((i) => i.id === AT)).toMatchObject({ status: "warn", detail: "권한 정책 파일을 읽지 못함", fix: NOTE });
+    expect(marked(items)).toEqual([AT]);
+    expect(await readFile(paths.policyFile, "utf8")).toBe("{oops");
+    expect(existsSync(`${paths.policyFile}.broken`)).toBe(false);
+  });
+
+  it("권한 없는 파일(chmod 000)도 같다", async () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    await writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { lead: { bash: "ask" } } }));
+    chmodSync(paths.policyFile, 0o000);
+    try {
+      expect(marked(await runDoctor(deps()))).toEqual([AT]);
+    } finally {
+      chmodSync(paths.policyFile, 0o600);
+    }
+  });
+
+  it("프로그램 파일이 이미 fail이면 fail 그대로 두고 값과 안내에 덧붙인다", async () => {
+    await writeFile(paths.policyFile, "{oops");
+    const { rm } = await import("node:fs/promises");
+    await rm(h.path("app/server.mjs"));
+    const app = (await runDoctor(deps())).find((i) => i.id === AT)!;
+    expect(app.status).toBe("fail");
+    expect(app.detail).toBe("화면 파일 있음, 서버 파일 없음, 권한 정책 파일을 읽지 못함");
+    expect(app.fix).toBe(`${NOTE} 설치 스크립트로 다시 설치해 주세요.`);
+  });
+
+  it("파일이 없거나 정상이거나 일부 규칙만 버린 파일이면 나오지 않는다", async () => {
+    expect(marked(await runDoctor(deps()))).toEqual([]);
+    await writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { lead: { bash: "ask" } } }));
+    expect(marked(await runDoctor(deps()))).toEqual([]);
+    await writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { lead: { bash: "allow" } } }));
+    expect(marked(await runDoctor(deps()))).toEqual([]);
+    expect((await runDoctor(deps())).find((i) => i.id === AT)!.status).toBe("ok");
   });
 });
 

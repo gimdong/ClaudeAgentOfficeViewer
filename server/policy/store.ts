@@ -103,6 +103,11 @@ export class PolicyStore {
     if (ignored) getLogger().warn("policy", "policy rules ignored", { ignored });
   }
 
+  /** load가 파일을 읽지 못했거나 깨진 파일로 본 뒤, 다음 저장 전까지 true(Ruling B101). 파일이 없으면 false */
+  unreadable(): boolean {
+    return this.broken;
+  }
+
   rulesOf(key: string): PolicyRules | undefined {
     return this.targets.get(key);
   }

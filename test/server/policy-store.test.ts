@@ -220,6 +220,31 @@ describe("PolicyStore", () => {
     expect(read()).toEqual({ version: 1, targets: { lead: { bash: "ask" } } });
   });
 
+  describe("unreadable(B101)", () => {
+    it("깨진 파일이면 true이고, 정책을 다시 저장하면 false", () => {
+      writeFileSync(fileOf(), "{oops");
+      const s = store();
+      expect(s.unreadable()).toBe(true);
+      s.set("lead", { bash: "ask" });
+      expect(s.unreadable()).toBe(false);
+    });
+
+    it("권한 없는 파일(chmod 000)도 true", () => {
+      if (process.platform === "win32" || process.getuid?.() === 0) return;
+      writeFileSync(fileOf(), '{"version":1,"targets":{"lead":{"bash":"ask"}}}');
+      chmodSync(fileOf(), 0o000);
+      expect(store().unreadable()).toBe(true);
+    });
+
+    it("파일이 없으면 false, 읽을 수 있는데 일부 규칙만 버린 파일도 false", () => {
+      expect(store().unreadable()).toBe(false);
+      writeFileSync(fileOf(), '{"version":1,"targets":{"lead":{"bash":"allow","edit":"deny"},"Agent:x":{"bash":"deny"}}}');
+      const s = store();
+      expect(s.rulesOf("lead")).toEqual({ edit: "deny" });
+      expect(s.unreadable()).toBe(false);
+    });
+  });
+
   it("파일이 없을 때(ENOENT)는 깨진 파일이 아니다", () => {
     const s = store();
     s.set("lead", { bash: "ask" });

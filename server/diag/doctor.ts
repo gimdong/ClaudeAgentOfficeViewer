@@ -44,6 +44,9 @@ const MANAGED_MISSING = "파일 없음(회사가 다른 방식으로 정책을 �
 const APPENDIX_A = " 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.";
 /** 정책이 있는데 hook이 대시보드에 닿지 않을 때(스펙 9장). 항목을 늘리지 않고 hooks 안내 앞에 둔다(상태 → 할 일, Ruling B98) */
 const POLICY_OFF = "권한 정책이 적용되지 않고 있습니다. ";
+/** 저장해 둔 정책 파일이 깨졌거나 권한이 없어 읽지 못했을 때(Ruling B101). 제거 요약에서 policy.json은 "프로그램 파일"에 들므로 그 항목에 붙인다 */
+const POLICY_UNREADABLE = '저장해 둔 권한 정책 파일을 읽지 못했습니다. 대시보드는 정책이 없는 상태로 켜집니다. 위쪽 막대의 "권한 정책"에서 다시 정해 주세요.';
+const POLICY_UNREADABLE_DETAIL = "권한 정책 파일을 읽지 못함";
 
 /** 플러그인 hooks.json의 PermissionRequest timeout(초). 대시보드에서 답할 시간(스펙 3.1) */
 const PERMISSION_TIMEOUT_S = 600;
@@ -301,17 +304,25 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
   // plugin 항목은 보지 않는다 — ~/.claude/settings.json만 봐서, 다른 곳에서 켠 플러그인으로 이벤트가 들어와도 warn이다.
   // 정말 꺼졌으면 이벤트가 0건이라 위 조건이 잡는다(Ruling B98)
   const notReaching = hooks?.detail === "받은 이벤트 0건" || hooks?.detail === "서버가 꺼져 있어 확인하지 못했습니다";
-  if (hooks && notReaching && policyTargets(d.paths.policyFile) > 0) hooks.fix = POLICY_OFF + hooks.fix;
+  const policy = policyState(d.paths.policyFile);
+  if (hooks && notReaching && policy.targets > 0) hooks.fix = POLICY_OFF + hooks.fix;
+  const app = items.find((i) => i.id === "app");
+  if (app && policy.unreadable) {
+    // ok면 warn으로 내리고 값을 바꾼다. 이미 fail이면 fail 그대로 두고 덧붙인다
+    if (app.status === "ok") Object.assign(app, { status: "warn", detail: POLICY_UNREADABLE_DETAIL, fix: POLICY_UNREADABLE });
+    else Object.assign(app, { detail: `${app.detail}, ${POLICY_UNREADABLE_DETAIL}`, fix: app.fix ? `${POLICY_UNREADABLE} ${app.fix}` : POLICY_UNREADABLE });
+  }
   return items;
 }
 
-function policyTargets(file: string): number {
+/** 정책 파일을 한 번 읽어 대상 수와 "읽지 못함"을 함께 얻는다. 읽기만 한다(저장하지 않으므로 .broken도 만들지 않는다) */
+function policyState(file: string): { targets: number; unreadable: boolean } {
   try {
     const s = new PolicyStore(file);
     s.load();
-    return s.summary().targets;
+    return { targets: s.summary().targets, unreadable: s.unreadable() };
   } catch {
-    return 0;
+    return { targets: 0, unreadable: false };
   }
 }
 
