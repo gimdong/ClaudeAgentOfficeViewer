@@ -494,7 +494,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li>평범한 권한 요청처럼 Claude Code 창에 권한 창이 뜨고, 캐릭터가 손을 듭니다. 권한 모드가 auto여도 뜹니다. 팀원과 서브에이전트의 요청도 <strong>리드의</strong> Claude Code 창에 뜨고, 창 위쪽에 누구의 요청인지(예: <code>from the reviewer agent</code>) 나옵니다.</li>
   <li>권한 창에는 이런 문장이 함께 보입니다.
     <pre class="out">대시보드 권한 정책: 리드에게는 "명령 실행 항상 질문"이 정해져 있어 이 도구는 매번 확인합니다.</pre></li>
-  <li>결정 보고서에는 <code>권한 정책이 매번 확인하도록 정해 둔 도구입니다</code>가 한 줄 보입니다. 대시보드나 Claude Code 창, 먼저 답한 쪽이 적용됩니다.</li>
+  <li>결정 보고서에는 보통 <code>권한 정책이 매번 확인하도록 정해 둔 도구입니다</code>가 한 줄 보입니다. 도구에 따라 이 줄 없이 평범한 권한 요청으로 보일 때도 있는데, 그래도 정책이 물은 것일 수 있습니다. Claude Code 창의 권한 창에 위의 <code>대시보드 권한 정책: …</code> 문장이 있으면 정책이 물은 것입니다. 대시보드나 Claude Code 창, 먼저 답한 쪽이 적용됩니다.</li>
   <li>대시보드에서 <strong>허용</strong>을 눌러도 정책은 바뀌지 않습니다. 그 한 번만 허용입니다.</li>
   <li>예산에 닿은 층에서는 예산 보고서가 먼저 뜹니다(위 "예산").</li>
 </ul>
@@ -629,15 +629,15 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <ol class="steps">
   <li><strong>대시보드가 켜져 있나요?</strong> 정책은 대시보드가 켜져 있을 때만 적용됩니다. 위쪽 막대가 <strong>● LIVE</strong>인지 보세요. 대시보드를 끈 사이에 한 일은 막지 못합니다.</li>
   <li><strong>[저장]을 눌렀나요?</strong> 패널에서 고르기만 하고 닫으면 적용되지 않습니다. 정책 목록에 그 이름과 요약이 보이면 저장된 것입니다. 저장할 때 이미 실행 중이던 도구는 막지 않습니다. 다음 도구부터입니다.</li>
+  <li><strong>정책 목록이 통째로 비었나요?</strong> 정해 둔 정책 파일이 깨졌거나 읽을 권한이 없으면(파일을 손으로 고친 경우 등) 대시보드는 정책이 없는 상태로 켜집니다. 이때는 정책 목록 맨 위에 정책 파일을 읽지 못했다는 경고가 보이고, 위쪽 막대의 <strong>권한 정책</strong> 단추에도 표시가 붙습니다. 환경 점검(doctor)에서는 이렇게 나옵니다.
+    <pre class="out">⚠️ 프로그램 파일: 권한 정책 파일을 읽지 못함
+  → 저장해 둔 권한 정책 파일을 읽지 못했습니다. 대시보드는 정책이 없는 상태로 켜집니다. 위쪽 막대의 "권한 정책"에서 다시 정해 주세요.</pre>
+    정책을 다시 정해 <strong>[저장]</strong>하면 됩니다. 읽지 못한 파일은 처음 저장할 때 <code>policy.json.broken</code>이라는 이름으로 남으니, 진단 파일과 함께 담당자에게 보내 주세요.</li>
   <li><strong>이름이 같나요?</strong> 정책은 이름에 붙습니다. 미리 추가한 이름이 화면의 이름표와 대소문자까지 같은지 보세요. 서브에이전트는 종류 이름(예: <code>Explore</code>)입니다. 리드에는 "그 밖의 모든"이 적용되지 않습니다.</li>
   <li><strong>다른 묶음의 도구로 같은 일을 하지 않았나요?</strong> <code>명령 실행</code>을 금지해도 <code>파일 고치기</code>나 외부 도구(MCP)로 파일을 바꿀 수 있습니다. 패널의 횟수(<code>켠 뒤로 금지 …번</code>)가 늘지 않았다면 정책에 걸린 도구를 쓰지 않은 것입니다. 막고 싶은 묶음을 모두 금지하거나 <code>읽기 전용</code>을 쓰세요.</li>
   <li><strong>환경 점검(doctor)을 해 보세요.</strong> 정책이 있는데 Claude Code의 소식이 대시보드에 닿지 않으면 아래처럼 고치는 법 맨 앞에 알려 줍니다. 그 줄대로 따라 하세요. 회사 PC라면 관리자 설정 때문일 수 있습니다(부록 A).
     <pre class="out">⚠️ 실시간 이벤트: 받은 이벤트 0건
   → 권한 정책이 적용되지 않고 있습니다. Claude Code 세션에서 아무 작업이나 해 보세요. 그래도 0건이면 플러그인과 회사 관리자 설정 항목을 확인해 주세요. 그래도 안 되면 회사 관리자에게 사용설명서 부록 A를 전달해 주세요.</pre></li>
-  <li><strong>정책 목록이 통째로 비었나요?</strong> 정해 둔 정책 파일이 깨졌거나 읽을 권한이 없으면(파일을 손으로 고친 경우 등) 대시보드는 정책이 없는 상태로 켜집니다. 이때는 정책 목록 맨 위에 정책 파일을 읽지 못했다는 경고가 보이고, 위쪽 막대의 <strong>권한 정책</strong> 단추에도 표시가 붙습니다. 환경 점검(doctor)에서는 이렇게 나옵니다.
-    <pre class="out">⚠️ 프로그램 파일: 권한 정책 파일을 읽지 못함
-  → 저장해 둔 권한 정책 파일을 읽지 못했습니다. 대시보드는 정책이 없는 상태로 켜집니다. 위쪽 막대의 "권한 정책"에서 다시 정해 주세요.</pre>
-    정책을 다시 정해 <strong>[저장]</strong>하면 됩니다. 읽지 못한 파일은 처음 저장할 때 <code>policy.json.broken</code>이라는 이름으로 남으니, 진단 파일과 함께 담당자에게 보내 주세요.</li>
 </ol>
 <figure class="fig" data-fig="fig-policy-unreadable">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 545" role="img" aria-labelledby="fig-policy-unreadable-t fig-policy-unreadable-d" shape-rendering="crispEdges" font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">

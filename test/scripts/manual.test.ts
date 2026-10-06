@@ -671,8 +671,21 @@ describe("사용설명서(docs/manual/index.html)", () => {
       for (const t of [TEXT.scopeNamed, TEXT.scopeLead, TEXT.followsOthers, TEXT.unsaved, TEXT.notPersisted, TEXT.noRules, LIST_TEXT.limitLine, LIST_TEXT.unreadHead, LIST_TEXT.unreadBody, countsLine(3, 5), summaryOf({ bash: "deny", edit: "deny" })]) {
         expect(s5, t).toContain(`<code>${t}</code>`);
       }
+      expect(s5).toContain(`<strong>그 밖의 모든 팀원·서브에이전트</strong>는 ${TEXT.scopeOthers}.`);
       // 고정 두 행(리드, 그 밖의 모든)은 정한 것이 없어도 목록에 있다(디자인 §4.4)
       expect(s5).toContain("맨 위 <strong>리드</strong> 줄과 맨 아래 <strong>그 밖의 모든 팀원·서브에이전트</strong> 줄은 정한 것이 없어도 늘 있습니다");
+    });
+
+    it("보고서 이유 줄은 '보통' 보이고, 없어도 정책이 물은 것일 수 있다(B110)", () => {
+      expect(s5).toContain("결정 보고서에는 보통 <code>권한 정책이 매번 확인하도록 정해 둔 도구입니다</code>가 한 줄 보입니다.");
+      expect(s5).toContain("이 줄 없이 평범한 권한 요청으로 보일 때도 있는데, 그래도 정책이 물은 것일 수 있습니다.");
+    });
+
+    it("6장 '안 막혀요'는 화면에서 보는 확인을 먼저, doctor를 나중에(B110)", () => {
+      const sym = between('<h3 id="policy-not-applied">', "<h3");
+      const order = ["대시보드가 켜져 있나요?", "[저장]을 눌렀나요?", "정책 목록이 통째로 비었나요?", "이름이 같나요?", "다른 묶음의 도구로 같은 일을 하지 않았나요?", "환경 점검(doctor)을 해 보세요."].map((h) => sym.indexOf(`<li><strong>${h}</strong>`));
+      expect(order.every((at) => at >= 0)).toBe(true);
+      expect([...order].sort((x, y) => x - y)).toEqual(order);
     });
 
     it("말풍선·자물쇠·보고서 이유 줄이 화면 코드와 같다(느낌표 모양, 30초)", () => {
