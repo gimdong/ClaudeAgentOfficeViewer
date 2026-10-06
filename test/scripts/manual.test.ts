@@ -640,6 +640,14 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(between('<h2 id="s7">', '<h2 id="s8">')).toContain("권한 정책 파일(<code>policy.json</code>)도 함께 지워집니다.");
     });
 
+    it("정책 파일이 깨진 경우: 6장 원인 후보와 부록 A 로그 문구가 store.ts와 같다(B100)", () => {
+      const msg = "policy unreadable, starting empty";
+      expect(read("server/policy/store.ts")).toContain(`getLogger().warn("policy", "${msg}"`);
+      expect(s8).toContain(`<code>src</code>가 <code>policy</code>인 <code>${msg}</code> 경고가 남습니다`);
+      const sym = between('<h3 id="policy-not-applied">', "<h3");
+      for (const t of ["정책 목록이 통째로 비었나요?", "\"정책 없음\"으로만 보입니다", "<code>policy.json.broken</code>", "진단 파일과 함께 담당자에게 보내 주세요"]) expect(sym, t).toContain(t);
+    });
+
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
       for (const old of ["외에 결정을 돌려주는 hook은 이것 하나입니다.", "여러분이 대시보드에서 직접 누른 답(허용·거부 등)만 Claude Code로 돌려보냅니다."]) expect(prose, old).not.toContain(old);
     });
