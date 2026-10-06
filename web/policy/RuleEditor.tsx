@@ -32,18 +32,23 @@ export function RuleEditor(p: { target: string; saved: PolicyRules; onSave(rules
   const announce = useRef(p.announce);
   announce.current = p.announce;
 
-  // 바꾼 것이 없으면 서버 값을 따라간다(다른 탭에서 바꿨거나 저장 직후 스냅샷). 스냅샷마다 새 객체이므로 내용으로 비교한다
+  // 바꾼 것이 없으면 서버 값을 따라간다(다른 탭에서 바꿨거나 저장 직후 스냅샷). 스냅샷마다 새 객체이므로 내용으로 비교한다.
+  // 값을 되돌려 dirty가 풀린 때도 따라간다(B105). 저장에 성공한 직후에는 그 저장이 실린 스냅샷이 올 때까지 기다린다 —
+  // 아직 예전 스냅샷이면 방금 저장한 값을 예전 값으로 되돌려 버린다
   const savedKey = JSON.stringify(copy(p.saved));
+  const staleKey = useRef<string | null>(null);
   useEffect(() => {
-    if (dirtyRef.current || busy.current) return;
+    if (staleKey.current !== null && staleKey.current !== savedKey) staleKey.current = null;
+    if (dirty || busy.current || staleKey.current !== null) return;
     const r = JSON.parse(savedKey) as PolicyRules;
     setBase(r);
     setEdit(r);
-  }, [savedKey]);
+  }, [savedKey, dirty]);
 
   useEffect(
     () => () => {
-      if (dirtyRef.current) announce.current(TEXT.discarded);
+      // 저장 중에 닫으면 버린 것이 아니다(곧 "저장했습니다"가 온다, B105)
+      if (dirtyRef.current && !busy.current) announce.current(TEXT.discarded);
     },
     [],
   );
@@ -69,6 +74,7 @@ export function RuleEditor(p: { target: string; saved: PolicyRules; onSave(rules
     busy.current = false;
     if (r === "saved" || r === "not-persisted") {
       // 메모리에는 적용됐다(B87). 편집 값을 기준으로 삼는다
+      if (JSON.stringify(rules) !== savedKey) staleKey.current = savedKey;
       setBase(rules);
       const empty = Object.keys(rules).length === 0;
       if (r === "saved") {
@@ -133,8 +139,8 @@ export function RuleEditor(p: { target: string; saved: PolicyRules; onSave(rules
         <button
           type="button"
           className="pbtn pbtn--primary ap-save"
-          disabled={status === "saving"}
-          aria-disabled={!canSave && status !== "saving" ? true : undefined}
+          aria-disabled={!canSave || status === "saving" ? true : undefined}
+          aria-busy={status === "saving" ? true : undefined}
           aria-describedby={dirty ? "ap-unsaved" : undefined}
           onClick={save}
         >

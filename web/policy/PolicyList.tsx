@@ -27,6 +27,7 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
   const nameInput = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [adding, setAdding] = useState<"closed" | "open" | "limit">("closed");
   const [kind, setKind] = useState<"agent" | "sub">("agent");
@@ -98,8 +99,11 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
     policy.openAgent(key, undefined, { view: "list" });
   };
   const del = async (key: string) => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setDeleting(true);
     const r = await policy.remove(key);
+    deletingRef.current = false;
     setDeleting(false);
     setConfirm(null);
     if (r === "saved" || r === "not-persisted") {
@@ -175,10 +179,11 @@ export function PolicyList({ policy, snapshot, announce }: { policy: Policy; sna
                 <div className="pl-act">
                   {asking ? (
                     <>
-                      <button type="button" className="pbtn" data-cancel={k} disabled={deleting} onClick={() => cancelConfirm(k)}>
+                      {/* disabled는 포커스를 body로 떨어뜨린다(d09c91d §4.3). 이중 전송은 deletingRef가 막는다 */}
+                      <button type="button" className="pbtn" data-cancel={k} aria-disabled={deleting || undefined} onClick={() => !deleting && cancelConfirm(k)}>
                         {LIST_TEXT.cancel}
                       </button>
-                      <button type="button" className="pbtn pbtn--deny" disabled={deleting} onClick={() => void del(k)}>
+                      <button type="button" className="pbtn pbtn--deny" aria-disabled={deleting || undefined} aria-busy={deleting || undefined} onClick={() => void del(k)}>
                         {deleting ? LIST_TEXT.deleting : LIST_TEXT.del}
                       </button>
                     </>

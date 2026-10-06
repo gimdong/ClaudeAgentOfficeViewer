@@ -405,6 +405,8 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .ap-chip { border-color: var(--policy); color: var(--policy); }
 .ap-title { overflow-wrap: anywhere; }
 .ap-scope { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+/* 한글 문장 줄은 단어 단위로 꺾는다(B105, d09c91d). 제목(.ap-title)·이름(.pl-name)은 anywhere만 */
+.ap-scope, .ap-note, .ap-help, .ap-line, .pl-limit, .pl-sum, .pl-empty, .pl-err, .pl-name-err, .pl-limit-note { word-break: keep-all; overflow-wrap: anywhere; }
 .ap-notes { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .ap-notes p { margin: 0; }
 .ap-note { font-family: var(--font-text); font-size: 13px; color: var(--ink); border-left: 2px solid var(--policy); padding-left: 10px; }
@@ -419,7 +421,8 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .ap-subbtn span { overflow: hidden; text-overflow: ellipsis; }
 /* 권한 칸 한 줄: 행과 열을 모두 적는다(FB-6) */
 .pr-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px 84px 52px; grid-template-rows: auto; column-gap: 4px; align-items: center; margin: 0; padding: 4px 0; border: 0; min-width: 0; }
-.pr-row.changed { box-shadow: inset 2px 0 0 var(--yellow); padding-left: 6px; }
+.pr-row.changed { box-shadow: inset 2px 0 0 var(--yellow); }
+.pr-row.changed .pr-name { padding-left: 6px; }
 .pr-row--all { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--desk); }
 .pr-name { grid-column: 1; grid-row: 1; font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
 .pr-opt--default { grid-column: 2; grid-row: 1; }
@@ -461,7 +464,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .pl-rows { list-style: none; margin: 0; padding: 0; }
 .pl-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: auto auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 8px 10px; border: 2px solid var(--desk); margin-bottom: 4px; }
 .pl-row.confirm { border-color: var(--pink); }
-.pl-name { grid-column: 1; grid-row: 1; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.pl-name { grid-column: 1; grid-row: 1; margin: 0; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .pl-label { font-family: var(--font-text); font-size: 13px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
 .pl-name .rp-chip { font-size: 11px; }
 .pl-gone { font-size: 10px; color: var(--muted); }

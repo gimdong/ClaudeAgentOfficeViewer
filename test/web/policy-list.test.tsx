@@ -172,6 +172,26 @@ describe("목록 서랍(§4)", () => {
     expect(status()).toBe("ghost 권한 정책을 지웠습니다");
   });
 
+  it("지우는 중의 버튼은 disabled가 아니라 aria-disabled·aria-busy이고 요청은 한 번(d09c91d §4.3)", async () => {
+    let finish!: (v: unknown) => void;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (!String(url).startsWith("/api/policy")) return { ok: true, status: 200, json: async () => DIAG };
+      await new Promise((r) => (finish = r));
+      return { ok: true, status: 200, json: async () => ({ saved: true }) };
+    });
+    show(snap({ targets: { "agent:ghost": { bash: "deny" } } }));
+    render(<App />);
+    openList();
+    fireEvent.click(within(row("ghost")).getByRole("button", { name: "ghost 정책 지우기" }));
+    fireEvent.click(within(row("ghost")).getByRole("button", { name: "지우기" }));
+    const btn = within(row("ghost")).getByRole("button", { name: LIST_TEXT.deleting }) as HTMLButtonElement;
+    expect([btn.disabled, btn.getAttribute("aria-disabled"), btn.getAttribute("aria-busy")]).toEqual([false, "true", "true"]);
+    fireEvent.click(btn);
+    await act(async () => finish(null));
+    await flush();
+    expect(policyCalls()).toHaveLength(1);
+  });
+
   it("리드·그 밖의 모든을 지울 때는 다른 확인 문구", () => {
     show(snap({ targets: { lead: { bash: "deny" } } }));
     render(<App />);

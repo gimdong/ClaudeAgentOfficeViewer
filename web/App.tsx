@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityBubble } from "./bubble/ActivityBubble";
 import { useBubble } from "./bubble/useBubble";
 import { Building } from "./building/Building";
@@ -64,11 +64,12 @@ export function App() {
   useBudgetAlarm(snapshot, announce);
   // 서랍은 한 번에 하나(디자인 phase3 §7.1): 새로 연 쪽이 다른 쪽을 포커스 되돌림 없이 닫는다
   const policyOpen = policy.open !== null;
-  useEffect(() => {
+  // 레이아웃 단계에서 닫아 두 서랍이 한 프레임도 함께 그려지지 않게 한다(B105)
+  useLayoutEffect(() => {
     if (d.openId !== null) policy.close(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.openId]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (policyOpen) d.close(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policyOpen, policy.open]);

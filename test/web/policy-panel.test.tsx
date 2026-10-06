@@ -211,10 +211,56 @@ describe("편집과 저장", () => {
     fireEvent.click(radio("명령 실행", "금지"));
     fireEvent.click(saveBtn());
     expect(saveBtn().textContent).toBe("저장하는 중…");
-    expect((saveBtn() as HTMLButtonElement).disabled).toBe(true);
+    // disabled는 실제 브라우저에서 포커스를 body로 떨어뜨린다(B105). aria-disabled + aria-busy, 이중 전송은 ref가 막는다
+    expect((saveBtn() as HTMLButtonElement).disabled).toBe(false);
+    expect(saveBtn().getAttribute("aria-disabled")).toBe("true");
+    expect(saveBtn().getAttribute("aria-busy")).toBe("true");
     fireEvent.click(saveBtn());
     await flush();
     expect(policyCalls()).toHaveLength(1);
+  });
+
+  it("값을 되돌려 바꾼 것이 없어지면 그 사이 바뀐 서버 값을 따라간다(B105)", () => {
+    show(snap({ targets: { "agent:reviewer": { web: "ask" } } }));
+    const { rerender } = render(<App />);
+    openDesk("reviewer");
+    fireEvent.click(radio("명령 실행", "금지"));
+    show(snap({ targets: { "agent:reviewer": { web: "deny" } } }));
+    rerender(<App />);
+    expect(checkedOf("웹 접근")).toBe("ask"); // 바꾸는 중에는 덮지 않는다
+    fireEvent.click(radio("명령 실행", "기본"));
+    expect(checkedOf("웹 접근")).toBe("deny");
+    expect(panel().textContent).not.toContain(TEXT.unsaved);
+  });
+
+  it("저장 직후 아직 예전 스냅샷이어도 방금 저장한 값이 그대로다", async () => {
+    show(snap());
+    render(<App />);
+    openDesk("reviewer");
+    fireEvent.click(radio("명령 실행", "금지"));
+    fireEvent.click(saveBtn());
+    await flush();
+    expect(checkedOf("명령 실행")).toBe("deny");
+    expect(panel().textContent).toContain("저장했습니다");
+  });
+
+  it("저장 중에 닫으면 버렸다고 알리지 않는다(B105)", async () => {
+    let finish!: (v: unknown) => void;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (!String(url).startsWith("/api/policy")) return { ok: true, status: 200, json: async () => DIAG };
+      await new Promise((r) => (finish = r));
+      return { ok: true, status: 200, json: async () => ({ saved: true }) };
+    });
+    show(snap());
+    render(<App />);
+    openDesk("reviewer");
+    fireEvent.click(radio("명령 실행", "금지"));
+    fireEvent.click(saveBtn());
+    fireEvent.click(within(panel()).getByRole("button", { name: "닫기" }));
+    expect(status()).not.toBe(TEXT.discarded);
+    await act(async () => finish(null));
+    await flush();
+    expect(status()).toBe("reviewer 권한 정책을 저장했습니다");
   });
 
   it("편집 중에 스냅샷이 다시 와도 고른 값이 그대로다", async () => {
