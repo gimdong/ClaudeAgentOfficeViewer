@@ -15,6 +15,7 @@ describe("resolvePaths", () => {
       staticDir: resolve("/x/app/app/web"),
       tokenFile: resolve("/p/token"),
       stateFile: resolve("/p/state.json"),
+      policyFile: resolve("/p/policy.json"),
     });
   });
 
@@ -27,6 +28,7 @@ describe("resolvePaths", () => {
       staticDir: resolve("/repo/dist/web"),
       tokenFile: resolve("/repo/.logs/token"),
       stateFile: resolve("/repo/.logs/state.json"),
+      policyFile: resolve("/repo/.logs/policy.json"),
     });
   });
 
@@ -39,5 +41,10 @@ describe("resolvePaths", () => {
     expect(resolvePaths({ moduleUrl: url("/x/app/app/server.mjs"), env: { CLAUDE_OFFICE_PREFIX: "/p" } })).toMatchObject({ tokenFile: resolve("/p/token"), stateFile: resolve("/p/state.json") });
     // 개발 모드는 --log-dir를 줘도 토큰·상태 파일은 저장소 .logs에 둔다(시험이 고른 임시 로그 폴더와 섞이지 않게)
     expect(resolvePaths({ moduleUrl: url("/repo/server/index.ts"), env: {}, logDir: "/tmp/x" })).toMatchObject({ tokenFile: resolve("/repo/.logs/token"), stateFile: resolve("/repo/.logs/state.json") });
+  });
+
+  it("policyFile은 설치본이면 prefix 아래, 개발이면 .logs 아래이고 --log-dir를 따라가지 않는다", () => {
+    expect(resolvePaths({ moduleUrl: url("/x/app/app/server.mjs"), env: { CLAUDE_OFFICE_PREFIX: "/p" }, logDir: "/elsewhere" }).policyFile).toBe(resolve("/p/policy.json"));
+    expect(resolvePaths({ moduleUrl: url("/repo/server/index.ts"), env: {}, logDir: "/tmp/x" }).policyFile).toBe(resolve("/repo/.logs/policy.json"));
   });
 });

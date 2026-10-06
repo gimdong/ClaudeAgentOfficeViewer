@@ -180,9 +180,11 @@ switch ($cmd) {
     Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "bin")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "VERSION")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "사용설명서.html")
-    # token(대시보드 열쇠)과 state.json(층 예산)도 프로그램 파일로 함께 지운다(sh와 같음, 요약 문구는 그대로)
+    # token(대시보드 열쇠), state.json(층 예산), policy.json(권한 정책)과 그 .broken도 프로그램 파일로 함께 지운다(sh와 같음, 요약 문구는 그대로)
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "token")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "state.json")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json.broken")
 
     $removeLogs = & $ask_u "로그와 진단 파일도 지울까요?"
     if ($removeLogs) {

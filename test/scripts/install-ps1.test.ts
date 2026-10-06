@@ -443,6 +443,12 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     expect(text).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "state.json")');
   });
 
+  it("제거 절에 policy.json과 policy.json.broken을 지우는 줄이 있다", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    expect(text).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json")');
+    expect(text).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json.broken")');
+  });
+
   it("Phase 2 문구가 sh·ps1에서 글자까지 같다(설치 질문, 토큰 로그, 열기 실패 안내)", () => {
     const installSh = readFileSync(join(ROOT, "packaging/install.sh"), "utf8");
     const launcherSh = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8");

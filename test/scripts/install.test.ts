@@ -1088,6 +1088,59 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
   });
 });
 
+describe("Phase 3 정책 파일 — 설치·재설치·제거", () => {
+  it("설치는 policy.json을 만들지 않는다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      expect(existsSync(join(prefix, "policy.json"))).toBe(false);
+      expect(existsSync(join(prefix, "policy.json.broken"))).toBe(false);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("다시 설치해도 policy.json과 policy.json.broken의 내용이 그대로다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      const policy = '{"version":1,"targets":{"agent:fake":{"bash":"deny"}}}';
+      const broken = "{broken";
+      writeFileSync(join(prefix, "policy.json"), policy);
+      writeFileSync(join(prefix, "policy.json.broken"), broken);
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      expect(readFileSync(join(prefix, "policy.json"), "utf8")).toBe(policy);
+      expect(readFileSync(join(prefix, "policy.json.broken"), "utf8")).toBe(broken);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("제거하면 policy.json과 policy.json.broken이 지워지고 요약 문구는 그대로다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(join(prefix, "policy.json"), "{}");
+      writeFileSync(join(prefix, "policy.json.broken"), "{broken");
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input: "n\nn\n" });
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(prefix, "policy.json"))).toBe(false);
+      expect(existsSync(join(prefix, "policy.json.broken"))).toBe(false);
+      expect(existsSync(join(prefix, "logs"))).toBe(true); // 로그는 남겼다
+      const summary = r.stdout.split("\n").filter((l) => /^(지움|남김): /.test(l));
+      expect(summary).toEqual(["지움: 프로그램 파일", "남김: 플러그인, logs, diagnostics"]);
+    } finally {
+      rig.cleanup();
+    }
+  });
+});
+
 // ───────── B65: 파이프로 답했는데 "아니오로 처리" 안내가 나오던 버그 ─────────
 // 안내는 읽기가 EOF로 실패해서 아니오가 됐을 때만 나와야 한다(실제로 y나 n을 읽었으면 안 나온다)
 describe("FB-1 안내는 입력이 끊겨(EOF) 아니오가 됐을 때만(Ruling B65)", () => {
