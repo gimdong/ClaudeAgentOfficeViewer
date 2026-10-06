@@ -269,7 +269,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .dp-row--ok { grid-template-columns: 16px 1fr auto; padding: 4px 10px; border-color: transparent; background: #15132a; }
 .dp-row--ok svg { color: var(--green); }
 .dp-row--ok .t { color: var(--muted); }
-.dp-row--ok .d { grid-column: auto; grid-row: 1; justify-self: end; }
+.dp-row--ok .d { grid-column: auto; grid-row: 1; justify-self: end; white-space: nowrap; } /* auto 열은 min-content로 줄어 한글이 한 글자씩 꺾인다("버전 24") */
 .dp-note { margin: 0 0 10px; font-family: var(--font-text); font-size: 13px; line-height: 1.6; color: var(--muted); }
 /* 패널 안 버튼은 시안 값(높이 36, 13px). Phase 1의 .pbtn(28px)은 그대로 둔다 */
 .diag-panel .pbtn { justify-content: center; height: 36px; padding: 0 16px; font-size: 13px; text-decoration: none; }
