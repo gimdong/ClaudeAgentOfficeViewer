@@ -60,7 +60,7 @@ export function App() {
   const { text: announceText, n: announceN, announce } = useLiveRegion(useDecisionAnnouncer(snapshot));
   const { target, handlers } = useBubble();
   const d = useDecisions(snapshot);
-  const policy = usePolicy(snapshot);
+  const policy = usePolicy();
   useBudgetAlarm(snapshot, announce);
   // 서랍은 한 번에 하나(디자인 phase3 §7.1): 새로 연 쪽이 다른 쪽을 포커스 되돌림 없이 닫는다
   const policyOpen = policy.open !== null;

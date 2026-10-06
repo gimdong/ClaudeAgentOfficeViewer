@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DecisionView, Member, PolicyRules, Snapshot } from "../../src/shared/types";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
-import { isTargetKey } from "../../server/policy/store";
+import { MAX_TARGETS as SERVER_MAX_TARGETS, isTargetKey } from "../../server/policy/store";
+import { MAX_TARGETS } from "../../web/policy/PolicyList";
 
 const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: true, unauthorized: false, markUnauthorized: () => {} } }));
 vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import("../../web/useSnapshot")>()), useSnapshot: () => state.value }));
@@ -224,6 +225,10 @@ describe("목록 서랍(§4)", () => {
     fireEvent.click(within(document.getElementById("agent-panel")!).getByRole("button", { name: "닫기" }));
     openList();
     expect(document.activeElement?.id).toBe("pl-title");
+  });
+
+  it("화면의 대상 상한은 서버 MAX_TARGETS와 같다(B112)", () => {
+    expect(MAX_TARGETS).toBe(SERVER_MAX_TARGETS);
   });
 
   it("parseNewTarget은 서버 isTargetKey와 같은 규칙이다(B106)", () => {

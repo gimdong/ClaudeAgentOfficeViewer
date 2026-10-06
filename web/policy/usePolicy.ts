@@ -1,5 +1,5 @@
 import { createContext, useCallback, useRef, useState } from "react";
-import type { PolicyRules, Snapshot } from "../../src/shared/types";
+import type { PolicyRules } from "../../src/shared/types";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 
 export type SaveResult = "saved" | "not-persisted" | "limit" | "invalid" | "failed";
@@ -28,7 +28,7 @@ async function request(method: "PUT" | "DELETE", target: string, body: object): 
  * 에이전트 패널·정책 목록 서랍의 상태(디자인 phase3 §1·§7). 화면 데이터는 스냅샷만 쓴다(Ruling B77) —
  * 저장 뒤에 따로 상태를 들지 않는다. 연 요소를 기억해 닫을 때 포커스를 돌려준다
  */
-export function usePolicy(_snapshot: Snapshot | null) {
+export function usePolicy() {
   const [open, setOpen] = useState<PolicyOpen>(null);
   const opener = useRef<HTMLElement | null>(null);
   /** 목록의 [고치기]로 연 대상. ‹로 목록에 돌아오면 그 행의 [고치기]에 포커스를 둔다(§7.2) */

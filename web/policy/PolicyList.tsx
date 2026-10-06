@@ -6,7 +6,8 @@ import { Icon } from "../pixel/Icon";
 import { LIST_TEXT, TEXT, kindLabel, parseNewTarget, summaryOf, targetKeyOf, targetLabel } from "./text";
 import type { Policy } from "./usePolicy";
 
-const MAX_TARGETS = 200;
+/** 서버 server/policy/store.ts의 MAX_TARGETS와 같다(테스트로 맞춘다) */
+export const MAX_TARGETS = 200;
 const ko = (a: string, b: string) => a.localeCompare(b, "ko");
 /** data-<attr>가 대상 키인 요소(키에 따옴표·대괄호가 있어도 되게 선택자를 만들지 않는다) */
 const byData = (root: HTMLElement, attr: string, key: string) =>
