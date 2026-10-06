@@ -328,7 +328,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const found = [...html.matchAll(/\d+\.\d+\.\d+-(?:beta\.\d+|dev)/g)].map((m) => m[0]);
     expect(found.length).toBeGreaterThan(5); // 파일 이름·폴더 이름·상단 표기
     expect(new Set(found)).toEqual(new Set([version]));
-    expect(html).toContain(`개발 버전 ${version}`);
+    expect(html).toContain(`베타 버전 ${version}`);
     expect(html).toContain(`claude-office-${version}.tar.gz`);
     expect(html).toContain(`claude-office-${version}.zip`);
   });
