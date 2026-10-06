@@ -85,13 +85,13 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
   });
 
-  it("designer 그림(베타 11개 + Phase 2 10개)이 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
+  it("designer 그림(베타 11개 + Phase 2 10개 + Phase 3 5개)이 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
     const ids = [...html.matchAll(/<figure class="fig" data-fig="([\w-]+)">\s*(?:<!--[\s\S]*?-->\s*)?<svg /g)].map((m) => m[1]).sort();
     expect(ids).toEqual(
       [
         "fig-budget-alarm", "fig-budget-bar", "fig-budget-settings", "fig-decision-report", "fig-decision-result", "fig-diag-chip-panel", "fig-diag-file",
         "fig-err-401", "fig-err-already-answered", "fig-err-managed", "fig-err-no-browser", "fig-err-nobubble", "fig-err-node", "fig-err-offline", "fig-err-port",
-        "fig-first-screen", "fig-install-ok", "fig-overview", "fig-plan-report", "fig-question-answer", "fig-screen-guide",
+        "fig-first-screen", "fig-install-ok", "fig-overview", "fig-plan-report", "fig-policy-list", "fig-policy-lock", "fig-policy-panel", "fig-policy-report", "fig-policy-unreadable", "fig-question-answer", "fig-screen-guide",
       ],
     );
     expect(html).not.toMatch(/<!-- FIG2?\(fig-/);
@@ -100,9 +100,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(dup).toEqual([]);
   });
 
-  it("그림이 designer 원본 SVG와 같다(같은 이름이면 Phase 2판이 우선)", () => {
+  it("그림이 designer 원본 SVG와 같다(같은 이름이면 나중 Phase판이 우선)", () => {
     const pick = new Map<string, string>();
-    for (const d of ["beta", "phase2"]) {
+    for (const d of ["beta", "phase2", "phase3"]) {
       const dir = join(__dirname, `../../docs/design/${d}/manual-figures`);
       for (const f of readdirSync(dir).filter((n) => n.endsWith(".svg"))) pick.set(f, join(dir, f));
     }
@@ -680,7 +680,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(s5).toContain(`<code>정책으로 막힘: ${GROUP_LABEL.bash}</code>`);
       expect(s5).toContain("지금 하는 일 대신");
       expect(read("server/policy/gate.ts")).toContain("export const POLICY_DENIED_SHOW_MS = 30_000;");
-      expect(s5).toContain("30초 동안 자물쇠가 분홍색으로 바뀌고 오른쪽에 <strong>느낌표</strong>가 붙습니다");
+      expect(s5).toContain("30초 동안 자물쇠가 분홍색으로 바뀌고 자물쇠 옆에 <strong>느낌표</strong>가 붙습니다"); // 방향은 적지 않는다(B108로 왼쪽으로 옮겨짐)
+      expect(s5).not.toContain("오른쪽에 <strong>느낌표</strong>");
       expect(s5).not.toContain("자물쇠가 30초 동안 분홍색이 되고");
       const why = "권한 정책이 매번 확인하도록 정해 둔 도구입니다";
       expect(read("web/report/text.ts")).toContain(`return "${why}"`);
