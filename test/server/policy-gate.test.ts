@@ -274,6 +274,9 @@ describe("PolicyGate.preToolUse", () => {
     expect(Object.keys(g.counts()).length).toBeLessThanOrEqual(MAX_COUNT_KEYS);
     expect(g.countsOf("agent:t9999").denied).toBe(1);
     expect(g.totals().deny).toBe(10_000);
+    // 방금 막힘 표도 500개 상한(30초 안이라 시간 정리가 아니라 상한으로만 지워진다, B97)
+    expect(g.lastDenied("s1", "t0")).toBeUndefined();
+    expect(g.lastDenied("s1", "t9999")).toBeDefined();
   });
 
   it("ask 짝 찾기 기록도 상한이 있다(세션당 20건, 10초 지나면 지움, 세션 500개)", () => {

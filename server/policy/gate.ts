@@ -143,6 +143,7 @@ export class PolicyGate {
   }
 
   private apply(decision: PolicyValue, group: PolicyGroup, ruleGroup: PolicyGroup, a: AgentKey, logKind: TargetKind, sessionId: string, tool: string, input: Record<string, unknown>): object {
+    // 횟수를 응답보다 먼저 올린다 — 이 함수에는 던지는 지점이 없다(로거·onChange는 안에서 삼킨다, B97)
     const c = this.countBy.get(a.key) ?? { denied: 0, asked: 0 };
     if (decision === "deny") c.denied++;
     else c.asked++;

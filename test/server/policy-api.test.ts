@@ -316,3 +316,34 @@ describe("정책 API(스펙 7.4)", () => {
     expect(pokes).toBe(2);
   });
 });
+
+describe("PUT의 400 본문(B96·B97)", () => {
+  it("저장소가 invalid를 돌려주면 400 {}(reason 없음), limit일 때만 reason", async () => {
+    let reason: "invalid" | "limit" = "invalid";
+    const app = createApp(
+      { current: () => makeSnapshot(), subscribe: () => () => {} },
+      { policyApi: { all: () => ({ version: 1, targets: {} }), set: () => ({ ok: false, reason }), remove: () => ({ ok: true, saved: true }) } },
+    ).listen(0, "127.0.0.1");
+    await new Promise((r) => app.once("listening", r));
+    const p = (app.address() as AddressInfo).port;
+    const call = () =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const body = JSON.stringify({ rules: { bash: "deny" } });
+        const req = request({ host: "127.0.0.1", port: p, path: "/api/policy/targets/lead", method: "PUT", headers: { Host: `127.0.0.1:${p}`, "Content-Type": "application/json", "Content-Length": String(body.length) } }, (res) => {
+          let t = "";
+          res.on("data", (d) => (t += d));
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body: t }));
+        });
+        req.on("error", reject);
+        req.end(body);
+      });
+    try {
+      expect(await call()).toEqual({ status: 400, body: "{}" });
+      reason = "limit";
+      expect(await call()).toEqual({ status: 400, body: '{"reason":"limit"}' });
+    } finally {
+      app.closeAllConnections();
+      await new Promise((r) => app.close(r));
+    }
+  });
+});
