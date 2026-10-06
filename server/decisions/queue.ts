@@ -115,7 +115,7 @@ export class DecisionQueue {
   }
 
   /** PermissionRequest 입력과 그 응답을 붙잡는다. 상한을 넘으면 빈 200으로 놓아주고 null */
-  hold(input: Record<string, unknown>, res: HeldResponse, o: { kind?: "budget"; budget?: { budgetTokens: number; usedTokens: number } } = {}): DecisionView | null {
+  hold(input: Record<string, unknown>, res: HeldResponse, o: { kind?: "budget"; budget?: { budgetTokens: number; usedTokens: number }; policy?: true } = {}): DecisionView | null {
     if (this.pendingCount() >= MAX_PENDING) {
       res.status(200).end();
       return null;
@@ -138,6 +138,7 @@ export class DecisionQueue {
       ...(kind === "question" ? { questions: questionsOf(input.tool_input) } : {}),
       ...(kind === "plan" ? planOf(input.tool_input) : {}),
       ...(kind === "budget" && o.budget ? { budget: { ...o.budget } } : {}),
+      ...(kind === "permission" && o.policy ? { byPolicy: true as const } : {}),
       answerable: kind !== "plan", // Ruling B40: 계획은 보고서만
     };
     if (!this.sessionNo.has(sessionId)) this.sessionNo.set(sessionId, this.sessionNo.size + 1);

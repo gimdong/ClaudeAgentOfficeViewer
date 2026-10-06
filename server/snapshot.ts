@@ -16,6 +16,8 @@ import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, typ
 import { UsageCollector } from "./collectors/usage";
 import { errInfo, getLogger, warnCaught } from "./log";
 import { readLastEntry } from "./lib/jsonlTail";
+import { POLICY_DENIED_SHOW_MS, memberKeyOf, type PolicyGate } from "./policy/gate";
+import type { PolicyStore } from "./policy/store";
 
 export interface BuilderOptions {
   claudeHome: string;
@@ -27,6 +29,8 @@ export interface BuilderOptions {
   decisions?: Pick<DecisionQueue, "list">;
   /** 층 예산(Phase 2 스펙 5장). 빌드마다 사용량을 관문에 넣고 처음 본 세션을 저장소에 알린다 */
   budget?: { gate: Pick<BudgetGate, "setUsage" | "usage" | "view">; store: Pick<BudgetStore, "touch" | "defaultTokens"> };
+  /** 권한 정책(Phase 3 스펙 7.4). 구성원마다 걸린 규칙·횟수·방금 막힘을 싣고, 스냅샷에 정책 전체를 싣는다(Ruling B77) */
+  policy?: { store: Pick<PolicyStore, "resolve" | "all">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -66,6 +70,27 @@ function withEvents(m: Member, d: Derived | undefined, alive: boolean, said?: st
 function floorStatusOf(alive: boolean, members: Member[]): FloorStatus {
   if (!alive) return "ended";
   return members.some((m) => m.state === "working" || m.state === "decision") ? "working" : "idle";
+}
+
+/** 구성원에 정책 필드를 얹는다. 키는 hook 쪽과 같은 memberKeyOf로 만든다(Task 4) */
+function policyFields(
+  m: Member,
+  p: NonNullable<BuilderOptions["policy"]>,
+  sessionId: string,
+  now: number,
+  leadEvents?: ReadonlyMap<string, readonly { subType?: string }[]>,
+): Member {
+  const key = memberKeyOf(m.name, m.role === "lead");
+  const r = p.store.resolve(key);
+  const d = p.gate.lastDenied(sessionId, m.name);
+  const subTypes = leadEvents ? [...new Set((leadEvents.get("team-lead") ?? []).flatMap((e) => (e.subType ? [e.subType] : [])))].sort() : [];
+  return {
+    ...m,
+    // 이름이 대상 이름 규칙에 안 맞으면 키가 "others"다 — 그 구성원에게는 "그 밖의 모든"을 따르는 것이다
+    ...(r ? { policy: { source: key === "others" ? "others" : r.source, rules: { ...r.rules }, ...p.gate.countsOf(key) } } : {}),
+    ...(d && now - d.at <= POLICY_DENIED_SHOW_MS ? { policyDenied: { group: d.group, at: new Date(d.at).toISOString(), ...(d.subType ? { subType: d.subType } : {}) } } : {}),
+    ...(subTypes.length ? { subTypes } : {}),
+  };
 }
 
 export class SnapshotBuilder {
@@ -141,7 +166,12 @@ export class SnapshotBuilder {
       ? decisions.filter((d) => d.state === "pending").length + teamItems.length
       : views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
 
-    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}) };
+    const p = this.opts.policy;
+    const targets = p?.store.all().targets ?? {};
+    const counts = p?.gate.counts() ?? {};
+    const policy = Object.keys(targets).length || Object.keys(counts).length ? { policy: { targets, counts } } : {};
+
+    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy };
   }
 
   private async sessionView(
@@ -235,6 +265,11 @@ export class SnapshotBuilder {
           at,
         ),
       );
+    }
+
+    const p = this.opts.policy;
+    if (p) {
+      for (let i = 0; i < members.length; i++) members[i] = policyFields(members[i], p, s.sessionId, now, i === 0 ? agents : undefined);
     }
 
     return {

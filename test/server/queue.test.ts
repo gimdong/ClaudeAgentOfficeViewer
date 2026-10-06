@@ -559,3 +559,26 @@ describe("DecisionQueue.onEvent(B70)", () => {
     }
   });
 });
+
+describe("정책 표시(Phase 3 Ruling B84)", () => {
+  it("hold(…, { policy: true })의 view에 byPolicy: true, 종류는 permission", () => {
+    q = new DecisionQueue();
+    const v = q.hold(req("Bash", { command: "ls" }), fakeRes(), { policy: true })!;
+    expect(v.kind).toBe("permission");
+    expect(v.byPolicy).toBe(true);
+    expect(q.list()[0].byPolicy).toBe(true);
+  });
+
+  it("인자가 없으면 byPolicy 키가 없다", () => {
+    q = new DecisionQueue();
+    const v = q.hold(req("Bash", { command: "ls" }), fakeRes())!;
+    expect("byPolicy" in v).toBe(false);
+  });
+
+  it("budget과 함께 오면 kind: budget이고 byPolicy는 싣지 않는다", () => {
+    q = new DecisionQueue();
+    const v = q.hold(req("Bash", { command: "ls" }), fakeRes(), { kind: "budget", budget: { budgetTokens: 1000, usedTokens: 1200 }, policy: true })!;
+    expect(v.kind).toBe("budget");
+    expect("byPolicy" in v).toBe(false);
+  });
+});

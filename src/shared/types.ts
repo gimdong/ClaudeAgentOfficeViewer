@@ -52,6 +52,8 @@ export interface DecisionView {
   /** plan이 4000자에서 잘렸다(Ruling B47) */
   planTruncated?: boolean;
   budget?: { budgetTokens: number; usedTokens: number };
+  /** 정책 ask로 뜬 권한 요청(Phase 3 Ruling B84). 종류는 permission 그대로 */
+  byPolicy?: true;
   /** false면 보고서만(팀원 요청, 보고서만으로 판정된 계획) */
   answerable: boolean;
 }
@@ -81,6 +83,12 @@ export interface Member {
   lastActivityAt?: string;
   activity?: Activity;
   decision?: Decision;
+  /** 이 구성원에게 걸린 권한 정책(Phase 3 스펙 7.4). 규칙이 없으면 싣지 않는다 */
+  policy?: MemberPolicy;
+  /** 30초 안의 마지막 정책 deny(Ruling B85) */
+  policyDenied?: PolicyDenied;
+  /** 리드만: 최근 이벤트에 보인 서브에이전트 종류(정렬, 중복 없음) */
+  subTypes?: string[];
 }
 
 export interface ContextInfo {
@@ -154,6 +162,8 @@ export interface Snapshot {
   decisions: DecisionView[];
   /** 새 층에 줄 예산 기본값. 없으면 기본값 없음 */
   defaultBudgetTokens?: number;
+  /** 권한 정책 전체와 켠 뒤로의 횟수(Ruling B77). 대상도 횟수도 없으면 싣지 않는다 */
+  policy?: PolicySnapshot;
 }
 
 // ───────── 진단(베타): 서버와 화면이 같이 쓴다 ─────────
@@ -169,3 +179,6 @@ export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView
 export type PolicyValue = "ask" | "deny";
 export type PolicyGroup = "bash" | "edit" | "web" | "agent" | "mcp" | "other" | "all";
 export type PolicyRules = Partial<Record<PolicyGroup, PolicyValue>>;
+export interface MemberPolicy { source: "own" | "others"; rules: PolicyRules; denied: number; asked: number }
+export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string }
+export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }> }

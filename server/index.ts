@@ -9,6 +9,8 @@ import { loadConfig } from "./config";
 import { BudgetGate } from "./budget/gate";
 import { BudgetStore } from "./budget/store";
 import { DecisionQueue, type DecisionStats } from "./decisions/queue";
+import { PolicyGate } from "./policy/gate";
+import { PolicyStore } from "./policy/store";
 import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
@@ -230,9 +232,12 @@ async function main(): Promise<void> {
   budgetStore.load();
   // 큐의 "계속" → 관문이 nextGateAt을 올리고, 관문은 같은 세션의 남은 예산 결정을 permission으로 바꾼다(Ruling B35)
   const gate = new BudgetGate(budgetStore, { demote: (id) => decisions.demoteBudget(id) });
+  const policyStore = new PolicyStore(paths.policyFile);
+  policyStore.load();
+  const policy = new PolicyGate(policyStore, { onChange: () => hub.poke() });
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events, decisions, budget: { gate, store: budgetStore } }), {
+  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy } }), {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
   });
@@ -268,7 +273,7 @@ async function main(): Promise<void> {
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token }, decisions, gate, budget }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token }, decisions, gate, budget, policy, policyApi: policyStore }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

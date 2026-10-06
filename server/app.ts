@@ -10,6 +10,9 @@ import { parseAnswer } from "./decisions/protocol";
 import type { DecisionQueue } from "./decisions/queue";
 import type { SnapshotHub } from "./hub";
 import { errInfo, getLogger } from "./log";
+import type { PolicyVerdict } from "./policy/gate";
+import { isTargetKey, parseRules, type PolicyFile, type SetResult } from "./policy/store";
+import type { PolicyRules } from "../src/shared/types";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -65,7 +68,7 @@ export function isSameOrigin(origin: string | undefined, host: string | undefine
 }
 
 export function createApp(
-  hub: Pick<SnapshotHub, "current" | "subscribe">,
+  hub: Pick<SnapshotHub, "current" | "subscribe"> & Partial<Pick<SnapshotHub, "poke">>,
   opts: {
     staticDir?: string;
     heartbeatMs?: number;
@@ -79,6 +82,10 @@ export function createApp(
     gate?: BudgetGateHooks;
     /** PUT /api/budget(스펙 5.4). sessionId가 없으면 새 층 기본값. 값 검사는 라우트가 한다 */
     budget?: { set(sessionId: string | undefined, budgetTokens: number | null): void };
+    /** 권한 정책 관문(Phase 3 스펙 6장). 메모리 값만 보는 동기 판정 */
+    policy?: { preToolUse(input: Record<string, unknown>): PolicyVerdict | null; claim(input: Record<string, unknown>): boolean };
+    /** 정책 API(스펙 7.4). 바뀌면 hub.poke()로 스냅샷을 다시 만든다 */
+    policyApi?: { all(): PolicyFile; set(target: string, rules: PolicyRules): SetResult; remove(target: string): { ok: true; saved: boolean } };
   } = {},
 ): Express {
   const app = express();
@@ -125,6 +132,26 @@ export function createApp(
       }
       const input = body as Record<string, unknown>;
       opts.stats?.accept(input.hook_event_name as string);
+      const isPre = input.hook_event_name === "PreToolUse";
+      // 정책 판정(스펙 6.2). 판정에서 예외가 나면 로그만 남기고 정책이 없는 것처럼 이어 간다(스펙 6.4)
+      let verdict: PolicyVerdict | null = null;
+      if (isPre) {
+        try {
+          verdict = opts.policy?.preToolUse(input) ?? null;
+        } catch (e) {
+          getLogger().error("policy", "check failed", { error: errInfo(e) });
+        }
+      }
+      // 1. 정책 deny: 즉시 답한다. 예산 관문·큐·이벤트 저장소를 거치지 않는다(막힌 호출이 "작업 중"으로 남지 않게, Ruling B79).
+      // respond()가 던지면 아래 단계로 그대로 내려간다(정책 오류가 도구를 막지 않는다)
+      if (verdict?.decision === "deny") {
+        try {
+          return void res.status(200).json(verdict.respond());
+        } catch (e) {
+          getLogger().error("policy", "deny failed", { error: errInfo(e) });
+          if (res.headersSent) return;
+        }
+      }
       try {
         opts.onHookEvent?.(input);
       } catch (e) {
@@ -138,18 +165,36 @@ export function createApp(
         getLogger().error("hooks", "decision event failed", { error: errInfo(e) });
       }
       try {
-        if (input.hook_event_name === "PreToolUse") {
+        if (isPre) {
+          // 2. 예산 관문이 정책 ask보다 먼저다 — 예산 ask는 뒤따르는 PermissionRequest가 예산 결정으로 짝지어져야 한다(B48)
           const out = opts.gate?.preToolUse(input);
           if (out) return void res.status(200).json(out);
         } else if (input.hook_event_name === "PermissionRequest" && opts.decisions) {
           const budget = opts.gate?.claim(input);
+          let byPolicy = false;
+          if (!budget) {
+            try {
+              byPolicy = opts.policy?.claim(input) ?? false;
+            } catch (e) {
+              getLogger().error("policy", "claim failed", { error: errInfo(e) });
+            }
+          }
           // 붙잡은 응답에는 큐만 쓴다(대시보드 답, 590초 빈 200, 상한 초과 빈 200)
-          opts.decisions.hold(input, res, budget ? { kind: "budget", budget } : undefined);
+          opts.decisions.hold(input, res, budget ? { kind: "budget", budget } : byPolicy ? { policy: true } : undefined);
           return;
         }
       } catch (e) {
         getLogger().error("hooks", "decision handling failed", { error: errInfo(e) });
         if (res.headersSent) return;
+      }
+      // 3. 정책 ask
+      if (verdict?.decision === "ask") {
+        try {
+          return void res.status(200).json(verdict.respond());
+        } catch (e) {
+          getLogger().error("policy", "ask failed", { error: errInfo(e) });
+          if (res.headersSent) return;
+        }
       }
       res.status(200).end();
     },
@@ -281,6 +326,52 @@ export function createApp(
       },
     );
     app.use("/api/budget", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(err.status === 413 ? 413 : 400).json({});
+    });
+  }
+
+  if (opts.policyApi) {
+    const policy = opts.policyApi;
+    const sameOrigin = (req: express.Request, res: express.Response, next: express.NextFunction) =>
+      isSameOrigin(req.headers.origin, req.headers.host) ? next() : void res.status(403).end();
+    // req.params는 Express가 디코드한 값이다. 퍼센트 인코딩이 깨졌으면 Express가 400 오류를 넘기고 아래 오류 처리가 받는다
+    const targetOf = (req: express.Request): string | null => (isTargetKey(req.params.target) ? (req.params.target as string) : null);
+    const changed = () => {
+      try {
+        hub.poke?.();
+      } catch (e) {
+        getLogger().error("policy", "poke failed", { error: errInfo(e) });
+      }
+    };
+    app.get("/api/policy", (_req, res) => {
+      res.json(policy.all());
+    });
+    app.put(
+      "/api/policy/targets/:target",
+      sameOrigin,
+      (req, res, next) => (req.is("application/json") ? next() : void res.status(415).end()),
+      express.json({ limit: "4kb", type: () => true }),
+      (req, res) => {
+        const target = targetOf(req);
+        const b = req.body as unknown;
+        const ok = !!b && typeof b === "object" && !Array.isArray(b) && Object.keys(b).length === 1 && Object.hasOwn(b, "rules");
+        const rules = ok ? parseRules((b as { rules: unknown }).rules) : null;
+        if (!target || !rules) return void res.status(400).json({});
+        const r = policy.set(target, rules);
+        // 상한 초과는 화면이 상한 안내를 보이게 이유를 싣는다(Ruling B95). 그 밖의 400에는 싣지 않는다
+        if (!r.ok) return void res.status(400).json({ reason: r.reason });
+        changed();
+        res.status(200).json({ saved: r.saved });
+      },
+    );
+    app.delete("/api/policy/targets/:target", sameOrigin, (req, res) => {
+      const target = targetOf(req);
+      if (!target) return void res.status(400).json({});
+      const r = policy.remove(target);
+      changed();
+      res.status(200).json({ saved: r.saved });
+    });
+    app.use("/api/policy", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(err.status === 413 ? 413 : 400).json({});
     });
   }

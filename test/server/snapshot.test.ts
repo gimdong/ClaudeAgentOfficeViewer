@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { utimes } from "node:fs/promises";
+import { mkdtemp, rm, utimes } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
 import { DecisionQueue, RESOLVED_KEEP_MS, type HeldResponse } from "../../server/decisions/queue";
 import { HOLD_MS } from "../../server/decisions/protocol";
 import { EventStore } from "../../server/events/store";
 import { getLogger } from "../../server/log";
+import { PolicyGate } from "../../server/policy/gate";
+import { PolicyStore } from "../../server/policy/store";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
 
 const NOW = Date.now();
@@ -337,5 +340,105 @@ describe("SnapshotBuilder + 결정 큐(Phase 2, Ruling B28·B40)", () => {
     const text = JSON.stringify(await build());
     expect(text).not.toContain("RAW-SECRET-LIKE");
     expect(text.length).toBeLessThan(50_000);
+  });
+});
+
+describe("SnapshotBuilder + 권한 정책(Phase 3 스펙 7.4)", () => {
+  const T = NOW;
+  let dir: string;
+  let store: PolicyStore;
+  let gate: PolicyGate;
+  let clock: number;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "co-snap-policy-"));
+    store = new PolicyStore(join(dir, "policy.json"));
+    store.load();
+    clock = T;
+    gate = new PolicyGate(store, { now: () => clock });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+  const build = (events?: EventStore) =>
+    new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, ...(events ? { events } : {}), policy: { store, gate } }).build(T);
+  const pre = (o: Record<string, unknown>) => ({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Bash", tool_input: { command: "FAKE-CMD-123" }, ...o });
+  const member = (snap: Awaited<ReturnType<typeof build>>, name: string) => snap.sessions.find((s) => s.id === "s1")!.members.find((m) => m.name === name)!;
+
+  it("(a) lead에 규칙이 있으면 리드 member에 policy", async () => {
+    await seed();
+    store.set("lead", { bash: "ask" });
+    gate.preToolUse(pre({}))?.respond();
+    const snap = await build();
+    expect(member(snap, "team-lead").policy).toEqual({ source: "own", rules: { bash: "ask" }, denied: 0, asked: 1 });
+  });
+
+  it("(b) others만 있으면 팀원은 source: others, 리드에는 policy가 없다", async () => {
+    await seed();
+    store.set("others", { web: "deny" });
+    const snap = await build();
+    expect(member(snap, "developer").policy).toEqual({ source: "others", rules: { web: "deny" }, denied: 0, asked: 0 });
+    expect("policy" in member(snap, "team-lead")).toBe(false);
+  });
+
+  it("(c) 규칙이 없으면 policy 키 자체가 없다", async () => {
+    await seed();
+    store.set("agent:reviewer", { bash: "deny" });
+    const snap = await build();
+    expect("policy" in member(snap, "developer")).toBe(false);
+    expect("policyDenied" in member(snap, "developer")).toBe(false);
+    expect(member(snap, "reviewer").policy?.source).toBe("own");
+  });
+
+  it("(d) 30초 안의 deny는 policyDenied, 서브에이전트면 리드에 subType과 함께", async () => {
+    await seed();
+    store.set("agent:reviewer", { bash: "deny" });
+    store.set("sub:Explore", { edit: "deny" });
+    gate.preToolUse(pre({ agent_id: "areviewer-1", agent_type: "reviewer" }))?.respond();
+    gate.preToolUse(pre({ agent_id: "a1b2c3d4e5f6a7b8", agent_type: "Explore", tool_name: "Edit" }))?.respond();
+    let snap = await build();
+    expect(member(snap, "reviewer").policyDenied).toEqual({ group: "bash", at: new Date(T).toISOString() });
+    expect(member(snap, "reviewer").policy?.denied).toBe(1);
+    expect(member(snap, "team-lead").policyDenied).toEqual({ group: "edit", at: new Date(T).toISOString(), subType: "Explore" });
+    clock = T + 31_000;
+    snap = await build();
+    expect("policyDenied" in member(snap, "reviewer")).toBe(false);
+  });
+
+  it("(d2) 이름이 101자인 팀원이 others의 규칙으로 막히면 그 member의 policy.denied가 1이다", async () => {
+    const long = "가".repeat(101);
+    await seed();
+    await h.write("teams/t/config.json", { name: "t", leadSessionId: "s1", members: [{ name: "team-lead", agentType: "team-lead" }, { name: long, agentType: "general-purpose" }] });
+    store.set("others", { bash: "deny" });
+    gate.preToolUse(pre({ agent_id: "along-1", agent_type: long }))?.respond();
+    const snap = await build();
+    expect(member(snap, long).policy).toEqual({ source: "others", rules: { bash: "deny" }, denied: 1, asked: 0 });
+  });
+
+  it("(e) 리드의 subTypes는 이벤트에 보인 종류를 중복 없이 정렬해 싣고, 없으면 키가 없다", async () => {
+    await seed();
+    let snap = await build(new EventStore());
+    expect("subTypes" in member(snap, "team-lead")).toBe(false);
+    const events = new EventStore();
+    for (const t of ["Plan", "Explore", "Plan"]) events.add(pre({ agent_id: "a1b2c3d4e5f6a7b8", agent_type: t, tool_name: "Read", tool_input: {} }), T - 100);
+    snap = await build(events);
+    expect(member(snap, "team-lead").subTypes).toEqual(["Explore", "Plan"]);
+    expect("subTypes" in member(snap, "developer")).toBe(false);
+  });
+
+  it("(f) snapshot.policy는 { targets, counts }이고 대상도 횟수도 없으면 키가 없다", async () => {
+    await seed();
+    expect("policy" in (await build())).toBe(false);
+    store.set("lead", { bash: "deny" });
+    gate.preToolUse(pre({}))?.respond();
+    const snap = await build();
+    expect(snap.policy).toEqual({ targets: { lead: { bash: "deny" } }, counts: { lead: { denied: 1, asked: 0 } } });
+  });
+
+  it("(g) 스냅샷 JSON에 가짜 명령 원문이 없다", async () => {
+    await seed();
+    store.set("lead", { all: "deny" });
+    gate.preToolUse(pre({}))?.respond();
+    const text = JSON.stringify(await build());
+    expect(text.includes("FAKE-CMD-123")).toBe(false);
   });
 });
