@@ -448,7 +448,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .policy-chip:hover, .policy-chip[aria-expanded="true"] { border-color: var(--policy); }
 .policy-chip.unreadable, .policy-chip.unreadable:hover, .policy-chip.unreadable[aria-expanded="true"] { border-color: var(--red); }
 .pc-count { margin-left: 0; padding: 0 4px; font-size: 11px; color: var(--panel); background: var(--policy); }
-.pc-warn { color: var(--red); }
+.policy-chip .pc-warn { color: var(--red); }
 .pl .dp-head > .icon { width: 20px; height: 20px; color: var(--policy); }
 .pl-close { margin-left: auto; }
 .pl-unread { flex: none; display: grid; grid-template-columns: 16px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; row-gap: 2px; margin: 10px 14px 0; padding: 8px 10px; border: 2px solid var(--red); }
