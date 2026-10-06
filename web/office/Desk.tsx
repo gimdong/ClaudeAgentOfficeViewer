@@ -4,7 +4,7 @@ import type { BubbleHandlers } from "../bubble/types";
 import { stateLabel } from "../format";
 import { NEON, roleOf, shirtColor } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
-import { characterRows, QMARK, QRING, spriteRects } from "../pixel/sprites";
+import { characterRows, LOCK_DESK, LOCK_DESK_DENIED, QMARK, QRING, spriteRects } from "../pixel/sprites";
 import { remainingSeconds } from "../report/text";
 import { OpenDecisionContext } from "../report/useDecisions";
 import { targetKeyOf } from "../policy/text";
@@ -43,6 +43,10 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
   const shown: MemberState = paused && !decision ? "idle" : member.state;
   const working = member.state === "working" && !paused;
   const screenOn = (working || member.state === "mail" || decision) && !paused;
+  const denied = !!member.policyDenied;
+  const locked = !!member.policy || denied;
+  // 접근 이름 덧붙임(phase3 §8.7)
+  const marks = `${locked ? ", 권한 정책 있음" : ""}${denied ? ", 방금 정책으로 막힘" : ""}`;
 
   const svg = (
     <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
@@ -87,6 +91,12 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
           <rect x={14} y={14} width={4} height={1} fill={NEON.monitor} />
         </g>
       )}
+      {locked && (
+        // 자물쇠(phase3 §6.2): 오른쪽 위 (18, 3). 방금 막힘은 분홍 + 느낌표 한 줄을 붙인 다른 모양(§6.3)
+        <g data-testid="lock" className="lock" data-shape={denied ? "denied" : "normal"}>
+          <PixelSprite rects={spriteRects(denied ? LOCK_DESK_DENIED : LOCK_DESK, { x: denied ? NEON.pink : NEON.violet, a: NEON.monitor })} x={18} y={3} />
+        </g>
+      )}
       <rect x={15} y={17} width={2} height={2} fill={NEON.monitor} />
       <rect x={0} y={19} width={24} height={2} fill={NEON.desk} />
       <rect x={1} y={21} width={2} height={8} fill={NEON.deskDark} />
@@ -116,8 +126,9 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
         type="button"
         className={cls}
         data-testid={`desk-${member.name}`}
+        data-policy-key={targetKeyOf(member)}
         aria-haspopup="dialog"
-        aria-label={`${member.name}, 결정 필요. 결정 보고서 열기`}
+        aria-label={`${member.name}, 결정 필요${marks}. 결정 보고서 열기`}
         onClick={(e) => openDecision?.(decisionId, e.currentTarget)}
         {...handlers}
       >
@@ -139,7 +150,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
         data-testid={`desk-${member.name}`}
         data-policy-key={key}
         aria-haspopup="dialog"
-        aria-label={`${member.name}, ${decision ? "결정 필요" : stateLabel(member.state)}. 권한 정하기`}
+        aria-label={`${member.name}, ${decision ? "결정 필요" : stateLabel(member.state)}${marks}. 권한 정하기`}
         onClick={(e) => openPolicy(key, e.currentTarget)}
         {...handlers}
       >
@@ -158,7 +169,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
       data-testid={`desk-${member.name}`}
       tabIndex={0}
       role="img"
-      aria-label={decision ? `${member.name}, 결정 필요` : `${member.name}, ${stateLabel(member.state)}`}
+      aria-label={`${decision ? `${member.name}, 결정 필요` : `${member.name}, ${stateLabel(member.state)}`}${marks}`}
       {...handlers}
     >
       {svg}

@@ -99,6 +99,7 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
       <div className="ap-subs">
         {[...subTypes.map((t) => `sub:${t}`), "others"].map((k) => (
           <button key={k} type="button" className="pbtn ap-subbtn" title={targetLabel(k)} aria-label={`${targetLabel(k)} 권한 정하기`} onClick={() => goTo(k)}>
+            {targets[k] && <Icon name="lock" accent="#0e0d18" />}
             <span>{k === "others" ? targetLabel(k) : k.slice(4)}</span>
           </button>
         ))}

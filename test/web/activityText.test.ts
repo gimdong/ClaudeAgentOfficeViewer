@@ -143,3 +143,24 @@ describe("metaLine (디자인 7.1)", () => {
     expect(metaLine(m, T)).toBe(`토큰 0 · ${want}`);
   });
 });
+
+describe("정책으로 막힘(phase3 §6.3)", () => {
+  const at = new Date(T - 1000).toISOString();
+  it("policyDenied면 '정책으로 막힘: <묶음>'이고 decision: false, 아이콘 lock", () => {
+    expect(activityLine({ ...tool("Bash", "ls"), policyDenied: { group: "bash", at } })).toEqual({ icon: "lock", text: "정책으로 막힘: 명령 실행", decision: false, blocked: true });
+    expect(activityLine(member({ state: "idle", policyDenied: { group: "all", at } })).text).toBe("정책으로 막힘: 모든 도구");
+  });
+
+  it("결정 대기가 먼저다", () => {
+    const m = member({ state: "decision", decision: { kind: "permission", since: at }, policyDenied: { group: "bash", at } });
+    expect(activityLine(m).decision).toBe(true);
+  });
+
+  it("서브에이전트가 막혔으면 보조 줄 앞에 서브에이전트(종류)", () => {
+    const m = { ...member({ state: "idle", model: "m" }), policyDenied: { group: "edit" as const, at, subType: "Explore" } };
+    expect(metaLine(m, T)).toBe("서브에이전트(Explore) · m · 토큰 0");
+    // 도구 활동의 서브에이전트 앞머리와 겹치지 않는다
+    const both = { ...tool("Bash", "x", { sub: true, subType: "Plan" }), model: "m", policyDenied: { group: "edit" as const, at, subType: "Explore" } };
+    expect(metaLine(both, T)).toBe("서브에이전트(Explore) · m · 토큰 0 · 12초째");
+  });
+});

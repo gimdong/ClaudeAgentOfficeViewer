@@ -54,7 +54,11 @@ export function ActivityBubble({ target, sessions }: { target: BubbleTarget | nu
       style={place ? { left: place.left, top: place.top } : { left: -9999, top: 0 }}
     >
       <div className="line">
-        <Icon name={line.icon} ink={line.decision ? NEON.yellow : NEON.cyan} accent={line.decision ? NEON.yellow : NEON.green} />
+        {line.blocked ? (
+          <Icon name="lock" ink={NEON.pink} accent="#0e0d18" />
+        ) : (
+          <Icon name={line.icon} ink={line.decision ? NEON.yellow : NEON.cyan} accent={line.decision ? NEON.yellow : NEON.green} />
+        )}
         <span className="text">{line.text}</span>
       </div>
       <div className="meta">{meta}</div>

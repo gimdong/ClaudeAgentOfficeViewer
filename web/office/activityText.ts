@@ -1,6 +1,7 @@
 import type { DecisionKind, Member } from "../../src/shared/types";
 import { formatTokens } from "../format";
 import type { IconName } from "../pixel/sprites";
+import { GROUP_LABEL } from "../policy/text";
 
 /** 「」 안 값의 최대 글자 수(디자인 7.3) */
 export const CLIP = 28;
@@ -46,6 +47,8 @@ export interface Line {
   text: string;
   /** 결정 대기 문장이면 말풍선 테두리를 노랑으로 바꾼다 */
   decision: boolean;
+  /** 정책으로 막힘(phase3 §6.3): 아이콘을 분홍 자물쇠로. 테두리는 그대로 */
+  blocked?: true;
 }
 
 // 조사가 받침에 따라 바뀌지 않도록 변하는 값은 「」로 감싸고 뒤에 고정 명사를 붙인다(디자인 7.2)
@@ -97,6 +100,8 @@ function toolLine(tool = "", target?: string): Line {
 /** 디자인 7.2 표. 우선순위: 결정 → 휴업 → 퇴근 → 도구 → activeForm → 메시지 → 마지막 문장 → 대기 */
 export function activityLine(m: Member, opts: { paused?: boolean } = {}): Line {
   if (m.state === "decision" && m.decision) return line("ask", `저는 지금 ${WAITING_FOR[m.decision.kind]} 기다리고 있습니다`, true);
+  // 결정 대기 다음이 정책으로 막힘(phase3 §6.3). 손은 들지 않는다(decision: false)
+  if (m.policyDenied) return { icon: "lock", text: `정책으로 막힘: ${GROUP_LABEL[m.policyDenied.group]}`, decision: false, blocked: true };
   if (opts.paused) return line("pause", "저는 지금 휴업 중이라 쉬고 있습니다");
   if (m.state === "offline") return line("wait", "저는 퇴근했습니다");
   const a = m.activity;
@@ -121,7 +126,9 @@ export function metaLine(m: Member, now: number): string {
   if (m.state === "offline") return "";
   const parts: string[] = [];
   // 디자인 7.1: 리드에 합친 서브에이전트가 한 일이면 앞머리에 "서브에이전트" 또는 "서브에이전트({agent_type})"
-  if (m.activity?.sub) parts.push(m.activity.subType ? `서브에이전트(${m.activity.subType})` : "서브에이전트");
+  // 정책으로 막힌 것이 서브에이전트면 그 종류를 앞머리로(phase3 §6.3). 도구 활동의 앞머리보다 먼저다
+  if (m.policyDenied?.subType) parts.push(`서브에이전트(${m.policyDenied.subType})`);
+  else if (m.activity?.sub) parts.push(m.activity.subType ? `서브에이전트(${m.activity.subType})` : "서브에이전트");
   if (m.model) parts.push(m.model);
   parts.push(`토큰 ${formatTokens(m.tokens.total)}`);
   if (m.activity && m.activity.kind !== "said") {

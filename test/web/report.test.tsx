@@ -566,6 +566,7 @@ describe("문구 함수", () => {
     expect(remaining(new Date(T0 + 5_000).toISOString(), T0)).toBe("0:05");
     expect(remaining(new Date(T0 - 5_000).toISOString(), T0)).toBe("0:00");
     expect(whyLine(dv({ toolName: "Edit" }))).toBe("이 파일을 바꿔도 될지 묻고 있습니다");
+    expect(whyLine(dv({ toolName: "Edit", byPolicy: true }))).toBe("권한 정책이 매번 확인하도록 정해 둔 도구입니다");
     expect(resultLine(dv({ kind: "plan", state: "answered-dashboard", outcome: "allow" }))).toBe("대시보드에서 승인함");
     expect(resultLine(dv({ state: "answered-dashboard", outcome: "answer" }))).toBe("대시보드에서 답함");
   });

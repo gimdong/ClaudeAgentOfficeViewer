@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DecisionView, SessionView } from "../../src/shared/types";
 import { Icon } from "../pixel/Icon";
 import { NEON, roleOf, shirtColor } from "../pixel/palette";
@@ -8,6 +8,8 @@ import {
   EXPIRED, KIND_CHIP, SEND_FAILED, VANISHED, budgetLabel, cutGraphemes, graphemes, conflictLine, outcomeLine, remaining, remainingSeconds, resultLine, summaryOf, titleOf, usageLabel, whyLine,
 } from "./text";
 import { QuestionForm } from "./QuestionForm";
+import { targetKeyOf, targetLabel } from "../policy/text";
+import { OpenPolicyContext } from "../policy/usePolicy";
 import type { Decisions } from "./useDecisions";
 
 /** 답한 뒤 다음 결정으로 넘어가거나 닫기까지(디자인 phase2 §3) */
@@ -116,6 +118,7 @@ function What({ v }: { v: DecisionView }) {
  */
 export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessions: SessionView[]; announce(text: string): void }) {
   const v = d.view;
+  const openPolicy = useContext(OpenPolicyContext);
   const [now, setNow] = useState(() => Date.now());
   const [reason, setReason] = useState("");
   const title = useRef<HTMLHeadingElement>(null);
@@ -212,6 +215,14 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
   if (!d.openId || !v) return null;
 
   const session = sessions.find((x) => x.id === v.sessionId);
+  // "권한" 버튼(phase3 §6.4): 그 결정의 에이전트 대상. 서브에이전트의 요청은 agent가 "team-lead"라 리드 패널이 된다
+  const agentMember = session?.members.find((m) => m.name === v.agent);
+  const policyKey = agentMember ? targetKeyOf(agentMember) : v.agent === "team-lead" ? "lead" : targetKeyOf({ name: v.agent, role: v.agent });
+  const openPermissions = () => {
+    // 보고서를 먼저 닫고 패널을 연다 — 순서가 바뀌면 서랍 서로 닫기가 패널까지 닫는다. 연 요소는 그 에이전트의 책상(닫을 때 data-policy-key로 찾는다)
+    d.close(false);
+    openPolicy?.(policyKey, null);
+  };
   const who = session ? `${session.floor}F ${session.name} · ${v.agent}` : v.agent;
   const busy = s.state === "sending" || !!banner?.locked;
   const answerable = v.answerable && pending;
@@ -310,6 +321,12 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
             {d.index >= 0 && <span className="rp-pos">{`${d.index + 1} / ${d.total}`}</span>}
             {timed && secs !== null && secs > 0 && (
               <span className={`rp-left${urgent ? " urgent" : ""}`} role="timer" aria-live="off">{`${remaining(v.deadline, now)} 남음 · 지나면 터미널에서 묻습니다`}</span>
+            )}
+            {openPolicy && (
+              <button type="button" className="rp-perm" aria-label={`${targetLabel(policyKey)} 권한 정하기`} onClick={openPermissions}>
+                <Icon name="lock" accent="#0e0d18" />
+                권한
+              </button>
             )}
           </p>
         </div>

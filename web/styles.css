@@ -446,6 +446,12 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .ap-state.red { color: var(--red); }
 .ap .ap-save { flex: none; justify-content: center; height: 36px; padding: 0 16px; font-size: 13px; }
 
+/* ───────── 권한 정책: 표시 (디자인 phase3 §6) ───────── */
+.rp-perm { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; background: none; border: 2px solid var(--policy); color: var(--ink); font: inherit; font-size: 11px; cursor: pointer; }
+.rp-perm:hover { border-color: var(--ink); }
+.rp-perm .icon { width: 12px; height: 12px; color: var(--policy); }
+.ap-subbtn .icon { color: var(--policy); }
+
 /* ───────── 권한 정책: 목록 서랍과 HUD 버튼 (디자인 phase3 §4·§5) ───────── */
 .policy-chip .icon { color: var(--policy); }
 .policy-chip:hover, .policy-chip[aria-expanded="true"] { border-color: var(--policy); }

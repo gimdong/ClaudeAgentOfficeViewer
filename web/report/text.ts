@@ -59,6 +59,8 @@ export function titleOf(v: DecisionView): string {
 export function whyLine(v: DecisionView): string {
   switch (v.kind) {
     case "permission":
+      // 정책 ask로 뜬 권한 요청(phase3 §6.4, B84)
+      if (v.byPolicy) return "권한 정책이 매번 확인하도록 정해 둔 도구입니다";
       if (v.toolName === "Bash") return "이 명령을 실행해도 될지 묻고 있습니다";
       if (FILE_TOOLS.has(v.toolName)) return "이 파일을 바꿔도 될지 묻고 있습니다";
       return "이 도구를 써도 될지 묻고 있습니다";
