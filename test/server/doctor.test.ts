@@ -417,6 +417,13 @@ describe("읽지 못한 정책 파일(B101)", () => {
     expect(existsSync(`${paths.policyFile}.broken`)).toBe(false);
   });
 
+  it("읽지 못한 파일 + 이벤트 0건이어도 hooks에는 B98 문장이 붙지 않는다(대상 0개, B103)", async () => {
+    await writeFile(paths.policyFile, "{oops");
+    const hooks = (await runDoctor(deps({ hooks: async () => stats() }))).find((i) => i.id === "hooks")!;
+    expect(hooks.detail).toBe("받은 이벤트 0건");
+    expect(hooks.fix.includes("권한 정책")).toBe(false);
+  });
+
   it("권한 없는 파일(chmod 000)도 같다", async () => {
     if (process.platform === "win32" || process.getuid?.() === 0) return;
     await writeFile(paths.policyFile, JSON.stringify({ version: 1, targets: { lead: { bash: "ask" } } }));
