@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OTHER_MAX, budgetReason, buildAnswers, parseAnswer, permissionResponse, preToolAsk } from "../../server/decisions/protocol";
+import { OTHER_MAX, budgetReason, buildAnswers, parseAnswer, permissionResponse, policyAskReason, policyDenyReason, preToolAsk, preToolDeny } from "../../server/decisions/protocol";
 import { toGraphemes } from "../../server/events/summarize";
 import { OTHER_MAX as WEB_OTHER_MAX } from "../../web/report/QuestionForm";
 import { graphemes } from "../../web/report/text";
@@ -18,6 +18,15 @@ describe("hook 응답 형식(스펙 2장, 계획 Global Constraints)", () => {
 
   it("budgetReason은 천 단위 쉼표와 스펙 문구", () => {
     expect(budgetReason(500000)).toBe("예산(500,000토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요");
+  });
+
+  it("preToolDeny 형식(글자 그대로)", () => {
+    expect(JSON.stringify(preToolDeny("r"))).toBe('{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"r"}}');
+  });
+
+  it("정책 이유 문구(B92, 글자 그대로)", () => {
+    expect(policyDenyReason("reviewer", "명령 실행 금지")).toBe('대시보드 권한 정책: reviewer에게는 "명령 실행 금지"가 정해져 있어 이 도구를 쓸 수 없습니다. 꼭 필요하면 사용자에게 알려 주세요.');
+    expect(policyAskReason("리드", "파일 고치기 항상 질문")).toBe('대시보드 권한 정책: 리드에게는 "파일 고치기 항상 질문"이 정해져 있어 이 도구는 매번 확인합니다.');
   });
 });
 

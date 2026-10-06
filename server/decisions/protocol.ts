@@ -30,6 +30,16 @@ export function preToolAsk(reason: string): object {
   return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason } };
 }
 
+export function preToolDeny(reason: string): object {
+  return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } };
+}
+
+/** who는 대상 화면 이름, rule은 걸린 규칙의 이름(ruleLabel, 예: "명령 실행 금지"). 도구 입력은 넣지 않는다(스펙 6.1, 문구는 Ruling B92) */
+export const policyDenyReason = (who: string, rule: string): string =>
+  `대시보드 권한 정책: ${who}에게는 "${rule}"가 정해져 있어 이 도구를 쓸 수 없습니다. 꼭 필요하면 사용자에게 알려 주세요.`;
+export const policyAskReason = (who: string, rule: string): string =>
+  `대시보드 권한 정책: ${who}에게는 "${rule}"이 정해져 있어 이 도구는 매번 확인합니다.`;
+
 export function budgetReason(budgetTokens: number): string {
   return `예산(${budgetTokens.toLocaleString("en-US")}토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요`;
 }
