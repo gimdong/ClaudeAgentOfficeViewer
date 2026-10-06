@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, utimes, writeFile } from "node:fs/promises";
-import { chmodSync, utimesSync } from "node:fs";
+import { mkdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { chmodSync, existsSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { defaultProbePort, formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
 import type { HookStatsView } from "../../server/events/stats";
@@ -368,6 +368,9 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     const items = await runDoctor(deps({ hooks: zero }));
     expect(items).toHaveLength(12);
     expect(noted(items)).toEqual([]);
+    // doctor는 읽기만 한다: 깨진 파일을 고치거나 .broken으로 옮기지 않는다(B100)
+    expect(await readFile(paths.policyFile, "utf8")).toBe("{oops");
+    expect(existsSync(`${paths.policyFile}.broken`)).toBe(false);
   });
 
   it("깨진 정책 파일로 여러 번 돌려도 policy 로그는 10분에 한 줄(로거의 반복 억제)", async () => {
