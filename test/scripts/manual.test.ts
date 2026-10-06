@@ -4,6 +4,7 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { EXEMPT_TOOLS, GROUP_KEYS, GROUPS, VALUE_LABELS, ruleLabel } from "../../server/policy/tools";
 import { policyAskReason, policyDenyReason } from "../../server/decisions/protocol";
+import { GROUP_LABEL, LIST_TEXT, TEMPLATES, TEXT, VALUE_LABEL, countsLine, summaryOf } from "../../web/policy/text";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -655,6 +656,35 @@ describe("사용설명서(docs/manual/index.html)", () => {
       // B100의 "정책 없음으로만 보인다"는 B101로 틀린 말이 됐다
       expect(prose).not.toContain("\"정책 없음\"으로만 보입니다");
       expect(prose).not.toContain("이때 화면과 doctor에는 정책이 없는 것으로만 보입니다.");
+    });
+
+    it("값·템플릿 이름과 템플릿 조합이 web/policy/text.ts와 같다", () => {
+      for (const v of Object.values(VALUE_LABEL)) expect(s5, v).toContain(`<code>${v}</code>`);
+      for (const t of TEMPLATES) {
+        const combo = Object.keys(t.rules).length ? summaryOf(t.rules) : "모두 기본";
+        expect(s5, t.label).toMatch(new RegExp(`<code>${t.label}</code>(은|는) ${combo}[,입]`));
+      }
+      expect(GROUP_LABEL).toEqual(Object.fromEntries(GROUP_KEYS.map((k) => [k, GROUPS[k].label])));
+    });
+
+    it("패널·목록·HUD 화면 문구가 web/policy/text.ts와 같다", () => {
+      for (const t of [TEXT.scopeNamed, TEXT.scopeLead, TEXT.followsOthers, TEXT.unsaved, TEXT.notPersisted, TEXT.noRules, LIST_TEXT.limitLine, LIST_TEXT.unreadHead, LIST_TEXT.unreadBody, countsLine(3, 5), summaryOf({ bash: "deny", edit: "deny" })]) {
+        expect(s5, t).toContain(`<code>${t}</code>`);
+      }
+      // 고정 두 행(리드, 그 밖의 모든)은 정한 것이 없어도 목록에 있다(디자인 §4.4)
+      expect(s5).toContain("맨 위 <strong>리드</strong> 줄과 맨 아래 <strong>그 밖의 모든 팀원·서브에이전트</strong> 줄은 정한 것이 없어도 늘 있습니다");
+    });
+
+    it("말풍선·자물쇠·보고서 이유 줄이 화면 코드와 같다(느낌표 모양, 30초)", () => {
+      expect(read("web/office/activityText.ts")).toContain("text: `정책으로 막힘: ${GROUP_LABEL[m.policyDenied.group]}`");
+      expect(s5).toContain(`<code>정책으로 막힘: ${GROUP_LABEL.bash}</code>`);
+      expect(s5).toContain("지금 하는 일 대신");
+      expect(read("server/policy/gate.ts")).toContain("export const POLICY_DENIED_SHOW_MS = 30_000;");
+      expect(s5).toContain("30초 동안 자물쇠가 분홍색으로 바뀌고 오른쪽에 <strong>느낌표</strong>가 붙습니다");
+      expect(s5).not.toContain("자물쇠가 30초 동안 분홍색이 되고");
+      const why = "권한 정책이 매번 확인하도록 정해 둔 도구입니다";
+      expect(read("web/report/text.ts")).toContain(`return "${why}"`);
+      expect(s5).toContain(`<code>${why}</code>`);
     });
 
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
