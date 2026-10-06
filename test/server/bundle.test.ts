@@ -194,6 +194,17 @@ describe("결정 통계(Phase 2)", () => {
   });
 });
 
+describe("권한 정책 통계(Phase 3)", () => {
+  it("policy 통계가 입력 그대로 들어간다", async () => {
+    const policy = { targets: 3, rulesByKind: { lead: 1, agent: 2, sub: 0, others: 1 }, decisions: { deny: 4, ask: 2 } };
+    expect((await base({ policy })).policy).toEqual(policy);
+  });
+
+  it("policy를 주지 않으면 0으로 채운다", async () => {
+    expect((await base()).policy).toEqual({ targets: 0, rulesByKind: { lead: 0, agent: 0, sub: 0, others: 0 }, decisions: { deny: 0, ask: 0 } });
+  });
+});
+
 describe("pseudonymize", () => {
   it("이 프로그램의 폴더와 로그·진단 파일 이름은 그대로 둔다", () => {
     const map = new Map<string, string>();

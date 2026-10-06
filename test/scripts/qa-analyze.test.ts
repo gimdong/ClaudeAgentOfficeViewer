@@ -187,6 +187,52 @@ describe("결정 절(Phase 2)", () => {
   });
 });
 
+describe("권한 정책 절(Phase 3)", () => {
+  const policy = { targets: 3, rulesByKind: { lead: 1, agent: 2, sub: 0, others: 1 }, decisions: { deny: 7, ask: 2 } };
+  /** B81 로그 줄: deny는 warn(10분 억제), ask는 info */
+  const policyLogs = [
+    log("2026-10-01T02:00:00.000Z", "warn", "policy", "deny bash agent", { outcome: "deny", group: "bash", target: "agent" }),
+    log("2026-10-01T02:11:00.000Z", "warn", "policy", "deny bash agent", { outcome: "deny", group: "bash", target: "agent", suppressed: 3 }),
+    log("2026-10-01T02:12:00.000Z", "info", "policy", "ask bash lead", { outcome: "ask", group: "bash", target: "lead" }),
+    log("2026-10-01T02:13:00.000Z", "info", "policy", "ask bash lead", { outcome: "ask", group: "bash", target: "lead" }),
+    log("2026-10-01T02:14:00.000Z", "warn", "policy", "deny edit sub", { outcome: "deny", group: "edit", target: "sub" }),
+    log("2026-10-01T02:15:00.000Z", "info", "server", "start"),
+  ];
+
+  it("대상 수·종류별 규칙 수·판정 수를 보여 주고, 결정 절 뒤에 온다", async () => {
+    const md = analyze({ ...(await bundle()), policy });
+    const s = section(md, "권한 정책");
+    expect(s).toContain("- 대상 3개, 판정 deny 7건 · ask 2건");
+    expect(s).toContain("| 종류 | 규칙 수 |");
+    for (const row of ["| lead | 1 |", "| agent | 2 |", "| sub | 0 |", "| others | 1 |"]) expect(s, row).toContain(row);
+    expect(md.indexOf("## 권한 정책")).toBeGreaterThan(md.indexOf("## 결정"));
+    expect(md.indexOf("## 권한 정책")).toBeLessThan(md.indexOf("## [QA 인폼] 초안"));
+  });
+
+  it("로그의 policy 줄을 msg로 묶어 센다(warn은 suppressed를 더한다)", async () => {
+    const b = await bundle();
+    const md = analyze({ ...b, policy, logs: [{ file: "office-2026-10-01.log", lines: policyLogs }, ...b.logs] });
+    const s = section(md, "권한 정책");
+    expect(s).toContain("| deny bash agent | 5 | 2026-10-01T02:00:00.000Z | 2026-10-01T02:11:00.000Z |");
+    expect(s).toContain("| ask bash lead | 2 |");
+    expect(s).toContain("| deny edit sub | 1 |");
+    expect(s).not.toContain("start");
+    expect(s.indexOf("deny bash agent")).toBeLessThan(s.indexOf("ask bash lead")); // 많은 순
+  });
+
+  it("policy 줄이 없으면 없다고 쓴다", async () => {
+    expect(section(analyze({ ...(await bundle()), policy }), "권한 정책")).toContain("로그에 policy 줄 없음");
+  });
+
+  it("policy 필드가 없는 옛 진단 파일도 읽는다", async () => {
+    const b = await bundle();
+    const { policy: _drop, ...old } = b as DiagBundle & { policy?: unknown };
+    const md = analyze(old as DiagBundle);
+    expect(section(md, "권한 정책")).toContain("권한 정책 통계 없음(이전 버전 진단 파일)");
+    expect(md).toContain("## [QA 인폼] 초안");
+  });
+});
+
 describe("CLI", () => {
   const run = (args: string[]) => spawnSync(join("node_modules", ".bin", "tsx"), ["scripts/qa-analyze.ts", ...args], { encoding: "utf8" });
 

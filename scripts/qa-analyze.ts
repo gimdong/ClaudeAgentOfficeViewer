@@ -13,8 +13,8 @@ const cell = (s: unknown) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g
 const INSTALL_LINE = /^(\S+) (\S+) (ok|fail|skip) ?(.*)$/; // Ruling B10: <ISO시각> <단계> ok|fail|skip <메시지>
 const MARK: Record<string, string> = { fail: "❌", warn: "⚠️" };
 
-/** 한 level의 로그 줄을 src+msg로 묶는다. warn은 로거가 10분 억제한 건수(data.suppressed)를 더해 센다 */
-function groupsOf(b: DiagBundle, level: "error" | "warn"): Group[] {
+/** 고른 로그 줄을 src+msg로 묶는다. warn은 로거가 10분 억제한 건수(data.suppressed)를 더해 센다 */
+function groupsOf(b: DiagBundle, keep: (l: LogLine) => boolean): Group[] {
   const groups = new Map<string, Group>();
   for (const { lines } of b.logs) {
     for (const raw of lines) {
@@ -24,7 +24,7 @@ function groupsOf(b: DiagBundle, level: "error" | "warn"): Group[] {
       } catch {
         continue; // 설치 로그(평문)와 깨진 줄
       }
-      if (l?.level !== level) continue;
+      if (!l || !keep(l)) continue;
       const key = `${l.src}\u0000${l.msg}`;
       const t = l.t ?? "";
       const n = 1 + (typeof l.data?.suppressed === "number" ? l.data.suppressed : 0);
@@ -75,13 +75,13 @@ export function analyze(b: DiagBundle): string {
     ...gs.map((g) => `| ${cell(g.src)} | ${cell(g.msg)} | ${g.count} | ${g.first} | ${g.last} |`),
     "",
   ];
-  const groups = groupsOf(b, "error");
+  const groups = groupsOf(b, (l) => l.level === "error");
   out.push("## 오류 묶음", "");
   if (!groups.length) out.push("error 없음", "");
   else out.push(...table(groups));
 
   // 수집 실패는 모두 warn이라 error 표가 비어도 원인은 여기 있을 수 있다
-  const warns = groupsOf(b, "warn");
+  const warns = groupsOf(b, (l) => l.level === "warn");
   out.push("## 경고 묶음", "");
   if (!warns.length) out.push("warn 없음", "");
   else out.push(...(warns.length > 10 ? [`상위 10개(전체 ${warns.length}개). 횟수는 10분 억제분(suppressed)을 더한 값`, ""] : ["횟수는 10분 억제분(suppressed)을 더한 값", ""]), ...table(warns.slice(0, 10)));
@@ -106,6 +106,17 @@ export function analyze(b: DiagBundle): string {
     const total = Object.values(dec.byKind).reduce((a, n) => a + n, 0);
     const rows = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `| ${cell(k)} | ${n} |`);
     out.push(`- 합계 ${total}건`, "- 종류별 건수는 요청이 들어올 때의 종류입니다. 예산 요청이 '계속' 뒤 권한 요청으로 바뀐 경우 로그의 끝난 종류와 수가 다를 수 있습니다", "", "| 종류 | 건수 |", "|---|---|", ...rows(dec.byKind), "", "| 결과 | 건수 |", "|---|---|", ...rows(dec.byState), "");
+  }
+
+  // Phase 3 권한 정책 통계. 이전 버전 진단 파일에는 이 필드가 없다. 로그 줄은 Ruling B81(deny는 warn, ask는 info)
+  const pol = (b as Partial<DiagBundle>).policy;
+  out.push("## 권한 정책", "");
+  if (!pol) out.push("권한 정책 통계 없음(이전 버전 진단 파일)", "");
+  else {
+    out.push(`- 대상 ${pol.targets}개, 판정 deny ${pol.decisions.deny}건 · ask ${pol.decisions.ask}건`, "", "| 종류 | 규칙 수 |", "|---|---|", ...Object.entries(pol.rulesByKind).map(([k, n]) => `| ${cell(k)} | ${n} |`), "");
+    const pg = groupsOf(b, (l) => l.src === "policy");
+    if (!pg.length) out.push("로그에 policy 줄 없음", "");
+    else out.push("| msg | 횟수 | 처음 | 마지막 |", "|---|---|---|---|", ...pg.map((g) => `| ${cell(g.msg)} | ${g.count} | ${g.first} | ${g.last} |`), "");
   }
 
   // 초안: 사람이 다듬어 director에게 보낸다. 형식은 팀 규칙 [QA 인폼] 증상 / 재현 조건 / 근거 / 추정 원인 / 제안

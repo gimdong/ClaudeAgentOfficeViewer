@@ -8,6 +8,9 @@ import type { HookStatsView } from "../events/stats";
 import { scrub } from "../log";
 import type { DoctorItem } from "./doctor";
 
+/** 권한 정책 통계(Phase 3). 대상 이름은 넣지 않는다(스펙 9장) */
+export interface PolicyStats { targets: number; rulesByKind: Record<"lead" | "agent" | "sub" | "others", number>; decisions: { deny: number; ask: number } }
+
 export interface DiagBundle {
   kind: "claude-office-diag";
   format: 1;
@@ -18,6 +21,7 @@ export interface DiagBundle {
   snapshot: { sessions: number; members: number; teams: number; decisions: number; error: boolean };
   /** 결정 종류별·결과별 건수만(Phase 2). 도구 입력·거부 이유·답 내용은 없다 */
   decisions: DecisionStats;
+  policy: PolicyStats;
   logs: Array<{ file: string; lines: string[] }>; // 최근 7일, 새 파일이 앞
   truncated: boolean;
 }
@@ -34,12 +38,16 @@ export interface BundleInput {
   maxBytes?: number;
   /** 서버의 DecisionQueue.stats(). 없으면(CLI가 서버 없이 만들 때 등) 0으로 채운다 */
   decisions?: DecisionStats;
+  /** 서버의 정책 저장소 요약 + 판정 수. 없으면 0으로 채운다 */
+  policy?: PolicyStats;
 }
 
 const EMPTY_DECISIONS = (): DecisionStats => ({
   byKind: { permission: 0, question: 0, plan: 0, budget: 0, team: 0 },
   byState: { pending: 0, "answered-dashboard": 0, "closed-terminal": 0, expired: 0 },
 });
+
+const EMPTY_POLICY = (): PolicyStats => ({ targets: 0, rulesByKind: { lead: 0, agent: 0, sub: 0, others: 0 }, decisions: { deny: 0, ask: 0 } });
 
 const DAY = 86_400_000;
 const OFFICE_LOG = /^office-(\d{4})-(\d{2})-(\d{2})\.log$/; // 날짜는 UTC(로그 줄의 t와 같다)
@@ -179,6 +187,7 @@ export async function buildBundle(d: BundleInput): Promise<DiagBundle> {
       error: !!s.error,
     },
     decisions: d.decisions ?? EMPTY_DECISIONS(),
+    policy: d.policy ?? EMPTY_POLICY(),
     logs: await readLogs(d.logDir, now),
     truncated: false,
   };
