@@ -105,6 +105,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 - 스크롤 영역: `.rp-scroll` 값(`flex:1; overflow-y:auto; padding: 0 14px 16px`).
 - 절: `.rp-sec` 값(위아래 12px, 사이 1px 점선 `--desk`), 절 제목 11px `--muted`.
 - 절 순서: (화면에 없는 이름 안내) → 횟수 → (others 안내) → 바로 쓰는 묶음 → 도구별 권한 → (서브에이전트). 안내 두 가지와 횟수는 하나의 절 안에 줄로 쌓습니다(절 제목 없음).
+- **문장 줄바꿈(B105):** `--font-text` 문장 줄(`.ap-scope`, `.ap-note`, `.ap-help`, `.ap-line`)은 `word-break: keep-all; overflow-wrap: anywhere`(한글 문장 끝 한 글자가 홀로 꺾이지 않게, 띄어쓰기 없는 긴 값은 그래도 꺾이게). 제목 `.ap-title`은 `overflow-wrap: anywhere`만(100자 이름). 정책 목록(§4)의 문장 줄에도 같은 규칙을 씁니다(§4.1).
 
 ### 1.4 화면에 없는 이름 안내
 
@@ -127,7 +128,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 
 - 문구: 「스펙」 `정한 것이 없어 "그 밖의 모든"을 따릅니다` (`--font-text` 13px `--ink`, 왼쪽 2px `--policy` 막대).
 - 그 아래 링크 모양 버튼(`.rp-more` 모양, 색 `--cyan`) `"그 밖의 모든" 정책 보기` — 누르면 같은 서랍이 `others` 대상으로 바뀌고 ‹가 생깁니다(→ 원래 대상).
-- 권한 칸(§2)의 처음 값은 **모두 `기본`**입니다(자기 규칙이 없음). 여기서 하나라도 정해 저장하면 이 이름은 더 이상 `others`를 따르지 않습니다. 이것을 권한 칸 바로 위에 12px `--muted`로 알립니다(문구 §8.2 "others 경고").
+- 권한 칸(§2)의 처음 값은 **모두 `기본`**입니다(자기 규칙이 없음). 여기서 하나라도 정해 저장하면 이 이름은 더 이상 `others`를 따르지 않습니다. 이것을 링크 바로 아래에 12px `--muted`로 알립니다(문구 §8.2 "others 경고"). 따름 안내 → 링크 → 경고가 한 묶음으로 횟수 줄과 같은 절에 있고, 바로 쓰는 묶음보다 위입니다(B105).
 - 리드는 `others`를 따르지 않으므로(Global Constraints) 리드 패널에는 이 절이 없습니다.
 
 ---
@@ -187,7 +188,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 - **색에만 의존하지 않기:** 고른 상자에는 표시 칸 `.pr-mark`(6×6, 글자 왼쪽)를 값의 색으로 **채우고**, 고르지 않은 상자의 표시 칸은 1px `--muted` 테두리만 있는 빈 칸입니다. 글자 굵기도 바뀝니다. 흑백으로 봐도 어느 값을 골랐는지 보입니다.
 - `input`은 화면에서 숨기되 포커스는 받게 둡니다: `position:absolute; opacity:0; width:1px; height:1px; margin:0`(`display:none`이나 `visibility:hidden`은 키보드로 고를 수 없게 되므로 쓰지 않습니다). `label`에 `position: relative`.
 
-**바꾼 줄 표시:** 저장된 값과 다른 줄은 줄 왼쪽에 2px `--yellow` 막대를 둡니다(`.pr-row.changed { box-shadow: inset 2px 0 0 var(--yellow); padding-left: 6px }`). 글자 안내는 §2.4의 아래 고정 줄이 맡습니다.
+**바꾼 줄 표시:** 저장된 값과 다른 줄은 줄 왼쪽에 2px `--yellow` 막대를 둡니다(`.pr-row.changed { box-shadow: inset 2px 0 0 var(--yellow) }` + `.pr-row.changed .pr-name { padding-left: 6px }`. 여백을 줄 전체에 주면 1fr 열이 줄어 그 줄의 값 상자만 어긋납니다, B105). 글자 안내는 §2.4의 아래 고정 줄이 맡습니다.
 
 ### 2.3 "모든 도구" 줄
 
@@ -209,7 +210,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 |---|---|---|---|---|
 | 같음 | 편집 값 = 저장된 값 | 비움 | `aria-disabled` | 없음 |
 | **바꿈** | 하나라도 다름 | `저장하지 않은 변경이 있습니다` (`--yellow`, 글자만) | 활성 | 없음. [저장]의 `aria-describedby`로 연결 |
-| 저장 중 | PUT 중 | 그대로 | `disabled`, 글자 `저장하는 중…`(Phase 2 §6.2와 같은 말) | 없음 |
+| 저장 중 | PUT 중 | 그대로 | `aria-disabled="true"` + `aria-busy="true"`(눌러도 요청 없음), 글자 `저장하는 중…`(Phase 2 §6.2와 같은 말). `disabled`는 쓰지 않습니다 — 실제 브라우저에서 포커스가 body로 떨어집니다(B105) | 없음 |
 | 저장됨 | `"saved"` | `저장했습니다` (`--green`). 다음에 값을 바꾸면 사라짐 | `aria-disabled` | 없음. live region 문장 §8.6 |
 | 값이 올바르지 않음 | `"invalid"`(400) | §8.3 (`--red`) | 활성 | `alert` |
 | 대상이 너무 많음 | `"limit"`(400 `{"reason":"limit"}`, 대상 200개) | §8.5의 상한 문구 (`--red`) | 활성 | `alert` |
@@ -265,6 +266,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 | 머리 | `.dp-head` 값. 아이콘 `lock` 20×20 `--policy`, 제목 `권한 정책`(`.dp-title`, `id="pl-title"`, `tabindex="-1"`), × `.icon-btn`(`margin-left: auto`) |
 | 한계 줄 | 「스펙」 `대시보드가 켜져 있을 때만 적용됩니다.` 머리 바로 아래, 스크롤 영역 **밖**(목록을 내려도 늘 보임). 여백 `10px 14px 0`, 안쪽 `8px 10px`, 2px 점선 `--yellow` 테두리, `--font-text` 13px `--ink`. 아이콘 없이 문장만. `role` 없음(늘 있는 글) |
 | 스크롤 영역 | `.dp-scroll` 값, 위 여백 10px |
+| 문장 줄바꿈 | `--font-text` 문장 줄(한계 줄, 경고 상자 본문 `.pl-unread .b`, 요약 `.pl-sum`, 빈 목록 문구, 지우기 확인 문장, `.pl-err`, 대상 추가의 도움말·틀린 이름·상한 문구)은 §1.3과 같이 `word-break: keep-all; overflow-wrap: anywhere`. 이름 `.pl-name`은 `overflow-wrap: anywhere`만 |
 
 **읽지 못한 정책 파일 경고 (B101).** 스냅샷의 `policy.unreadable`이 `true`이면(저장해 둔 정책 파일이 깨졌거나 권한이 없어 읽지 못함) 머리와 한계 줄 사이, **한계 줄 바로 위**에 경고 상자를 둡니다. 한계 줄은 그대로 그 아래에 있습니다. 둘 다 스크롤 영역 밖이라 늘 보입니다. 다시 저장해 `unreadable`이 사라지면 상자도 사라집니다.
 
@@ -321,7 +323,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 | 행 | 테두리 2px `--pink`. `.pl-sum` 자리에 확인 문장(§8.5, `--font-text` 13px `--ink`) |
 | 버튼 | `.pl-act`가 `[취소]`(`.pbtn`) `[지우기]`(`.pbtn--deny`, 분홍 테두리)로 바뀝니다. 순서는 취소 → 지우기 |
 | 포커스 | 확인으로 바뀌면 **[취소]**에 둡니다(위험한 동작, Phase 1 9장) |
-| 지우는 중 | 두 버튼 `disabled`, [지우기] 글자 `지우는 중…` |
+| 지우는 중 | 두 버튼 `aria-disabled="true"`(눌러도 동작 없음), [지우기]에 `aria-busy="true"`와 글자 `지우는 중…`. `disabled`를 쓰지 않는 이유는 §2.4 저장 중과 같습니다(포커스가 body로 떨어짐) |
 | 성공 | 행이 목록에서 사라지고(스냅샷), live region §8.6. 포커스는 다음 행의 [고치기] → 없으면 이전 행의 [고치기] → 없으면 [대상 추가] |
 | 실패 | 행을 원래 모양으로 되돌리고, `.pl-err`(§4.2 격자, 3행 1–2열)에 §8.5 실패 문구(`--red` 12px, `role="alert"`). 포커스는 [지우기]로 |
 | 취소·Esc | 원래 모양으로. 포커스는 [지우기]로 |
@@ -555,8 +557,8 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 | 화면에 없는 이름 표시 | `지금 없음` |
 | 행 버튼 | `고치기` · `지우기` |
 | 행 버튼 aria-label | `{대상 화면 이름} 정책 고치기` · `{대상 화면 이름} 정책 지우기` |
-| 읽지 못한 파일 경고 · 머리말 (초안, qa 검토) | `정책 파일을 읽지 못함` |
-| 읽지 못한 파일 경고 · 본문 (B101 초안, qa 검토) | `저장해 둔 정책 파일을 읽지 못했습니다. 지금은 정책이 적용되지 않습니다. 정책을 다시 정해 저장하면 예전 파일은 policy.json.broken으로 보관됩니다.` |
+| 읽지 못한 파일 경고 · 머리말 | `정책 파일을 읽지 못함` |
+| 읽지 못한 파일 경고 · 본문 (B101) | `저장해 둔 정책 파일을 읽지 못했습니다. 지금은 정책이 적용되지 않습니다. 정책을 다시 정해 저장하면 예전 파일은 policy.json.broken으로 보관됩니다.` |
 | 빈 목록(이름 있는 대상이 없을 때, 고정 두 행 아래) | `아직 이름으로 정한 정책이 없습니다. 캐릭터를 누르거나 [대상 추가]로 만들 수 있습니다.` |
 
 ### 8.5 지우기와 대상 추가
@@ -602,7 +604,7 @@ export const LOCK_DESK_DENIED = [".xxx..", "x...xx", "xxxxxx", "xxaxxx", "xxaxx.
 | 자물쇠 덧붙임 「스펙」 | `권한 정책 있음` |
 | 말풍선 「스펙」 | `정책으로 막힘: {묶음 화면 이름}` |
 | HUD 버튼 글자 | `권한 정책` (+ 개수 `{n}`) |
-| HUD 버튼 aria-label | 0개 `권한 정책 열기` / n개 `권한 정책 열기, 대상 {n}개` / 읽지 못함(B101 초안, qa 검토) 0개 `권한 정책 열기, 정책 파일을 읽지 못함`, n개 `권한 정책 열기, 대상 {n}개, 정책 파일을 읽지 못함` |
+| HUD 버튼 aria-label | 0개 `권한 정책 열기` / n개 `권한 정책 열기, 대상 {n}개` / 읽지 못함(B101) 0개 `권한 정책 열기, 정책 파일을 읽지 못함`, n개 `권한 정책 열기, 대상 {n}개, 정책 파일을 읽지 못함` |
 | 보고서 "권한" 버튼 | 글자 `권한`, aria-label `{에이전트 화면 이름} 권한 정하기` |
 | 보고서 이유 줄 「스펙」 | `권한 정책이 매번 확인하도록 정해 둔 도구입니다` |
 
