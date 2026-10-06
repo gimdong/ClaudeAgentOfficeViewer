@@ -80,7 +80,19 @@ interface Rig {
   home: string;
   stubBin: string;
   stubLog: string;
+  /** node 래퍼가 doctor·diag를 돌린 포트(B109) — 4317(사용자 대시보드)이 아닌 빈 포트 */
+  doctorPort: number;
+  /** node 래퍼가 포트를 붙인 호출의 기록 */
+  wrapLog: string;
   cleanup: () => void;
+}
+
+/** 지금 빈 포트 하나(동기). makeRig가 동기라 자식 node로 listen(0)을 한 번 한다 */
+function freePortSync(): number {
+  const r = spawnSync(process.execPath, ["-e", 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})'], { encoding: "utf8" });
+  const port = Number(r.stdout);
+  if (!Number.isInteger(port) || port <= 0) throw new Error("빈 포트를 못 얻음");
+  return port;
 }
 
 /** 임시 HOME·stub-bin·STUB_LOG를 만든다. claude가 false면 stub-bin에 claude를 안 둔다("claude 없음" 시나리오). */
@@ -96,9 +108,19 @@ function makeRig(opts: { claude?: boolean } = {}): Rig {
   }
   const stubLog = join(base, "stub.log");
   writeFileSync(stubLog, "");
+  // B109: 진짜 install.sh·런처는 끝에서 doctor를 기본 포트 4317로 돌린다. 이 Mac 사용자의 대시보드가 켜져 있으면
+  // 테스트마다 읽기 요청이 간다. PATH 맨 앞의 node 래퍼가 --port 없는 doctor·diag에 rig의 빈 포트를 붙인다
+  // (그 밖의 호출은 진짜 node로 그대로). fakeNode를 쓰는 테스트는 이 래퍼를 덮어쓴다
+  const doctorPort = freePortSync();
+  const wrapLog = join(base, "node-wrap.log");
+  writeFileSync(
+    join(stubBin, "node"),
+    `#!/bin/sh\ncase " $* " in\n  *" --port "*) ;;\n  *" doctor "*|*" diag "*) echo "port ${doctorPort} $*" >> "${wrapLog}"; exec "${process.execPath}" "$@" --port ${doctorPort} ;;\nesac\nexec "${process.execPath}" "$@"\n`,
+  );
+  chmodSync(join(stubBin, "node"), 0o755);
   // maxRetries/retryDelay: 서버를 띄웠다 끈 테스트에서 아직 핸들이 덜 풀린 파일이 있어도(killAndWait로
   // "exit" 이벤트까지는 기다리지만, OS가 핸들을 완전히 닫는 데는 한 박자 더 걸릴 수 있다) 몇 번 재시도한다.
-  return { home, stubBin, stubLog, cleanup: () => rmSync(base, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }) };
+  return { home, stubBin, stubLog, doctorPort, wrapLog, cleanup: () => rmSync(base, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }) };
 }
 
 function env(rig: Rig, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -899,6 +921,26 @@ function fakeNode(rig: Rig) {
 function runLauncher(prefix: string, e: NodeJS.ProcessEnv, args: string[] = ["--port", "5999"]) {
   return spawnSync(join(prefix, "bin/claude-office"), args, { env: e, encoding: "utf8", timeout: 15_000 });
 }
+
+describe("설치 테스트는 사용자 대시보드(4317)를 보지 않는다(Ruling B109)", () => {
+  it("install.sh 끝의 doctor는 rig가 고른 빈 포트를 본다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig));
+      expect(r.status, r.stderr).toBe(0);
+      const calls = existsSync(rig.wrapLog) ? readFileSync(rig.wrapLog, "utf8").trim().split("\n").filter(Boolean) : [];
+      expect(calls.length).toBeGreaterThan(0);
+      for (const c of calls) expect(c.startsWith(`port ${rig.doctorPort} `), c).toBe(true);
+      expect(rig.doctorPort).not.toBe(4317);
+      expect(r.stdout.includes("4317")).toBe(false);
+      expect(r.stdout).toContain(`(${rig.doctorPort})`);
+    } finally {
+      rig.cleanup();
+    }
+  });
+});
 
 describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
   it("install.sh: 토큰 파일을 64자 hex, 권한 600으로 만든다", () => {
