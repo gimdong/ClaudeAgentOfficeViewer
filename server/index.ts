@@ -11,7 +11,7 @@ import { BudgetStore } from "./budget/store";
 import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
 import { PolicyStore } from "./policy/store";
-import { buildBundle, readClaudeVersion, writeBundle } from "./diag/bundle";
+import { buildBundle, readClaudeVersion, writeBundle, type PolicyStats } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
@@ -128,10 +128,10 @@ async function doctorCli(argv: string[]): Promise<void> {
 }
 
 /** 진단 파일을 만들어 paths.diagDir에 쓰고 파일 이름을 돌려준다(서버 버튼과 CLI가 같이 쓴다) */
-/** decisions는 켜진 서버의 큐 통계. CLI가 직접 만들 때는 없다(진단 파일에는 0으로 들어간다) */
-async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, decisions?: DecisionStats): Promise<string> {
+/** decisions는 켜진 서버의 큐 통계. CLI가 직접 만들 때는 없다(진단 파일에는 0으로 들어간다). policy는 정책 통계(대상 이름 없음) */
+async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, policy: PolicyStats, decisions?: DecisionStats): Promise<string> {
   const claudeVersion = await readClaudeVersion(defaultWhich(process.env, process.platform)("claude"));
-  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions }));
+  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions, policy }));
 }
 
 /**
@@ -160,7 +160,11 @@ async function diagCli(argv: string[]): Promise<void> {
   if (!file) {
     const config = await loadConfig(opts.configPath);
     const snapshot = await new SnapshotBuilder({ claudeHome: opts.claudeHome, config }).build();
-    file = await makeBundleFile(paths, snapshot, new HookStats().view(), () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port }));
+    // 서버가 없으면 정책 파일을 읽기만 한다(판정 수는 서버 메모리 값이라 0)
+    const policyStore = new PolicyStore(paths.policyFile);
+    policyStore.load();
+    const policy = { ...policyStore.summary(), decisions: { deny: 0, ask: 0 } };
+    file = await makeBundleFile(paths, snapshot, new HookStats().view(), () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port }), policy);
   }
   console.log(`진단 파일을 만들었습니다: ${join(paths.diagDir, file)}`);
   console.log("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
@@ -269,7 +273,7 @@ async function main(): Promise<void> {
       logDir: scrub(paths.logDir, home) as string,
       diagDir: scrub(paths.diagDir, home) as string,
     }),
-    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, decisions.stats()),
+    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, { ...policyStore.summary(), decisions: policy.totals() }, decisions.stats()),
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);

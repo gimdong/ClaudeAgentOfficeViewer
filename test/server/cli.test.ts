@@ -235,6 +235,49 @@ describe("CLI", () => {
     }
   }, 40_000);
 
+  it("진단 배선: 서버가 만든 진단 파일의 policy는 저장한 대상 수와 켠 뒤로의 판정 수다", async () => {
+    const s = await startServer();
+    try {
+      const token = readFileSync(join(s.prefix, "token"), "utf8").trim();
+      for (const [target, rules] of [["lead", { bash: "deny" }], [encodeURIComponent("agent:rev"), { edit: "ask" }]] as const) {
+        const r = await fetch(`http://127.0.0.1:${s.port}/api/policy/targets/${target}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ rules }),
+        });
+        expect(r.status).toBe(200);
+      }
+      const pre = await fetch(`http://127.0.0.1:${s.port}/hooks/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s-fake", tool_name: "Bash", tool_input: { command: "echo fake" } }),
+      });
+      expect(JSON.stringify(await pre.json())).toContain('"permissionDecision":"deny"');
+      const g = await run(["diag", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      expect(g.code).toBe(0);
+      const [file] = readdirSync(join(s.prefix, "diagnostics"));
+      const bundle = JSON.parse(readFileSync(join(s.prefix, "diagnostics", file), "utf8")) as { policy: unknown };
+      expect(bundle.policy).toEqual({ targets: 2, rulesByKind: { lead: 1, agent: 1, sub: 0, others: 0 }, decisions: { deny: 1, ask: 0 } });
+    } finally {
+      await s.stop();
+    }
+  }, 40_000);
+
+  it("진단 배선: 서버 없이 만들면 policy는 파일에서 읽은 대상 수이고 판정 수는 0이다", async () => {
+    const prefix = mkdtempSync(join(tmpdir(), "office-diag-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-diag-home-"));
+    writeFileSync(join(prefix, "policy.json"), JSON.stringify({ version: 1, targets: { others: { all: "deny" }, "sub:Explore": { edit: "deny", bash: "deny" } } }));
+    const r = await run(["diag", "--claude-home", home, "--port", String(await freePort())], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
+    const [file] = readdirSync(join(prefix, "diagnostics"));
+    const body = JSON.parse(readFileSync(join(prefix, "diagnostics", file), "utf8")) as { policy: unknown };
+    const policyText = readFileSync(join(prefix, "policy.json"), "utf8");
+    rmSync(prefix, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    expect(r.code).toBe(0);
+    expect(body.policy).toEqual({ targets: 2, rulesByKind: { lead: 0, agent: 0, sub: 2, others: 1 }, decisions: { deny: 0, ask: 0 } });
+    expect(policyText.includes("Explore")).toBe(true); // 읽기만 했다(파일 그대로)
+  }, 30_000);
+
   it("예산 배선: Bearer로 PUT /api/budget(기본값)이면 204이고 prefix의 state.json에 저장된다", async () => {
     const s = await startServer();
     try {
