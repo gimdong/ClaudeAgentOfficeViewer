@@ -222,6 +222,25 @@ describe("packaging/install.sh, claude-office.sh", () => {
       const realPrefix = realpathSync(prefix);
       expect(log[0]).toBe(`plugin marketplace add ${realPrefix}/plugin`);
       expect(log[1]).toBe("plugin install claude-office@claude-office --scope user");
+      // FB-4: 이미 설치된 플러그인은 install만으로는 등록(버전·경로)이 바뀌지 않는다 — update가 새로 적는다
+      expect(log[2]).toBe("plugin update claude-office@claude-office --scope user");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("FB-4: plugin update가 실패해도(옛 Claude Code 등) 설치는 끝까지 가고 플러그인 단계는 ok로 남는다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      // update만 실패하는 가짜 claude
+      writeFileSync(join(rig.stubBin, "claude"), '#!/bin/sh\necho "$@" >> "$STUB_LOG"\n[ "$2" = update ] && exit 1\nexit 0\n');
+      chmodSync(join(rig.stubBin, "claude"), 0o755);
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }));
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout + r.stderr).not.toContain("플러그인 설치 실패");
+      expect(installLogLines(prefix).join("\n")).toContain("플러그인 설치 완료");
     } finally {
       rig.cleanup();
     }

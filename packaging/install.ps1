@@ -212,6 +212,9 @@ if ($claude) {
     if ($LASTEXITCODE -ne 0) { Write-Host "마켓플레이스 등록 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."; $pluginOk = $false }
     & claude plugin install claude-office@claude-office --scope user
     if ($LASTEXITCODE -ne 0) { Write-Host "플러그인 설치 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."; $pluginOk = $false }
+    # 이미 설치돼 있으면 install은 등록(버전·경로)을 그대로 둔다 — update가 새 버전으로 다시 적는다(FB-4).
+    # 실패해도 설치는 계속한다(옛 Claude Code 등). 등록이 옛 버전에 남으면 doctor의 "결정 대기 시간"이 알려 준다
+    try { & claude plugin update claude-office@claude-office --scope user } catch { }
     if ($pluginOk) {
       Write-InstallLog "plugin" "ok" "플러그인 설치 완료"
     } else {
@@ -225,6 +228,7 @@ if ($claude) {
   Write-Host "claude 명령을 찾지 못해 플러그인 설치를 건너뜁니다. 나중에:"
   Write-Host "  claude plugin marketplace add `"$(Join-Path $Prefix 'plugin')`""
   Write-Host "  claude plugin install claude-office@claude-office --scope user"
+  Write-Host "  claude plugin update claude-office@claude-office --scope user"
 }
 
 # 5. doctor

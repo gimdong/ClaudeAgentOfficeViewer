@@ -174,6 +174,9 @@ if command -v claude >/dev/null 2>&1; then
     plugin_ok=1
     claude plugin marketplace add "$PREFIX/plugin" || { echo "마켓플레이스 등록 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }
     claude plugin install claude-office@claude-office --scope user || { echo "플러그인 설치 실패 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요." >&2; plugin_ok=0; }
+    # 이미 설치돼 있으면 install은 등록(버전·경로)을 그대로 둔다 — update가 새 버전으로 다시 적는다(FB-4).
+    # 실패해도 설치는 계속한다(옛 Claude Code 등). 등록이 옛 버전에 남으면 doctor의 "결정 대기 시간"이 알려 준다
+    claude plugin update claude-office@claude-office --scope user || true
     if [ "$plugin_ok" = 1 ]; then log plugin ok "플러그인 설치 완료"; else log plugin fail "플러그인 설치 중 오류(설치는 계속함)"; fi
   else
     log plugin skip "사용자가 거절함"
@@ -183,6 +186,7 @@ else
   echo "claude 명령을 찾지 못해 플러그인 설치를 건너뜁니다. 나중에:"
   echo "  claude plugin marketplace add \"$PREFIX/plugin\""
   echo "  claude plugin install claude-office@claude-office --scope user"
+  echo "  claude plugin update claude-office@claude-office --scope user"
 fi
 
 # 5. doctor

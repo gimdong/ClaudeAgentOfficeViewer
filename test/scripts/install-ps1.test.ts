@@ -55,7 +55,7 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     const installPs1 = readFileSync(INSTALL_PS1, "utf8");
     const launcherPs1 = readFileSync(LAUNCHER_PS1, "utf8");
 
-    for (const cmd of ["plugin marketplace add", "plugin install claude-office@claude-office --scope user"]) {
+    for (const cmd of ["plugin marketplace add", "plugin install claude-office@claude-office --scope user", "plugin update claude-office@claude-office --scope user"]) {
       expect(installSh, cmd).toContain(cmd);
       expect(installPs1, cmd).toContain(cmd);
     }
