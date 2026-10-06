@@ -640,12 +640,21 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(between('<h2 id="s7">', '<h2 id="s8">')).toContain("권한 정책 파일(<code>policy.json</code>)도 함께 지워집니다.");
     });
 
-    it("정책 파일이 깨진 경우: 6장 원인 후보와 부록 A 로그 문구가 store.ts와 같다(B100)", () => {
+    it("정책 파일을 읽지 못한 경우: 6장 원인 후보(화면 경고·HUD 표시·doctor 출력)와 부록 A 로그 문구가 코드와 같다(B100·B101)", () => {
       const msg = "policy unreadable, starting empty";
       expect(read("server/policy/store.ts")).toContain(`getLogger().warn("policy", "${msg}"`);
       expect(s8).toContain(`<code>src</code>가 <code>policy</code>인 <code>${msg}</code> 경고가 남습니다`);
+      expect(s8).toContain("doctor의 <strong>프로그램 파일</strong> 항목에 알림이 나옵니다");
+      const doctor = read("server/diag/doctor.ts");
+      const note = /const POLICY_UNREADABLE = '([^']+)';/.exec(doctor)![1];
+      const detail = /const POLICY_UNREADABLE_DETAIL = "([^"]+)";/.exec(doctor)![1];
+      expect(doctor).toContain('item("app", "ok", "프로그램 파일"');
       const sym = between('<h3 id="policy-not-applied">', "<h3");
-      for (const t of ["정책 목록이 통째로 비었나요?", "\"정책 없음\"으로만 보입니다", "<code>policy.json.broken</code>", "진단 파일과 함께 담당자에게 보내 주세요"]) expect(sym, t).toContain(t);
+      expect(sym).toContain(`<pre class="out">⚠️ 프로그램 파일: ${detail}\n  → ${note}</pre>`);
+      for (const t of ["정책 목록이 통째로 비었나요?", "정책 목록 맨 위에 정책 파일을 읽지 못했다는 경고", "<strong>권한 정책</strong> 단추에도 표시", "<code>policy.json.broken</code>", "진단 파일과 함께 담당자에게 보내 주세요"]) expect(sym, t).toContain(t);
+      // B100의 "정책 없음으로만 보인다"는 B101로 틀린 말이 됐다
+      expect(prose).not.toContain("\"정책 없음\"으로만 보입니다");
+      expect(prose).not.toContain("이때 화면과 doctor에는 정책이 없는 것으로만 보입니다.");
     });
 
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
