@@ -63,15 +63,27 @@ export function tokenUrlLine(mode: OfficePaths["mode"], port: number, token: str
   return mode === "dev" ? `대시보드 열기(개발): http://127.0.0.1:${port}/?k=${token}` : null;
 }
 
-/** 포트에 이미 무엇이 있는가: Phase 2 인증 서버(토큰 없이 401 + app 표시), 인증 없는 옛 베타 서버, 그 밖 */
-export type RunningKind = "phase2" | "beta" | "other";
+/**
+ * 포트에 이미 무엇이 있는가: 같은 버전의 Phase 2 계열 서버(토큰 없이 401 + app 표시 + 같은 version), 버전이 다르거나 버전을
+ * 안 싣는 Phase 2 계열 서버(FB-8: 설치 뒤 옛 서버가 떠 있는 경우), 인증 없는 옛 베타 서버, 그 밖
+ */
+export type RunningKind = "phase2" | "phase2-old" | "beta" | "other";
 
-/** 포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64, 문구 B66). 런처가 앞에 낸 "이 창을 닫으면…"을 설치본에서는 바로잡는다 */
-export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], port: number): { code: 0; out: string } | { code: 1; err: string } {
+/** 이전 버전 서버가 떠 있을 때의 문구. 설명서 4장·6장이 글자 그대로 인용한다(manual.test) */
+const OLD_RUNNING = "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.";
+/** FB-8: Claude Code 안에서 `!`로 켠 서버는 끌 창이 없다 */
+const NO_WINDOW_HINT = "창이 보이지 않으면(Claude Code 안에서 !로 켠 경우) 사용설명서 6장 \"끌 창이 없어요\"를 보세요.";
+
+/**
+ * 포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64, 문구 B66, FB-8). 런처가 앞에 낸 "이 창을 닫으면…"을 설치본에서는 바로잡는다.
+ * 버전이 다른 Phase 2 계열 서버는 0으로 끝내지 않는다 — 옛 서버가 새 화면을 내보내 저장이 실패하고 사용자는 재시작할 길을 모른다(FB-7·8)
+ */
+export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], port: number, version?: string): { code: 0; out: string } | { code: 1; err: string } {
   if (kind === "phase2") {
     return { code: 0, out: mode === "installed" ? "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다." : "이미 켜져 있습니다." };
   }
-  if (kind === "beta") return { code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요." };
+  if (kind === "phase2-old") return { code: 1, err: `${version ? OLD_RUNNING.replace("이전 버전 대시보드가", `이전 버전 대시보드(${version})가`) : OLD_RUNNING} ${NO_WINDOW_HINT}` };
+  if (kind === "beta") return { code: 1, err: `${OLD_RUNNING} ${NO_WINDOW_HINT}` };
   return { code: 1, err: `포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.` };
 }
 
@@ -79,15 +91,19 @@ export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], p
  * doctor의 "ours"에는 인증 없는 베타 서버도 들어간다. 토큰 없이 물어 401 + app "claude-office"면 Phase 2 서버다(토큰은 보내지 않는다, B52).
  * 그 밖에 doctor 판정이 ours면 옛 베타 서버
  */
-async function probeRunning(port: number): Promise<RunningKind> {
+async function probeRunning(port: number): Promise<{ kind: RunningKind; version?: string }> {
   try {
     const r = await fetch(`http://127.0.0.1:${port}/api/snapshot`, { signal: AbortSignal.timeout(1500) });
-    const body = (await r.json().catch(() => null)) as { app?: unknown } | null;
-    if (r.status === 401 && body?.app === "claude-office") return "phase2";
+    const body = (await r.json().catch(() => null)) as { app?: unknown; version?: unknown } | null;
+    if (r.status === 401 && body?.app === "claude-office") {
+      // FB-8: 401에 version을 싣기 시작한 것은 beta.5부터. 없으면 그보다 옛 Phase 2 계열 서버다
+      const v = typeof body.version === "string" ? body.version : undefined;
+      return v === pkg.version ? { kind: "phase2", version: v } : { kind: "phase2-old", version: v };
+    }
   } catch {
     /* 아래 doctor 판정으로 */
   }
-  return (await defaultProbePort(port)) === "ours" ? "beta" : "other";
+  return { kind: (await defaultProbePort(port)) === "ours" ? "beta" : "other" };
 }
 
 /** Node가 24 미만이면 쉬운 말 안내를, 아니면 null을 돌려준다(스펙 5장 1번) */
@@ -241,7 +257,7 @@ async function main(): Promise<void> {
   const policy = new PolicyGate(policyStore, { onChange: () => hub.poke() });
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy } }), {
+  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy } }), {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
   });
@@ -277,7 +293,7 @@ async function main(): Promise<void> {
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token }, decisions, gate, budget, policy, policyApi: policyStore }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
@@ -289,15 +305,15 @@ async function main(): Promise<void> {
       // 이미 이 프로그램이 켜져 있으면(Ruling B42) 오류가 아니다 — 런처가 토큰 주소로 브라우저를 이미 다시 열었다.
       // 판별은 doctor의 포트 판정을 그대로 쓴다(토큰을 보내지 않는다, B52). v1·다른 프로그램은 기존 안내와 종료 코드 1
       // 인증 없는 옛 베타 서버(B64)는 0으로 끝내지 않는다 — 브라우저에 옛 화면이 뜨고 결정·예산이 조용히 동작하지 않기 때문
-      void probeRunning(opts.port).then((kind) => {
+      void probeRunning(opts.port).then(({ kind, version }) => {
         hub.stop();
-        const o = portInUseOutcome(kind, paths.mode, opts.port);
+        const o = portInUseOutcome(kind, paths.mode, opts.port, version);
         if (o.code === 0) {
           console.log(o.out);
           log.info("server", "already running", { port: opts.port });
         } else {
           console.error(o.err);
-          log.error("server", kind === "beta" ? "older version running" : "port in use", { port: opts.port });
+          log.error("server", kind === "beta" || kind === "phase2-old" ? "older version running" : "port in use", { port: opts.port });
         }
         process.exit(o.code);
       });

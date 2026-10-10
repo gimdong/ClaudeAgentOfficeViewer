@@ -14,6 +14,10 @@ import { PolicyList } from "./policy/PolicyList";
 import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
+/** FB-7: 설치 뒤 옛 서버(메모리)가 새 화면(디스크)을 내보내면 저장 API가 없어 "저장하지 못했습니다"가 난다. 서버 버전이 없거나 다르면 알린다 */
+export const UPGRADE_NOTE = "새 버전이 설치됐습니다. 대시보드를 껐다 다시 켜 주세요(지금 화면은 새 버전, 서버는 이전 버전입니다).";
+/** FB-10: 다른 브라우저로 옮기는 길. 열쇠는 찍지 않고 명령만 안내한다(Ruling B45 유지) */
+export const AUTH_OPEN_HINT = "이미 켜져 있는데 이 브라우저에서 보고 싶으면, 터미널에서 claude-office open Safari 처럼 브라우저 이름을 붙여 실행하세요.";
 
 /** 접속 열쇠(토큰 쿠키)가 없을 때의 안내(디자인 phase2 §8). HUD와 빌딩 대신 이것만 그린다 */
 function AuthScreen() {
@@ -34,6 +38,7 @@ function AuthScreen() {
       </h1>
       <p>이 화면은 접속 열쇠가 있어야 볼 수 있습니다. 터미널에서 claude-office를 실행하면 열쇠가 담긴 주소로 브라우저가 열립니다.</p>
       <p>북마크로 열었는데 이 화면이 보이면, 터미널에서 한 번만 다시 열어 주세요. 그 뒤로는 북마크로 열립니다.</p>
+      <p>{AUTH_OPEN_HINT}</p>
       <pre className="auth-cmd">$ claude-office</pre>
     </main>
   );
@@ -89,6 +94,11 @@ export function App() {
         {snapshot.error && (
           <div className="banner" role="alert">
             {snapshot.error}
+          </div>
+        )}
+        {snapshot.serverVersion !== __APP_VERSION__ && (
+          <div className="banner banner--upgrade" data-testid="upgrade-note">
+            {UPGRADE_NOTE}
           </div>
         )}
         <Hud

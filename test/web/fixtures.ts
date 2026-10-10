@@ -12,6 +12,7 @@ export function makeSession(p: Partial<SessionView> = {}): SessionView {
 export function makeSnapshot(p: Partial<Snapshot> = {}): Snapshot {
   return {
     generatedAt: "2026-09-28T00:00:00.000Z",
+    serverVersion: __APP_VERSION__,
     usage: { today: emptySum(), last5h: emptySum(), last7d: emptySum(), byModel: [], hourly: new Array(24).fill(0) },
     budget: {},
     limits: null,

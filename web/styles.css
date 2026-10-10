@@ -76,6 +76,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .app { max-width: 1200px; margin: 0 auto; padding: 16px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); }
 .banner { background: var(--pink); color: var(--bg); padding: 8px 12px; margin-bottom: 12px; font-weight: bold; }
+.banner--upgrade { background: var(--yellow); } /* FB-7: 오류가 아니라 재시작 안내 — 노랑, role 없음(status는 하나뿐) */
 
 /* ───────── HUD (v1 유지 + 결정 대기 칩 + 층 바로가기) ───────── */
 .hud { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; background: var(--panel); border: 2px solid var(--desk); padding: 10px 12px; margin-bottom: 16px; position: sticky; top: 0; z-index: 20; }

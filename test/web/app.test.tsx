@@ -17,6 +17,21 @@ describe("App", () => {
     expect(screen.getByText("사무실 불 켜는 중...")).toBeTruthy();
   });
 
+  it("FB-7: 서버 버전이 화면과 다르거나(옛 서버) 없으면 \"다시 켜 주세요\" 띠를 띄우고, 같으면 띄우지 않는다", () => {
+    const note = "새 버전이 설치됐습니다. 대시보드를 껐다 다시 켜 주세요(지금 화면은 새 버전, 서버는 이전 버전입니다).";
+    state.value = { snapshot: makeSnapshot({ serverVersion: undefined, sessions: [makeSession()] }), live: true };
+    const { rerender, unmount } = render(<App />);
+    expect(screen.getByTestId("upgrade-note").textContent).toBe(note);
+    expect(screen.getByTestId("upgrade-note").getAttribute("role")).toBeNull(); // status는 하나뿐(phase2 §9.5)
+    state.value = { snapshot: makeSnapshot({ serverVersion: "0.0.1", sessions: [makeSession()] }), live: true };
+    rerender(<App />);
+    expect(screen.getByTestId("upgrade-note").textContent).toBe(note);
+    unmount();
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()] }), live: true }; // fixture 기본값 = 화면 버전
+    render(<App />);
+    expect(screen.queryByTestId("upgrade-note")).toBeNull();
+  });
+
   it("error가 있으면 배너를 띄우고 HUD와 사무실을 그린다", () => {
     state.value = { snapshot: makeSnapshot({ error: "Claude 데이터 폴더를 읽을 수 없습니다: /x", sessions: [makeSession()] }), live: true };
     render(<App />);

@@ -42,8 +42,22 @@ describe("parseCliArgs", () => {
   it("포트가 이미 쓰일 때의 안내와 종료 코드(Ruling B42·B64)", () => {
     expect(portInUseOutcome("phase2", "installed", 4317)).toEqual({ code: 0, out: "이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. 이 창은 닫아도 대시보드가 꺼지지 않습니다." });
     expect(portInUseOutcome("phase2", "dev", 4319)).toEqual({ code: 0, out: "이미 켜져 있습니다." });
-    expect(portInUseOutcome("beta", "installed", 4317)).toEqual({ code: 1, err: "이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요." });
+    const beta = portInUseOutcome("beta", "installed", 4317) as { code: 1; err: string };
+    expect(beta.code).toBe(1);
+    expect(beta.err.startsWith("이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.")).toBe(true);
     expect(portInUseOutcome("other", "dev", 4319)).toEqual({ code: 1, err: "포트 4319번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요." });
+  });
+
+  it("FB-8: 버전이 다른 Phase 2 계열 서버는 \"이전 버전\" 안내(버전 표시)와 창이 없을 때의 안내, 종료 코드 1", () => {
+    const o = portInUseOutcome("phase2-old", "installed", 4317, "2.0.0-beta.4");
+    expect(o.code).toBe(1);
+    const err = (o as { err: string }).err;
+    expect(err.startsWith("이전 버전 대시보드(2.0.0-beta.4)가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.")).toBe(true);
+    expect(err).toContain("창이 보이지 않으면");
+    // 버전을 모르면(beta.4 이전 Phase 2 서버의 401에는 버전이 없음) 괄호 없이
+    expect((portInUseOutcome("phase2-old", "installed", 4317) as { err: string }).err.startsWith("이전 버전 대시보드가 켜져 있습니다.")).toBe(true);
+    // 옛 베타(인증 없음) 문구에도 같은 "창이 없을 때" 안내가 붙는다
+    expect((portInUseOutcome("beta", "installed", 4317) as { err: string }).err).toContain("창이 보이지 않으면");
   });
 
   it("토큰 주소 줄은 개발 모드에서만 만든다(Ruling B33)", () => {
@@ -157,7 +171,7 @@ describe("CLI", () => {
       if (process.platform !== "win32") expect(statSync(join(s.prefix, "token")).mode & 0o777).toBe(0o600);
       const r = await fetch(`http://127.0.0.1:${s.port}/api/snapshot`);
       expect(r.status).toBe(401);
-      expect(await r.json()).toEqual({ error: "unauthorized", app: "claude-office" });
+      expect(await r.json()).toEqual({ error: "unauthorized", app: "claude-office", version: expect.stringMatching(/^\d+\.\d+\.\d+/) }); // FB-8: 실제 서버는 자기 버전을 싣는다
       expect((await fetch(`http://127.0.0.1:${s.port}/api/snapshot`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
       // doctor는 토큰 파일을 읽어 Bearer로 묻는다. 4317이 아니므로 "켜져 있지만 플러그인은 4317로" 안내 = 이 프로그램으로 인식
       const d = await run(["doctor", "--json", "--claude-home", s.home, "--port", String(s.port)], s.env);
@@ -331,6 +345,25 @@ describe("CLI", () => {
       expect(r.stdout).not.toContain("이미 켜져 있습니다");
     } finally {
       beta.close();
+      for (const d of [prefix, home, logDir]) rmSync(d, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("FB-8: 버전이 다른 Phase 2 계열 서버(401 + app, 다른 version)가 포트를 쓰면 \"이전 버전\" 안내와 종료 코드 1", async () => {
+    const { createServer: createHttp } = await import("node:http");
+    const old = createHttp((_req, res) => void res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "unauthorized", app: "claude-office", version: "0.0.1-old" }))).listen(0, "127.0.0.1");
+    await new Promise((r) => old.once("listening", r));
+    const port = (old.address() as { port: number }).port;
+    const prefix = mkdtempSync(join(tmpdir(), "office-fb8-prefix-"));
+    const home = mkdtempSync(join(tmpdir(), "office-fb8-home-"));
+    const logDir = mkdtempSync(join(tmpdir(), "office-fb8-log-"));
+    try {
+      const r = await run(["--port", String(port), "--claude-home", home, "--log-dir", logDir], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("이전 버전 대시보드(0.0.1-old)가 켜져 있습니다.");
+      expect(r.stdout).not.toContain("이미 켜져 있습니다");
+    } finally {
+      old.close();
       for (const d of [prefix, home, logDir]) rmSync(d, { recursive: true, force: true });
     }
   }, 30_000);

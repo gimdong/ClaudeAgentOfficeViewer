@@ -58,7 +58,7 @@ beforeAll(async () => {
     {
       staticDir,
       heartbeatMs: 60_000,
-      auth: { token: TOKEN },
+      auth: { token: TOKEN, version: "9.9.9-test" },
       diagnostics: {
         diagDir: tmp,
         summary: async () => ({ doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" }),
@@ -100,7 +100,8 @@ describe("읽기 API 인증", () => {
     for (const p of ["/api/snapshot", "/api/stream", "/api/diagnostics", "/api/diagnostics/files/claude-office-diag-20261002-000000.json", "/api/nope"]) {
       const r = await send("GET", p);
       expect(r.status, p).toBe(401);
-      expect(JSON.parse(r.body)).toEqual({ error: "unauthorized", app: "claude-office" });
+      // FB-8: 런처가 떠 있는 서버의 버전을 알 수 있게 401 본문에 버전을 싣는다(이 PC 안에서만 보이는 값)
+      expect(JSON.parse(r.body)).toEqual({ error: "unauthorized", app: "claude-office", version: "9.9.9-test" });
     }
   });
 
@@ -160,7 +161,7 @@ describe("쓰기 API 인증(Ruling B32)", () => {
     expect((await send("POST", bundle, { ...cookie, ...origin(), "Content-Type": "text/plain" }, "{}")).status).toBe(415);
     const r = await send("POST", bundle, { ...origin(), ...json }, "{}");
     expect(r.status).toBe(401);
-    expect(JSON.parse(r.body)).toEqual({ error: "unauthorized", app: "claude-office" });
+    expect(JSON.parse(r.body)).toEqual({ error: "unauthorized", app: "claude-office", version: "9.9.9-test" });
   });
 
   it("쓰기 API: Bearer + Origin 없음이면 통과, Bearer + 다른 출처 Origin이면 403", async () => {

@@ -29,6 +29,8 @@ export interface BuilderOptions {
   decisions?: Pick<DecisionQueue, "list">;
   /** 층 예산(Phase 2 스펙 5장). 빌드마다 사용량을 관문에 넣고 처음 본 세션을 저장소에 알린다 */
   budget?: { gate: Pick<BudgetGate, "setUsage" | "usage" | "view">; store: Pick<BudgetStore, "touch" | "defaultTokens"> };
+  /** 서버 버전(package.json). 스냅샷에 실어 화면이 자기 버전과 비교한다(FB-7) */
+  version?: string;
   /** 권한 정책(Phase 3 스펙 7.4). 구성원마다 걸린 규칙·횟수·방금 막힘을 싣고, 스냅샷에 정책 전체를 싣는다(Ruling B77) */
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
@@ -102,12 +104,16 @@ export class SnapshotBuilder {
     this.usage = new UsageCollector(join(opts.claudeHome, "projects"));
   }
 
+  private versionField(): Pick<Snapshot, "serverVersion"> {
+    return this.opts.version ? { serverVersion: this.opts.version } : {};
+  }
+
   async build(now = Date.now()): Promise<Snapshot> {
     const { claudeHome, config } = this.opts;
     try {
       await access(claudeHome);
     } catch {
-      return emptySnapshot(now, config, `Claude 데이터 폴더를 읽을 수 없습니다: ${claudeHome}`);
+      return { ...emptySnapshot(now, config, `Claude 데이터 폴더를 읽을 수 없습니다: ${claudeHome}`), ...this.versionField() };
     }
 
     let stale = false;
@@ -173,7 +179,7 @@ export class SnapshotBuilder {
     const unreadable = p?.store.unreadable() ?? false;
     const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
-    return { ...emptySnapshot(now, config), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy };
+    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy };
   }
 
   private async sessionView(

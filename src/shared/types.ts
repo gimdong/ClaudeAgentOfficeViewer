@@ -151,6 +151,8 @@ export interface UsageSummary {
 
 export interface Snapshot {
   generatedAt: string;
+  /** 이 스냅샷을 만든 서버의 버전(FB-7). beta.4 이전 서버는 싣지 않으므로 화면은 "없음"도 불일치로 본다 */
+  serverVersion?: string;
   error?: string;
   usage: UsageSummary;
   budget: { fiveHour?: number; weekly?: number };

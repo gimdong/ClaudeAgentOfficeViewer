@@ -76,7 +76,7 @@ export function createApp(
     stats?: HookStats;
     diagnostics?: DiagnosticsDeps;
     /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
-    auth?: { token: string };
+    auth?: { token: string; /** 401 본문에 싣는 서버 버전(FB-8). 런처가 떠 있는 서버가 같은 버전인지 가린다 */ version?: string };
     /** 결정 큐(스펙 3.2). 없으면 PermissionRequest도 즉시 빈 200(Phase 1 동작) */
     decisions?: Pick<DecisionQueue, "hold" | "answer" | "onEvent">;
     gate?: BudgetGateHooks;
@@ -230,7 +230,7 @@ export function createApp(
     app.use("/api", (req, res, next) => {
       const byCookie = tokenMatches(cookieOf(req.headers.cookie), token);
       const byBearer = tokenMatches(bearerOf(req.headers.authorization), token);
-      if (!byCookie && !byBearer) return void res.status(401).json({ error: "unauthorized", app: "claude-office" });
+      if (!byCookie && !byBearer) return void res.status(401).json({ error: "unauthorized", app: "claude-office", ...(opts.auth?.version ? { version: opts.auth.version } : {}) });
       if (req.method === "GET" || req.method === "HEAD") return next();
       const origin = req.headers.origin;
       const fromPage = byCookie && origin !== undefined && isSameOrigin(origin, req.headers.host);
