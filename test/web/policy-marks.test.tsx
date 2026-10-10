@@ -10,7 +10,9 @@ vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import
 
 import { App } from "../../web/App";
 
-const T0 = Date.UTC(2026, 9, 7, 3, 0, 0);
+// 실제 시계로 도는 파일이라 기준 시각은 지금으로 둔다. 고정 날짜를 쓰면 그 날짜가 지난 뒤 결정이 "만료"로 잠겨
+// 허용 클릭이 무시된다(2026-10-10에 그렇게 깨졌다. Phase 2 #180 테스트와 같은 함정)
+const T0 = Date.now();
 let fetchMock: ReturnType<typeof vi.fn>;
 const DIAG = { doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" };
 beforeEach(() => {
