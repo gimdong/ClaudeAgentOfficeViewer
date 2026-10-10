@@ -468,6 +468,20 @@ describe("사용설명서(docs/manual/index.html)", () => {
       for (const t of [onNew, onOld]) expect(read("server/index.ts"), t).toContain(`"${t}"`);
       expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onNew}`);
       expect(prose).toContain(`이 창을 닫으면 대시보드가 꺼집니다.\n${onOld}`);
+      // FB-8: 옛 서버가 떠 있을 때 붙는 "창이 없으면" 안내 — 서버 상수와 같은 글자, 설명서 6장 출력 상자에 그대로
+      const noWindow = /const NO_WINDOW_HINT = "(.+)";/.exec(read("server/index.ts"))![1].replace(/\\"/g, '"');
+      expect(prose).toContain(`${onOld} ${noWindow}`);
+      expect(html).toContain('<h3 id="no-window">대시보드를 끄고 싶은데 끌 창이 없어요</h3>');
+      expect(prose).toContain("lsof -ti :4317 | xargs kill");
+      expect(prose).toContain("Claude Code 안에서 <code>!</code>로 켜지 마세요.");
+      // FB-7: 버전 불일치 띠 문구는 화면 코드의 상수와 같은 글자
+      const upgrade = /export const UPGRADE_NOTE = "([^"]+)"/.exec(read("web/App.tsx"))![1];
+      expect(prose).toContain(upgrade);
+      // FB-10: 다른 브라우저로 여는 명령 — 401 화면 문구와 4장 안내
+      const openHint = /export const AUTH_OPEN_HINT = "([^"]+)"/.exec(read("web/App.tsx"))![1];
+      expect(openHint).toContain("claude-office open Safari");
+      expect(prose).toContain("claude-office open Safari");
+      expect(read("packaging/claude-office.sh")).toContain("  open)");
       // 7장: 제거가 token·state.json도 지운다
       expect(read("packaging/claude-office.sh")).toMatch(/rm -rf [^\n]*"\$PREFIX\/token" "\$PREFIX\/state\.json"/);
       expect(prose).toContain("접속 열쇠 파일(<code>token</code>)과 층별 예산 설정(<code>state.json</code>)");
