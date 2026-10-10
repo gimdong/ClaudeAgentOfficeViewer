@@ -1012,6 +1012,31 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
     }
   }, 20_000);
 
+  it("FB-10: `claude-office open [브라우저]`는 열쇠 주소를 (지정한) 브라우저로 열고 서버는 켜지 않으며 열쇠를 찍지 않는다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
+      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fakeNode(rig);
+      const token = readFileSync(join(prefix, "token"), "utf8").trim();
+      writeFileSync(rig.stubLog, "");
+      let r = runLauncher(prefix, env(rig), ["open"]);
+      expect(r.status).toBe(0);
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe(`open http://127.0.0.1:4317/?k=${token}`);
+      expect((r.stdout + r.stderr).includes(token)).toBe(false);
+      expect(r.stdout + r.stderr).not.toContain("이 창을 닫으면"); // 서버를 켜지 않는다
+      writeFileSync(rig.stubLog, "");
+      r = runLauncher(prefix, env(rig), ["open", "Safari", "--port", "5999"]);
+      expect(r.status).toBe(0);
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe(`open -a Safari http://127.0.0.1:5999/?k=${token}`);
+    } finally {
+      rig.cleanup();
+    }
+  }, 20_000);
+
   it("런처: 토큰이 없으면 예전 주소로 연다", () => {
     requireBuildOk();
     const rig = makeRig();

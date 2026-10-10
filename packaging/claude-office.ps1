@@ -127,6 +127,33 @@ switch ($cmd) {
   "--version" {
     Get-Content -LiteralPath (Join-Path $Prefix "VERSION")
   }
+  "open" {
+    # FB-10: 이미 켜진 대시보드를 다른 브라우저로 열 길. `claude-office open [브라우저 이름] [--port N]`.
+    # 열쇠 주소를 기본 브라우저(이름을 주면 그 프로그램)로 열고 서버는 켜지 않는다. 열쇠는 찍지 않는다(sh와 같은 문구)
+    $app = ""
+    $port = 4317
+    $prev = ""
+    foreach ($a in $RestArgs) {
+      if ($a -like "--port=*") { $port = $a.Substring(7) }
+      elseif ($prev -eq "--port") { $port = $a }
+      elseif ($a -ne "--port") { $app = $a }
+      $prev = $a
+    }
+    $url = "http://127.0.0.1:$port/"
+    $tokenFile = Join-Path $Prefix "token"
+    if (Test-Path -LiteralPath $tokenFile) {
+      $t = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
+      if ($t) { $url = "$url" + "?k=$t" }
+    }
+    try {
+      if ($app) { Start-Process -FilePath $app -ArgumentList $url -ErrorAction Stop } else { Start-Process $url -ErrorAction Stop }
+      exit 0
+    } catch {
+      [Console]::WriteLine("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url")
+      [Console]::WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")
+      exit 1
+    }
+  }
   "uninstall" {
     $rest = if ($RestArgs.Count -gt 1) { $RestArgs[1..($RestArgs.Count - 1)] } else { @() }
     $UYes = $rest -contains "--yes"

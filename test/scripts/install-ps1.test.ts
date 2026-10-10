@@ -59,6 +59,10 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
       expect(installSh, cmd).toContain(cmd);
       expect(installPs1, cmd).toContain(cmd);
     }
+    // FB-10: open 하위 명령은 두 런처에 모두 있다(ps1은 Start-Process로 연다)
+    expect(launcherSh).toContain("  open)");
+    expect(launcherPs1).toContain('"open" {');
+    expect(launcherPs1).toMatch(/"open" \{[\s\S]*Start-Process/);
     for (const cmd of ["plugin uninstall claude-office@claude-office --scope user", "plugin marketplace remove claude-office"]) {
       expect(launcherSh, cmd).toContain(cmd);
       expect(launcherPs1, cmd).toContain(cmd);

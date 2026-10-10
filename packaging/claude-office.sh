@@ -74,6 +74,32 @@ case "$cmd" in
   --version)
     cat "$PREFIX/VERSION"
     ;;
+  open)
+    # FB-10: 이미 켜진 대시보드를 다른 브라우저로 열 길. `claude-office open [브라우저 이름] [--port N]`.
+    # 열쇠 주소를 기본 브라우저(이름을 주면 그 브라우저)로 열고 서버는 켜지 않는다. 열쇠는 찍지 않는다(Ruling B45 유지)
+    shift
+    app=""
+    port=4317
+    prev=""
+    for a in "$@"; do
+      case "$a" in
+        --port=*) port=${a#--port=} ;;
+        --port) : ;;
+        *) [ "$prev" = "--port" ] && port="$a" || app="$a" ;;
+      esac
+      prev="$a"
+    done
+    url="http://127.0.0.1:$port/"
+    if [ -s "$PREFIX/token" ]; then url="${url}?k=$(tr -d ' \n\r' < "$PREFIX/token")"; fi
+    if [ -n "$app" ]; then
+      open -a "$app" "$url" 2>/dev/null && exit 0
+    else
+      { open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null; } && exit 0
+    fi
+    echo "브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url"
+    echo "이 주소는 열쇠입니다. 남에게 보내지 마세요."
+    exit 1
+    ;;
   uninstall)
     shift
     UYES=0
