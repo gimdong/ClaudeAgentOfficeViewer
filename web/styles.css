@@ -176,7 +176,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .room { position: relative; min-height: var(--room-min-h); background: linear-gradient(var(--wall) 0 70%, var(--floor) 70% 100%); padding: 8px 12px 6px; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
 .floor.collapsed .room { display: none; }
 .backdrop { flex: none; width: 88px; height: 64px; align-self: flex-start; margin-top: 8px; }
-.desks { display: flex; flex-wrap: wrap; gap: 8px 4px; align-items: flex-end; flex: 1; min-width: 0; }
+.desks { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-end; flex: 1; min-width: 0; padding-left: 8px; } /* 책상 사이 20px, 왼쪽 여백 8px — 사용자 피드백(beta.4: 책상이 왼쪽에 붙어 보임) */
 
 .desk { position: relative; width: 96px; text-align: center; background: none; border: 0; padding: 0; outline-offset: 0; }
 .desk svg { width: 96px; height: 120px; overflow: visible; }
