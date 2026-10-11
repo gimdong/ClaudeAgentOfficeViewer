@@ -18,6 +18,7 @@ import { errInfo, getLogger, warnCaught } from "./log";
 import { readLastEntry } from "./lib/jsonlTail";
 import { POLICY_DENIED_SHOW_MS, memberKeyOf, type PolicyGate } from "./policy/gate";
 import type { PolicyStore } from "./policy/store";
+import type { FloorControl } from "./floors/control";
 
 export interface BuilderOptions {
   claudeHome: string;
@@ -32,6 +33,8 @@ export interface BuilderOptions {
   /** 서버 버전(package.json). 스냅샷에 실어 화면이 자기 버전과 비교한다(FB-7) */
   version?: string;
   /** 권한 정책(Phase 3 스펙 7.4). 구성원마다 걸린 규칙·횟수·방금 막힘을 싣고, 스냅샷에 정책 전체를 싣는다(Ruling B77) */
+  /** 층 관리(Phase 4a): 일시정지·종료 중·숨김. 빌드마다 sweep으로 끝난 세션을 정리한다 */
+  floors?: Pick<FloorControl, "sweep" | "view" | "isHidden" | "hiddenCount">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
 
@@ -136,9 +139,13 @@ export class SnapshotBuilder {
     const limits = await readLimits(claudeHome, now).catch((e) => (warnCaught("snapshot", "limits collect failed", e), null));
     this.opts.events?.prune(now);
 
-    const byStart = [...sessions].sort((a, b) => a.startedAt - b.startedAt || a.sessionId.localeCompare(b.sessionId));
+    // 층 관리(Phase 4a): 끝난 세션을 정리하고, 숨긴 세션을 뺀 나머지로 층 번호·현재 세션을 매긴다(스펙 6, B118)
+    const floors = this.opts.floors;
+    floors?.sweep(sessions);
+    const shown = floors ? sessions.filter((s) => !floors.isHidden(s.sessionId)) : sessions;
+    const byStart = [...shown].sort((a, b) => a.startedAt - b.startedAt || a.sessionId.localeCompare(b.sessionId));
     const floorOf = new Map(byStart.map((s, i) => [s.sessionId, i + 1]));
-    const ordered = [...sessions].sort((a, b) => Number(b.alive) - Number(a.alive) || b.updatedAt - a.updatedAt);
+    const ordered = [...shown].sort((a, b) => Number(b.alive) - Number(a.alive) || b.updatedAt - a.updatedAt);
     const currentId = ordered.find((s) => s.alive)?.sessionId;
     const projectsDir = join(claudeHome, "projects");
     const teamFor = async (sessionId: string): Promise<TeamRecord | undefined> => {
@@ -180,7 +187,23 @@ export class SnapshotBuilder {
     const unreadable = p?.store.unreadable() ?? false;
     const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
-    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy };
+    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0 };
+  }
+
+  /** 마지막 빌드의 세션 레코드(Phase 4a B114·B117). 종료 API가 pid·procStart를 이것으로 검사한다. 스냅샷에는 싣지 않는다 */
+  record(sessionId: string): SessionRecord | undefined {
+    return this.prevSessions.find((s) => s.sessionId === sessionId);
+  }
+
+  /** 살아 있고 일시정지면 "paused"(구성원 상태와 무관, 스펙 4.4). 횟수는 일시정지 층에만, 종료 중은 참일 때만 */
+  private floorFields(s: SessionRecord, members: Member[]): Pick<SessionView, "floorStatus" | "pausedDenied" | "terminating"> {
+    const v = this.opts.floors?.view(s.sessionId);
+    const paused = s.alive && !!v?.paused;
+    return {
+      floorStatus: paused ? "paused" : floorStatusOf(s.alive, members),
+      ...(paused ? { pausedDenied: v.pausedDenied } : {}),
+      ...(s.alive && v?.terminating ? { terminating: true as const } : {}),
+    };
   }
 
   private async sessionView(
@@ -289,7 +312,7 @@ export class SnapshotBuilder {
       isCurrent,
       status,
       floor,
-      floorStatus: floorStatusOf(s.alive, members),
+      ...this.floorFields(s, members),
       ...(s.startedAt ? { startedAt: iso(s.startedAt) } : {}),
       ...(!s.alive && s.updatedAt ? { endedAt: iso(s.updatedAt) } : {}),
       ...(stale ? { stale: true } : {}),

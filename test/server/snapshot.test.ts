@@ -8,6 +8,9 @@ import { HOLD_MS } from "../../server/decisions/protocol";
 import { EventStore } from "../../server/events/store";
 import { getLogger } from "../../server/log";
 import { PolicyGate } from "../../server/policy/gate";
+import { FloorControl } from "../../server/floors/control";
+import { BudgetGate } from "../../server/budget/gate";
+import { BudgetStore } from "../../server/budget/store";
 import { PolicyStore } from "../../server/policy/store";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -453,5 +456,125 @@ describe("SnapshotBuilder + 권한 정책(Phase 3 스펙 7.4)", () => {
     gate.preToolUse(pre({}))?.respond();
     const text = JSON.stringify(await build());
     expect(text.includes("FAKE-CMD-123")).toBe(false);
+  });
+});
+
+describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
+  const T = NOW;
+  const PS = "Mon Oct 11 10:00:00 2026";
+  async function seedFloors() {
+    await h.write("sessions/1.json", { pid: 1, sessionId: "A", name: "a", cwd: "/a", status: "busy", startedAt: T - 3_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/2.json", { pid: 2, sessionId: "B", name: "b", cwd: "/b", status: "idle", startedAt: T - 2_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/3.json", { pid: 3, sessionId: "C", name: "c", cwd: "/c", status: "idle", startedAt: T - 1_000_000, updatedAt: T - 500 });
+  }
+  let alive: (pid: number) => boolean;
+  let floors: FloorControl;
+  beforeEach(() => {
+    alive = () => true;
+    floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 999_999 });
+  });
+  const builder = () => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: (pid) => alive(pid), floors });
+  const by = (snap: Awaited<ReturnType<SnapshotBuilder["build"]>>) => Object.fromEntries(snap.sessions.map((s) => [s.id, s]));
+
+  it("record(id)는 마지막 빌드의 레코드를 주고 procStart를 담는다, 없는 id는 undefined", async () => {
+    await seedFloors();
+    // procStart가 있으면 readSessions가 실제 ps로 pid 재사용을 본다(읽기만). 여기서는 레코드에 남는지만 본다
+    await h.write("sessions/4.json", { pid: 4, sessionId: "D", name: "d", cwd: "/d", status: "idle", startedAt: T - 500_000, updatedAt: T - 100, procStart: PS });
+    const b = builder();
+    expect(b.record("A")).toBeUndefined();
+    await b.build(T);
+    expect(b.record("A")).toMatchObject({ sessionId: "A", pid: 1, alive: true });
+    expect(b.record("D")?.procStart).toBe(PS);
+    expect(b.record("nope")).toBeUndefined();
+  });
+
+  it("일시정지 층은 구성원이 작업 중이어도 paused이고 pausedDenied를 싣는다, 재개하면 기존 규칙, 끝난 세션은 ended", async () => {
+    await seedFloors();
+    const b = builder();
+    floors.pause("A");
+    floors.preToolUse({ hook_event_name: "PreToolUse", session_id: "A", tool_name: "Bash" });
+    let s = by(await b.build(T));
+    expect([s.A.floorStatus, s.A.pausedDenied]).toEqual(["paused", 1]);
+    expect("pausedDenied" in s.B).toBe(false);
+    floors.resume("A");
+    s = by(await b.build(T));
+    expect(s.A.floorStatus).toBe("working");
+    expect("pausedDenied" in s.A).toBe(false);
+    floors.pause("C");
+    alive = (pid) => pid !== 3;
+    s = by(await b.build(T));
+    expect(s.C.floorStatus).toBe("ended");
+    expect(floors.isPaused("C")).toBe(false); // 빌드의 sweep이 지웠다
+  });
+
+  it("terminating이면 terminating: true가 실리고 floorStatus는 그대로", async () => {
+    await seedFloors();
+    const b = builder();
+    await b.build(T);
+    expect(await floors.terminate({ ...b.record("A")!, procStart: PS }, false)).toMatchObject({ ok: true, sent: true }); // 가짜 matcher·signal
+    const s = by(await b.build(T));
+    expect([s.A.terminating, s.A.floorStatus]).toEqual([true, "working"]);
+    expect("terminating" in s.B).toBe(false);
+  });
+
+  it("숨긴 세션은 sessions에서 빠지고 층 번호가 다시 매겨지며 hiddenFloors가 그 수다", async () => {
+    await seedFloors();
+    alive = (pid) => pid !== 2;
+    const b = builder();
+    await b.build(T);
+    floors.hide("B");
+    const snap = await b.build(T);
+    expect(snap.sessions.map((s) => [s.id, s.floor])).toEqual([["C", 2], ["A", 1]]);
+    expect(snap.hiddenFloors).toBe(1);
+    expect(snap.sessions.find((s) => s.isCurrent)?.id).toBe("C");
+  });
+
+  it("숨긴 세션이 다시 살아나면 숨김이 풀리고 보인다(Review Focus 3)", async () => {
+    await seedFloors();
+    alive = (pid) => pid !== 2;
+    const b = builder();
+    await b.build(T);
+    floors.hide("B");
+    expect((await b.build(T)).hiddenFloors).toBe(1);
+    alive = () => true;
+    const snap = await b.build(T);
+    expect(snap.hiddenFloors).toBe(0);
+    expect(snap.sessions.map((s) => s.id).sort()).toEqual(["A", "B", "C"]);
+  });
+
+  it("숨겨도 예산·정책 상태는 그대로다(Review Focus 3)", async () => {
+    await seedFloors();
+    alive = (pid) => pid !== 2;
+    const dir = await mkdtemp(join(tmpdir(), "co-snap-floors-"));
+    try {
+      const store = new BudgetStore(join(dir, "state.json"));
+      store.load();
+      store.setBudget("B", 5000, 0);
+      const gate = new BudgetGate(store);
+      const pstore = new PolicyStore(join(dir, "policy.json"));
+      pstore.load();
+      pstore.set("lead", { bash: "deny" });
+      const pgate = new PolicyGate(pstore);
+      pgate.preToolUse({ hook_event_name: "PreToolUse", session_id: "B", tool_name: "Bash" })?.respond();
+      const b = new SnapshotBuilder({ claudeHome: h.home, config, isAlive: (pid) => alive(pid), floors, budget: { gate, store }, policy: { store: pstore, gate: pgate } });
+      await b.build(T);
+      floors.hide("B");
+      await b.build(T);
+      expect(store.get("B")).toEqual({ budgetTokens: 5000, nextGateAt: 5000 });
+      expect(pgate.countsOf("lead")).toEqual({ denied: 1, asked: 0 });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("빌드마다 sweep이 불리고, 스냅샷 JSON에 pid·procStart가 없다", async () => {
+    await seedFloors();
+    const sweep = vi.spyOn(floors, "sweep");
+    const b = builder();
+    await b.build(T);
+    const snap = await b.build(T);
+    expect(sweep).toHaveBeenCalledTimes(2);
+    const text = JSON.stringify(snap);
+    expect([text.includes('"pid"'), text.includes("procStart"), text.includes(PS)]).toEqual([false, false, false]);
   });
 });

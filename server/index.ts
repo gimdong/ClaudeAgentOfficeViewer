@@ -261,7 +261,8 @@ async function main(): Promise<void> {
   const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke() });
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const hub = new SnapshotHub(new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy } }), {
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors });
+  const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
   });
@@ -306,8 +307,8 @@ async function main(): Promise<void> {
     hide: (id: string) => floors.hide(id),
     unhideAll: () => floors.unhideAll(),
     hiddenCount: () => floors.hiddenCount(),
-    // 마지막 빌드의 세션 레코드는 Task 4가 SnapshotBuilder.record로 연결한다. 그 전까지는 레코드 없음(모든 층 API가 ended·404)
-    record: (_id: string) => undefined,
+    // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
+    record: (id: string) => builder.record(id),
   };
   const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
