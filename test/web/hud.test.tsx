@@ -58,6 +58,16 @@ describe("Hud", () => {
     expect(screen.getByText("● LIVE")).toBeTruthy();
   });
 
+  it("버전을 LIVE 옆에 보여 준다 — 서버 버전이 있으면 그것, 없으면(옛 서버) 화면 버전에 '화면' 표시", () => {
+    render(<Hud snapshot={makeSnapshot({ serverVersion: "2.0.0-beta.9" })} live />);
+    const v = screen.getByTestId("version");
+    expect(v.textContent).toBe("v2.0.0-beta.9");
+    expect(v.getAttribute("title")).toBe(`서버 2.0.0-beta.9 · 화면 ${__APP_VERSION__}`);
+    cleanup();
+    render(<Hud snapshot={makeSnapshot({ serverVersion: undefined })} live />);
+    expect(screen.getByTestId("version").textContent).toBe(`화면 v${__APP_VERSION__}`);
+  });
+
   it("주간 사용률이 더 높으면 PLAN은 주간 기준으로 표시한다", () => {
     const snap = makeSnapshot({ limits: { fiveHourPct: 10, weeklyPct: 95, source: "statusline" } });
     render(<Hud snapshot={snap} live />);

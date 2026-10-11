@@ -99,6 +99,10 @@ export function Hud({
         }}
       />
       <span className={`live ${live ? "on" : "off"}`}>{live ? "● LIVE" : "○ 재연결 중"}</span>
+      {/* 지금 돌고 있는 서버의 버전(사용자 요청). 옛 서버는 버전을 싣지 않으므로 화면 버전에 "화면"을 붙여 구별한다(FB-7 띠와 짝) */}
+      <span className="version" data-testid="version" title={`서버 ${snapshot.serverVersion ?? "알 수 없음"} · 화면 ${__APP_VERSION__}`}>
+        {snapshot.serverVersion ? `v${snapshot.serverVersion}` : `화면 v${__APP_VERSION__}`}
+      </span>
       <Elevator sessions={snapshot.sessions} />
       {/* .hud는 sticky라 그 안의 fixed 서랍이 HUD 쌓임 맥락에 갇힌다. body에 그린다 */}
       {diagOpen &&
