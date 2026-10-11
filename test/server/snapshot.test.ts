@@ -463,9 +463,9 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
   const T = NOW;
   const PS = "Mon Oct 11 10:00:00 2026";
   async function seedFloors() {
-    await h.write("sessions/1.json", { pid: 1, sessionId: "A", name: "a", cwd: "/a", status: "busy", startedAt: T - 3_000_000, updatedAt: T - 1000 });
-    await h.write("sessions/2.json", { pid: 2, sessionId: "B", name: "b", cwd: "/b", status: "idle", startedAt: T - 2_000_000, updatedAt: T - 1000 });
-    await h.write("sessions/3.json", { pid: 3, sessionId: "C", name: "c", cwd: "/c", status: "idle", startedAt: T - 1_000_000, updatedAt: T - 500 });
+    await h.write("sessions/1.json", { pid: 101, sessionId: "A", name: "a", cwd: "/a", status: "busy", startedAt: T - 3_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/2.json", { pid: 102, sessionId: "B", name: "b", cwd: "/b", status: "idle", startedAt: T - 2_000_000, updatedAt: T - 1000 });
+    await h.write("sessions/3.json", { pid: 103, sessionId: "C", name: "c", cwd: "/c", status: "idle", startedAt: T - 1_000_000, updatedAt: T - 500 });
   }
   let alive: (pid: number) => boolean;
   let floors: FloorControl;
@@ -479,11 +479,11 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
   it("record(id)는 마지막 빌드의 레코드를 주고 procStart를 담는다, 없는 id는 undefined", async () => {
     await seedFloors();
     // procStart가 있으면 readSessions가 실제 ps로 pid 재사용을 본다(읽기만). 여기서는 레코드에 남는지만 본다
-    await h.write("sessions/4.json", { pid: 4, sessionId: "D", name: "d", cwd: "/d", status: "idle", startedAt: T - 500_000, updatedAt: T - 100, procStart: PS });
+    await h.write("sessions/4.json", { pid: 104, sessionId: "D", name: "d", cwd: "/d", status: "idle", startedAt: T - 500_000, updatedAt: T - 100, procStart: PS });
     const b = builder();
     expect(b.record("A")).toBeUndefined();
     await b.build(T);
-    expect(b.record("A")).toMatchObject({ sessionId: "A", pid: 1, alive: true });
+    expect(b.record("A")).toMatchObject({ sessionId: "A", pid: 101, alive: true });
     expect(b.record("D")?.procStart).toBe(PS);
     expect(b.record("nope")).toBeUndefined();
   });
@@ -501,7 +501,7 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
     expect(s.A.floorStatus).toBe("working");
     expect("pausedDenied" in s.A).toBe(false);
     floors.pause("C");
-    alive = (pid) => pid !== 3;
+    alive = (pid) => pid !== 103;
     s = by(await b.build(T));
     expect(s.C.floorStatus).toBe("ended");
     expect(floors.isPaused("C")).toBe(false); // 빌드의 sweep이 지웠다
@@ -519,7 +519,7 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
 
   it("숨긴 세션은 sessions에서 빠지고 층 번호가 다시 매겨지며 hiddenFloors가 그 수다", async () => {
     await seedFloors();
-    alive = (pid) => pid !== 2;
+    alive = (pid) => pid !== 102;
     const b = builder();
     await b.build(T);
     floors.hide("B");
@@ -531,7 +531,7 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
 
   it("숨긴 세션이 다시 살아나면 숨김이 풀리고 보인다(Review Focus 3)", async () => {
     await seedFloors();
-    alive = (pid) => pid !== 2;
+    alive = (pid) => pid !== 102;
     const b = builder();
     await b.build(T);
     floors.hide("B");
@@ -544,7 +544,7 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
 
   it("숨겨도 예산·정책 상태는 그대로다(Review Focus 3)", async () => {
     await seedFloors();
-    alive = (pid) => pid !== 2;
+    alive = (pid) => pid !== 102;
     const dir = await mkdtemp(join(tmpdir(), "co-snap-floors-"));
     try {
       const store = new BudgetStore(join(dir, "state.json"));

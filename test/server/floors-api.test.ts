@@ -33,6 +33,7 @@ let match: () => Promise<boolean | undefined>;
 let records: Map<string, SessionRecord>;
 let onHookEvent: ReturnType<typeof vi.fn<(input: Record<string, unknown>) => void>>;
 let pokes: number;
+let accepted: string[];
 
 const rec = (p: Partial<SessionRecord> = {}): SessionRecord => ({
   pid: 2001, sessionId: "s1", name: "alpha", cwd: "/x", status: "busy", startedAt: 1, updatedAt: 2, alive: true, procStart: "Mon Oct 11 10:00:00 2026", ...p,
@@ -65,12 +66,14 @@ beforeEach(async () => {
   };
   onHookEvent = vi.fn<(input: Record<string, unknown>) => void>();
   pokes = 0;
+  accepted = [];
   const snap = makeSnapshot({ sessions: [makeSession({ id: "s1" })] });
   server = createApp(
     { current: () => snap, subscribe: () => () => {}, poke: () => void pokes++ },
     {
       auth: { token: TOKEN },
       onHookEvent: (i) => onHookEvent(i),
+      stats: { accept: (e: string) => void accepted.push(e), reject: () => {} } as never,
       decisions: queue,
       gate: budgetGate,
       policy: policyGate,
@@ -150,10 +153,11 @@ describe("관문 순서(스펙 4.2)", () => {
     expect(v.kind).toBe("permission"); // 예산으로 짝지어지지 않았다
   });
 
-  it("일시정지 deny는 이벤트 저장소·큐 onEvent를 거치지 않는다", async () => {
+  it("일시정지 deny는 이벤트 저장소·큐 onEvent를 거치지 않는다(수신 통계에는 센다, B123)", async () => {
     const onEvent = vi.spyOn(queue, "onEvent");
     floors.pause("s1");
     await hook(pre());
+    expect(accepted).toEqual(["PreToolUse"]);
     expect(onHookEvent).not.toHaveBeenCalled();
     expect(onEvent).not.toHaveBeenCalled();
   });

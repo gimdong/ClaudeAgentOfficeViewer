@@ -150,9 +150,17 @@ describe("종료 검사(스펙 5.1)", () => {
       [1001, "SIGKILL"],
     ]);
     expect(floorLines().filter((l) => l.msg === "terminate").map((l) => l.data)).toEqual([
-      { session: "s1", signal: "SIGTERM" },
-      { session: "s1", signal: "SIGKILL" },
+      { session: 1, signal: "SIGTERM" },
+      { session: 1, signal: "SIGKILL" },
     ]);
+  });
+
+  it.each([0, 1, -1, 1.5])("pid %s는 unverified이고 matcher·signal을 부르지 않는다(B123)", async (pid) => {
+    const m = vi.fn(async () => true);
+    match = m;
+    expect(await fc().terminate(rec({ pid }), false)).toEqual({ ok: false, error: "unverified" });
+    expect(m).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
   });
 
   it("terminate는 레코드의 pid로만 신호를 보낸다", async () => {
@@ -221,8 +229,30 @@ describe("로그와 onChange", () => {
     f.resume("s1");
     const text = logText();
     expect([text.includes("FAKE-CMD-123"), text.includes("FAKE-CWD")]).toEqual([false, false]);
-    expect(floorLines().map((l) => l.msg)).toEqual(["pause", "paused-deny", "terminate", "hide", "unhide", "resume"]);
-    expect(floorLines().find((l) => l.msg === "paused-deny")?.data).toEqual({ session: "s1", tool: "Bash" });
+    expect(floorLines().map((l) => l.msg)).toEqual(["pause", "paused-deny Bash", "terminate", "hide", "unhide", "resume"]);
+    expect(floorLines().find((l) => l.msg === "paused-deny Bash")?.data).toEqual({ session: 1, tool: "Bash" });
+    // 세션 표시는 처음 본 순서의 순번(B123): s1=1, s2=2. 세션 id 문자열은 로그에 없다
+    expect(floorLines().find((l) => l.msg === "hide")?.data).toEqual({ session: 2 });
+    expect([text.includes("s1"), text.includes("s2")]).toEqual([false, false]);
+  });
+
+  it("같은 도구를 5번 막으면 로그는 한 줄(로거의 10분 묶음, B125), 횟수는 5", () => {
+    const f = fc();
+    f.pause("s1");
+    for (let i = 0; i < 5; i++) f.preToolUse(pre());
+    expect(floorLines().filter((l) => l.msg.startsWith("paused-deny"))).toHaveLength(1);
+    expect(f.view("s1").pausedDenied).toBe(5);
+  });
+
+  it("세션 id가 길고 고유해도 로그 폴더 전체에 그 문자열이 없다(B123)", async () => {
+    const id = "sess-6f1d2c3b-UNIQUE-ID-XYZ";
+    const f = fc();
+    f.pause(id);
+    f.preToolUse(pre({ session_id: id }));
+    await f.terminate(rec({ sessionId: id }), false);
+    f.resume(id);
+    f.hide(id);
+    expect(logText().includes("UNIQUE-ID")).toBe(false);
   });
 
   it("onChange는 상태가 바뀔 때만(deny 횟수 포함)", async () => {

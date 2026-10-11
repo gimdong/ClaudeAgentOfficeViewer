@@ -19,6 +19,8 @@ export class FloorControl {
   private readonly pausedDenied = new Map<string, number>();
   private readonly hidden = new Set<string>();
   private readonly terminating = new Map<string, { sentAt: number; force: boolean }>();
+  /** 로그에 쓰는 세션 순번(처음 본 순서, B123 — Phase 2 큐의 sessionNo와 같은 방식). 세션 id는 로그에 남기지 않는다 */
+  private readonly sessionNo = new Map<string, number>();
   private readonly signal: (pid: number, sig: Sig) => void;
   private readonly matchProcStart: ProcStartMatcher;
   private readonly selfPid: number;
@@ -42,7 +44,8 @@ export class FloorControl {
       if (typeof sessionId !== "string" || typeof tool !== "string" || !tool) return null;
       if (!this.paused.has(sessionId) || EXEMPT_TOOLS.has(tool)) return null;
       this.pausedDenied.set(sessionId, (this.pausedDenied.get(sessionId) ?? 0) + 1);
-      getLogger().info("floors", "paused-deny", { session: sessionId, tool });
+      // warn이라 같은 도구의 되풀이 deny는 로거가 10분 동안 한 줄로 묶는다(B125, Phase 3 정책 deny와 같다)
+      getLogger().warn("floors", `paused-deny ${tool}`, { session: this.no(sessionId), tool });
       this.changed();
       return preToolDeny(PAUSED_REASON);
     } catch (e) {
@@ -54,13 +57,13 @@ export class FloorControl {
   pause(sessionId: string): void {
     if (this.paused.has(sessionId)) return;
     this.paused.add(sessionId);
-    getLogger().info("floors", "pause", { session: sessionId });
+    getLogger().info("floors", "pause", { session: this.no(sessionId) });
     this.changed();
   }
 
   resume(sessionId: string): void {
     if (!this.paused.delete(sessionId)) return;
-    getLogger().info("floors", "resume", { session: sessionId });
+    getLogger().info("floors", "resume", { session: this.no(sessionId) });
     this.changed();
   }
 
@@ -75,6 +78,8 @@ export class FloorControl {
   async terminate(record: SessionRecord | undefined, force: boolean): Promise<TerminateResult> {
     if (!record?.alive) return { ok: false, error: "ended" };
     if (record.pid === this.selfPid) return { ok: false, error: "self" };
+    // 0·1·음수·소수는 프로세스 그룹·init 등을 가리킨다. 신호도 matcher도 부르지 않는다(B123)
+    if (!Number.isInteger(record.pid) || record.pid <= 1) return { ok: false, error: "unverified" };
     let match: boolean | undefined;
     try {
       match = record.procStart ? await this.matchProcStart(record.pid, record.procStart) : undefined;
@@ -90,11 +95,11 @@ export class FloorControl {
       this.signal(record.pid, sig);
     } catch (e) {
       // ESRCH: 그 사이 이미 끝났다. 그 밖(EPERM 등)은 확인하지 못한 것으로 본다. 어느 쪽이든 종료 중으로 두지 않는다
-      getLogger().warn("floors", "terminate failed", { session: id, signal: sig, error: errInfo(e) });
+      getLogger().warn("floors", "terminate failed", { session: this.no(id), signal: sig, error: errInfo(e) });
       return { ok: false, error: (e as { code?: string }).code === "ESRCH" ? "ended" : "unverified" };
     }
     this.terminating.set(id, { sentAt: this.now(), force });
-    getLogger().info("floors", "terminate", { session: id, signal: sig });
+    getLogger().info("floors", "terminate", { session: this.no(id), signal: sig });
     this.changed();
     return { ok: true, signal: sig, sent: true };
   }
@@ -102,7 +107,7 @@ export class FloorControl {
   hide(sessionId: string): void {
     if (this.hidden.has(sessionId)) return;
     this.hidden.add(sessionId);
-    getLogger().info("floors", "hide", { session: sessionId });
+    getLogger().info("floors", "hide", { session: this.no(sessionId) });
     this.changed();
   }
 
@@ -144,6 +149,12 @@ export class FloorControl {
 
   stats(): FloorStats {
     return { paused: this.paused.size, hidden: this.hidden.size, terminating: this.terminating.size };
+  }
+
+  private no(sessionId: string): number {
+    let n = this.sessionNo.get(sessionId);
+    if (n === undefined) this.sessionNo.set(sessionId, (n = this.sessionNo.size + 1));
+    return n;
   }
 
   private changed(): void {
