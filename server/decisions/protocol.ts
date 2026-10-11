@@ -40,6 +40,9 @@ export const policyDenyReason = (who: string, rule: string): string =>
 export const policyAskReason = (who: string, rule: string): string =>
   `대시보드 권한 정책: ${who}에게는 "${rule}"이 정해져 있어 이 도구는 매번 확인합니다.`;
 
+/** 일시정지 deny의 이유(Phase 4a 스펙 4.2·B122, 설명서·테스트가 글자까지 대조) */
+export const PAUSED_REASON = '대시보드 일시정지: 사용자가 대시보드에서 이 세션을 일시정지해 지금은 이 도구를 쓸 수 없습니다. 사용자가 대시보드에서 스위치를 "영업 중"으로 돌리면 다시 쓸 수 있습니다. 기다리거나 사용자에게 알려 주세요.';
+
 export function budgetReason(budgetTokens: number): string {
   return `예산(${budgetTokens.toLocaleString("en-US")}토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요`;
 }

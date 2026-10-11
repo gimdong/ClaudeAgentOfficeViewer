@@ -55,6 +55,7 @@ export function emptySnapshot(now: number, config: OfficeConfig, error?: string)
     sessions: [],
     decisionCount: 0,
     decisions: [],
+    hiddenFloors: 0,
   };
 }
 

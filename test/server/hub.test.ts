@@ -14,6 +14,7 @@ function snap(tag: string, n: number): Snapshot {
     sessions: [{ id: tag, name: tag, cwd: "", alive: true, isCurrent: true, status: "idle", floor: 1, floorStatus: "idle", context: null, members: [] }],
     decisionCount: 0,
     decisions: [],
+    hiddenFloors: 0,
   };
 }
 

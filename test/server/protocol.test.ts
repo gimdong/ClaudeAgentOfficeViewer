@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OTHER_MAX, budgetReason, buildAnswers, parseAnswer, permissionResponse, policyAskReason, policyDenyReason, preToolAsk, preToolDeny } from "../../server/decisions/protocol";
+import { OTHER_MAX, PAUSED_REASON, budgetReason, buildAnswers, parseAnswer, permissionResponse, policyAskReason, policyDenyReason, preToolAsk, preToolDeny } from "../../server/decisions/protocol";
 import { toGraphemes } from "../../server/events/summarize";
 import { OTHER_MAX as WEB_OTHER_MAX } from "../../web/report/QuestionForm";
 import { graphemes } from "../../web/report/text";
@@ -18,6 +18,10 @@ describe("hook 응답 형식(스펙 2장, 계획 Global Constraints)", () => {
 
   it("budgetReason은 천 단위 쉼표와 스펙 문구", () => {
     expect(budgetReason(500000)).toBe("예산(500,000토큰)에 도달했습니다. 대시보드나 이 창에서 계속할지 정해 주세요");
+  });
+
+  it("PAUSED_REASON 글자 그대로(Phase 4a 스펙 4.2, B122)", () => {
+    expect(PAUSED_REASON).toBe('대시보드 일시정지: 사용자가 대시보드에서 이 세션을 일시정지해 지금은 이 도구를 쓸 수 없습니다. 사용자가 대시보드에서 스위치를 "영업 중"으로 돌리면 다시 쓸 수 있습니다. 기다리거나 사용자에게 알려 주세요.');
   });
 
   it("preToolDeny 형식(글자 그대로)", () => {

@@ -15,6 +15,8 @@ export interface SessionRecord {
   startedAt: number;
   updatedAt: number;
   alive: boolean;
+  /** 파일의 procStart 그대로(Phase 4a B114). 종료 신호 전에 matcher가 pid 재사용을 가린다. 파일에 없으면 없음 */
+  procStart?: string;
 }
 
 const DAY = 86_400_000;
@@ -137,6 +139,7 @@ export async function readSessions(
       startedAt: num(raw.startedAt) ?? 0,
       updatedAt,
       alive,
+      ...(procStart ? { procStart } : {}),
     });
   }
   return out;

@@ -76,6 +76,15 @@ describe("readSessions - procStart로 pid 재사용을 감지한다", () => {
     expect(matchProcStart).toHaveBeenCalledWith(1, PROC_START);
   });
 
+  it("procStart가 레코드에 남는다, 없으면 키가 없다(Phase 4a B114)", async () => {
+    await h.write("sessions/1.json", { ...file, pid: 1, sessionId: "s1", updatedAt: NOW - 1000, procStart: PROC_START });
+    await h.write("sessions/2.json", { ...file, pid: 2, sessionId: "s2", updatedAt: NOW - 1000 });
+    const list = await readSessions(h.home, NOW, () => true, vi.fn().mockResolvedValue(true));
+    const by = Object.fromEntries(list.map((r) => [r.sessionId, r]));
+    expect(by.s1.procStart).toBe(PROC_START);
+    expect("procStart" in by.s2).toBe(false);
+  });
+
   it("procStart가 일치하면 alive=true를 유지한다", async () => {
     await h.write("sessions/1.json", { ...file, pid: 1, sessionId: "s1", updatedAt: NOW - 1000, procStart: PROC_START });
     const matchProcStart = vi.fn().mockResolvedValue(true);

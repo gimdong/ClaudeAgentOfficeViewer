@@ -98,8 +98,8 @@ export interface ContextInfo {
   estimated: boolean;
 }
 
-/** "paused"는 Phase 4에서 추가한다 */
-export type FloorStatus = "working" | "idle" | "ended";
+/** "paused": 대시보드에서 일시정지한 살아 있는 층(Phase 4a 스펙 4.4) */
+export type FloorStatus = "working" | "idle" | "paused" | "ended";
 
 export interface SessionView {
   id: string;
@@ -119,6 +119,10 @@ export interface SessionView {
   members: Member[];
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
   budget?: BudgetView;
+  /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
+  pausedDenied?: number;
+  /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */
+  terminating?: true;
 }
 
 /** 층 예산. usedTokens는 세션 구성원 tokens.total의 합(cacheRead 제외) */
@@ -166,6 +170,8 @@ export interface Snapshot {
   defaultBudgetTokens?: number;
   /** 권한 정책 전체와 켠 뒤로의 횟수(Ruling B77). 대상도 횟수도 없으면 싣지 않는다 */
   policy?: PolicySnapshot;
+  /** 대시보드에서 숨긴 끝난 층의 수(Phase 4a 스펙 6) */
+  hiddenFloors: number;
 }
 
 // ───────── 진단(베타): 서버와 화면이 같이 쓴다 ─────────

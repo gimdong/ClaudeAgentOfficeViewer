@@ -19,6 +19,7 @@ export function makeSnapshot(p: Partial<Snapshot> = {}): Snapshot {
     sessions: [],
     decisionCount: 0,
     decisions: [],
+    hiddenFloors: 0,
     ...p,
   };
 }

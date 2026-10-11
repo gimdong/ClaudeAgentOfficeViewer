@@ -12,7 +12,7 @@ import { MiniBar } from "./MiniBar";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
 
-const STATUS_LABEL: Record<Exclude<FloorStatus, "ended">, string> = { working: "작업 중", idle: "대기" };
+const STATUS_LABEL: Record<Exclude<FloorStatus, "ended">, string> = { working: "작업 중", idle: "대기", paused: "멈춤" };
 
 function hhmm(iso?: string): string {
   if (!iso) return "";

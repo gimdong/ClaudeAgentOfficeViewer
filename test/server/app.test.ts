@@ -14,6 +14,7 @@ const base: Snapshot = {
   sessions: [],
   decisionCount: 0,
   decisions: [],
+  hiddenFloors: 0,
 };
 
 let current = base;
