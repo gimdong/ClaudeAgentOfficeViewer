@@ -60,7 +60,7 @@ interface FloorControl {
 판정:
 - `session_id`가 `paused`에 있고 `tool_name`이 `EXEMPT_TOOLS`에 없으면 deny. 예외 도구는 그대로 통과(리드가 `AskUserQuestion`으로 사용자에게 물을 수 있고, `TaskStop`으로 팀을 내릴 수 있다).
 - 응답은 정책 deny와 같은 모양(`hookSpecificOutput.permissionDecision: "deny"`, `permissionDecisionReason`).
-- 이유 문구(고정, 설명서와 테스트가 대조): `대시보드에서 이 층을 일시정지했습니다. 재개하려면 대시보드의 "영업 중" 스위치를 켜 주세요.`
+- 이유 문구(고정, 설명서와 테스트가 대조): `대시보드 일시정지: 사용자가 대시보드에서 이 세션을 일시정지해 지금은 이 도구를 쓸 수 없습니다. 사용자가 대시보드에서 스위치를 "영업 중"으로 돌리면 다시 쓸 수 있습니다. 기다리거나 사용자에게 알려 주세요.` (2026-10-11 교정, Ruling B122: 원문 "…\"영업 중\" 스위치를 켜 주세요"는 멈춘 동안의 라벨이 "멈춤"이라 틀렸고, 받는 쪽인 Claude가 할 수 없는 일을 시켰다. 머리말 "대시보드 일시정지:"로 정책 문구와 구별한다. 라벨은 "영업 중"↔"멈춤"으로 통일한다)
 - deny할 때 `pausedDenied[session]++`, 로그 `floors`/`paused-deny`(세션 id·도구 이름만. tool_input은 읽지 않는다).
 - 정책 deny처럼 예산 관문·큐·이벤트 저장소를 거치지 않는다(막힌 호출이 "작업 중"으로 남지 않게).
 - PreToolUse가 아닌 이벤트(PostToolUse, Stop, Notification 등)는 일시정지와 무관하게 그대로 처리한다.
