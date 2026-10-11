@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Member, SessionView, Snapshot } from "../../src/shared/types";
 import { activityLine } from "../../web/office/activityText";
@@ -189,6 +191,40 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     show(snap(floorOf({ floorStatus: "paused", pausedDenied: 0 })));
     rerender(<App />);
     expect(floor().querySelector(".shutter")?.className).toContain("shutter-down");
+  });
+
+  it("셔터 애니메이션 클래스는 animationend 뒤 내려 접었다 펼쳐도 다시 내려오지 않는다(B129 M2)", () => {
+    show(snap(floorOf()));
+    const { rerender } = render(<App />);
+    show(snap(floorOf({ floorStatus: "paused", pausedDenied: 0 })));
+    rerender(<App />);
+    const shutter = floor().querySelector(".shutter")!;
+    expect(shutter.className).toContain("shutter-down");
+    // jsdom에는 AnimationEvent가 없어 React가 접두사 이름(webkitAnimationEnd)으로 듣는다 — 둘 다 보낸다
+    act(() => {
+      shutter.dispatchEvent(new Event("animationend", { bubbles: true }));
+      shutter.dispatchEvent(new Event("webkitAnimationEnd", { bubbles: true }));
+    });
+    expect(floor().querySelector(".shutter")!.className).not.toContain("shutter-down");
+    // 접기 상태는 세션 id별로 기억되므로(앞 테스트) 이름 대신 접기 버튼을 두 번 누른다
+    fireEvent.click(floor().querySelector<HTMLElement>(".fold")!);
+    fireEvent.click(floor().querySelector<HTMLElement>(".fold")!);
+    expect(floor().querySelector(".shutter")!.className).not.toContain("shutter-down");
+  });
+
+  it("멈춘 층의 결정 대기 책상만 셔터 위로(B130)", () => {
+    const css = readFileSync(join(__dirname, "../../web/styles.css"), "utf8");
+    expect(css.includes(".floor--paused .desk--decision { position: relative; z-index: 3; }")).toBe(true);
+  });
+
+  it("말풍선은 스위치를 누른 직후(스냅샷 전)에도 들고 있는 값으로 휴업 줄을 쓴다(B129 M1)", async () => {
+    show(snap(floorOf()));
+    render(<App />);
+    fireEvent.click(sw());
+    await flush();
+    fireEvent.mouseEnter(within(floor()).getByTestId("desk-dev"));
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole("tooltip").textContent).toContain("저는 지금 휴업 중이라 도구를 쓰지 않고 기다립니다");
   });
 
   it("말풍선의 휴업 줄(B126)", () => {

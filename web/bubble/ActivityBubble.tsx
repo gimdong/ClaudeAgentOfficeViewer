@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Member, SessionView } from "../../src/shared/types";
 import { activityLine, metaLine } from "../office/activityText";
+import { pausedOf } from "../floors/useFloors";
 import { Icon } from "../pixel/Icon";
 import { NEON } from "../pixel/palette";
 import { placeBubble, type Placement } from "./place";
@@ -11,7 +12,7 @@ function findMember(sessions: SessionView[], key: string): { member?: Member; pa
   const sessionId = key.slice(0, i);
   const name = key.slice(i + 1);
   const s = sessions.find((x) => x.id === sessionId);
-  return { member: s?.members.find((m) => m.name === name), paused: s?.floorStatus === "paused" };
+  return { member: s?.members.find((m) => m.name === name), paused: s ? pausedOf(s) : false };
 }
 
 /** 모든 책상이 함께 쓰는 fixed 말풍선 하나(디자인 7.1). 등장 애니메이션은 없다 */

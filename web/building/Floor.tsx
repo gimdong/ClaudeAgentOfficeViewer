@@ -9,7 +9,7 @@ import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
 import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
-import { FLOOR_TEXT, useFloorSwitch, useFloorTerminate } from "../floors/useFloors";
+import { FLOOR_TEXT, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
@@ -41,7 +41,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
   };
 
   const sw = useFloorSwitch(session, budgetCtx.announce);
-  const term = useFloorTerminate(session, budgetCtx.announce);
+  const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
   const sectionRef = useRef<HTMLElement>(null);
   // 창이 닫히면 그 층의 "종료" 버튼으로(끝나 "삭제"로 바뀌었으면 그것으로, §3.1)
   const prevStage = useRef(term.stage);
@@ -51,6 +51,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
   }, [term.stage]);
   // 화면 상태: 기다리는 값(응답)을 스냅샷보다 먼저 따른다(디자인 §1.2). 칩·셔터·LED도 같은 값
   const paused = session.floorStatus !== "ended" && sw.paused;
+  useShownPaused(session.id, paused);
   const floorStatus = session.floorStatus === "ended" ? "ended" : paused ? "paused" : session.floorStatus !== "paused" ? session.floorStatus : session.members.some((m) => m.state === "working" || m.state === "decision") ? "working" : "idle";
   // 셔터는 영업 중 → 멈춤으로 바뀐 순간에만 내려오는 애니메이션(첫 렌더에는 없음, §2.4)
   const wasPaused = useRef(paused);
@@ -133,7 +134,8 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
         <div className="room" id={`${id}-room`}>
           <Backdrop />
           {paused && (
-            <div className={`shutter${dropping ? " shutter-down" : ""}`} aria-hidden="true">
+            // animationend 뒤 클래스를 내려, 접었다 펼칠 때(display 복귀) 다시 내려오지 않게(B129 M2)
+            <div className={`shutter${dropping ? " shutter-down" : ""}`} aria-hidden="true" onAnimationEnd={() => setDropping(false)}>
               <span className="shutter-sign">
                 휴업<small>잠시 쉬는 중</small>
               </span>

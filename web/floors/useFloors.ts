@@ -69,6 +69,19 @@ export const floorsApi = {
   unhideAll: () => call<{ hidden: number }>("DELETE", "/api/floors/hidden"),
 };
 
+/**
+ * 층마다 화면이 지금 보이는 멈춤 값(기다리는 값 포함). 같은 화면의 말풍선이 칩·셔터와 어긋나지 않게 Floor가 적고
+ * ActivityBubble이 읽는다(B129 M1). Floor가 사라지면 지운다
+ */
+const shownPaused = new Map<string, boolean>();
+export const pausedOf = (s: SessionView): boolean => shownPaused.get(s.id) ?? s.floorStatus === "paused";
+export function useShownPaused(sessionId: string, paused: boolean): void {
+  useEffect(() => {
+    shownPaused.set(sessionId, paused);
+  }, [sessionId, paused]);
+  useEffect(() => () => void shownPaused.delete(sessionId), [sessionId]);
+}
+
 /** 화면이 응답 값을 스냅샷이 따라올 때까지 들고 있는 최대 시간(디자인 §1.2, B117·B127) */
 export const HOLD_MS = 6_000;
 const ERR_MS = 10_000;
@@ -136,7 +149,7 @@ export const FORCE_AFTER_MS = 10_000;
  * 종료 확인 창 두 단계(디자인 phase4a §3). 창 단계·요청·실패 문구·10초 타이머·"종료 중" 칩 붙잡기(6초)를 든다.
  * 10초가 됐을 때 최신 스냅샷의 alive를 본다(층이 끝났거나 사라졌으면 둘째 창 없음 — Floor가 사라지면 타이머도 함께 사라진다)
  */
-export function useFloorTerminate(session: SessionView, announce?: (text: string) => void) {
+export function useFloorTerminate(session: SessionView, announce?: (text: string) => void, blocked = false) {
   const [stage, setStage] = useState<0 | 1 | 2>(0);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +161,10 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
   const aliveRef = useRef(alive);
   aliveRef.current = alive;
   const sentHere = useRef(false);
+  /** 10초가 됐는데 다른 대화상자(예산 설정)가 열려 있어 미룬 둘째 창(B131) */
+  const [deferred, setDeferred] = useState(false);
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, tick] = useState(0);
   const nameRef = useRef(session.name);
@@ -184,6 +201,13 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
     if (session.terminating) setHoldUntil(0); // 스냅샷이 따라왔다
   }, [session.terminating]);
 
+  // 미룬 둘째 창은 다른 대화상자가 닫히면 그때 연다(두 모달이 겹치지 않게)
+  useEffect(() => {
+    if (!deferred || blocked) return;
+    setDeferred(false);
+    if (aliveRef.current) setStage(2);
+  }, [deferred, blocked]);
+
   const terminating = alive && (session.terminating === true || Date.now() < holdUntil);
 
   const open = () => {
@@ -219,7 +243,9 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
       clearTimer();
       timer.current = setTimeout(() => {
         timer.current = null;
-        if (aliveRef.current) setStage(2);
+        if (!aliveRef.current) return;
+        if (blockedRef.current) setDeferred(true);
+        else setStage(2);
       }, FORCE_AFTER_MS);
     }
   };

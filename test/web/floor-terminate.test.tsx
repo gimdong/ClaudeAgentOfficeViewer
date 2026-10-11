@@ -176,6 +176,20 @@ describe("둘째 창(§3.3)과 타이머(Review Focus 1)", () => {
     expect(status()).toBe("fake-shop 층을 강제로 끄는 신호를 보냈습니다");
   });
 
+  it("예산 설정 창이 열려 있으면 닫힐 때까지 둘째 창을 미룬다(B131)", async () => {
+    show(snap(fl()));
+    const { rerender } = render(<App />);
+    await sendFirst();
+    show(snap(fl({ terminating: true })));
+    rerender(<App />);
+    fireEvent.click(within(screen.getByTestId("floor")).getByRole("button", { name: "fake-shop 예산 설정" }));
+    await advance(11_000);
+    expect(screen.queryAllByRole("dialog").map((d) => d.querySelector("h2")?.textContent)).toEqual(["fake-shop 예산"]);
+    fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true })); // 예산 창 닫기(Esc)
+    await flush();
+    expect(within(dialog()!).getByRole("heading").textContent).toBe("fake-shop 층이 아직 끝나지 않았습니다");
+  });
+
   it("10초 전에 층이 끝나면 둘째 창이 뜨지 않고, 이 화면에서 끈 층이 끝나면 '꺼짐'을 알린다(B124 ⑧)", async () => {
     show(snap(fl()));
     const { rerender } = render(<App />);
