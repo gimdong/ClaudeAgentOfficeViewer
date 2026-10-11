@@ -9,7 +9,7 @@ import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
 import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
-import { FLOOR_TEXT, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
+import { FLOOR_TEXT, useFloorHide, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
@@ -23,7 +23,7 @@ function hhmm(iso?: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function Floor({ session, bubble }: { session: SessionView; bubble?: BubbleHandlers }) {
+export function Floor({ session, bubble, onHidden }: { session: SessionView; bubble?: BubbleHandlers; onHidden?(id: string, hidden: number): void }) {
   // 종료 층은 처음에 접힌다. 사용자가 바꾼 상태는 세션 id별로 기억한다(디자인 5.5)
   const [collapsed, setCollapsed] = useState(() => readFold(session.id, session.floorStatus === "ended"));
   const toggle = () => {
@@ -42,6 +42,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
 
   const sw = useFloorSwitch(session, budgetCtx.announce);
   const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
+  const hider = useFloorHide(session, onHidden, budgetCtx.announce);
   const sectionRef = useRef<HTMLElement>(null);
   // 창이 닫히면 그 층의 "종료" 버튼으로(끝나 "삭제"로 바뀌었으면 그것으로, §3.1)
   const prevStage = useRef(term.stage);
@@ -124,10 +125,10 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
               <BudgetBar ref={settingsBtn} budget={session.budget} floorName={session.name} onOpenSettings={() => setSettingsOpen(true)} />
             </span>
           )}
-          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} onTerminate={term.open} noteId={noteId} />
-          {sw.error && (
+          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} onTerminate={term.open} onHide={() => void hider.hide()} hideBusy={hider.busy} noteId={noteId} />
+          {(sw.error ?? hider.error) && (
             <span className="fc-err" role="alert">
-              {sw.error}
+              {sw.error ?? hider.error}
             </span>
           )}
         </header>

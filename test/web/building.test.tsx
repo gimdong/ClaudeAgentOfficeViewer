@@ -110,7 +110,7 @@ describe("종료된 층 (v1 OfficeTile off 테스트 대체)", () => {
     expect(floor.className).toContain("floor--ended");
     expect(floor.className).toContain("collapsed");
     expect(floor.querySelector(".chip--ended")!.textContent).toBe("종료됨 14:32");
-    expect(within(floor).getByRole("button", { name: "삭제" }).getAttribute("aria-disabled")).toBe("true");
+    expect(within(floor).getByRole("button", { name: /층 삭제\(목록에서만 숨김\)$/ }).getAttribute("aria-disabled")).toBeNull(); // Task 7(B121): 모양만 → 활성
     expect(within(floor).queryByRole("switch")).toBeNull();
     expect(floor.querySelector(".bars")).toBeNull();
     expect(floor.querySelector(".summary")!.textContent).toBe("팀원 2 · 작업 중 0");

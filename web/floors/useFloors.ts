@@ -38,6 +38,16 @@ export const FLOOR_TEXT = {
   sentTerm: (name: string) => `${name} 층에 끄기 신호를 보냈습니다`,
   sentKill: (name: string) => `${name} 층을 강제로 끄는 신호를 보냈습니다`,
   gone: (name: string) => `${name} 층이 꺼졌습니다`,
+  // 숨김(§6.5)
+  hideLabel: (name: string) => `${name} 층 삭제(목록에서만 숨김)`,
+  hideTitle: "대시보드 목록에서만 숨깁니다. 대화 기록은 지우지 않습니다.",
+  hiddenBar: (n: number) => `숨긴 층 ${n}개 · 모두 보이기`,
+  reloading: "숨긴 층을 다시 불러오는 중…",
+  hideAlive: "아직 켜져 있는 층은 숨길 수 없습니다.",
+  hideNotFound: "이미 목록에 없는 층입니다.",
+  hideFailed: "처리하지 못했습니다. 서버 연결을 확인하고 다시 시도해 주세요.",
+  hidden: (name: string) => `${name} 층을 목록에서 숨겼습니다`,
+  unhidden: "숨긴 층을 모두 다시 보이게 했습니다",
 } as const;
 
 const KNOWN: ReadonlySet<string> = new Set(["ended", "alive", "self", "pid-reused", "unverified"]);
@@ -251,5 +261,107 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
   };
 
   return { stage, sending, error, terminating, open, close, confirm, forceDisabled: stage === 2 && !alive };
+}
+
+const hideError = (e: FloorError) => (e === "alive" ? FLOOR_TEXT.hideAlive : e === "not-found" ? FLOOR_TEXT.hideNotFound : FLOOR_TEXT.hideFailed);
+
+/** 끝난 층의 "삭제"(디자인 §4.1). 확인 창 없이 hide. 성공하면 onHidden으로 빌딩에 알린다(빌딩이 바로 빼고 6초 들고 있음) */
+export function useFloorHide(session: SessionView, onHidden?: (id: string, hidden: number) => void, announce?: (text: string) => void) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(null), ERR_MS);
+    return () => clearTimeout(t);
+  }, [error]);
+  const hide = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    const r = await floorsApi.hide(session.id);
+    busyRef.current = false;
+    setBusy(false);
+    if (r.ok) {
+      announce?.(FLOOR_TEXT.hidden(session.name));
+      onHidden?.(session.id, r.body.hidden);
+    } else if (!r.unauthorized) setError(hideError(r.error));
+  };
+  return { busy, error, hide };
+}
+
+/**
+ * 빌딩의 숨긴 층(디자인 §4.2·§4.3). 숨긴 id·숨긴 수·"다시 불러오는 중"을 최대 6초 들고 스냅샷이 따라오면 놓는다.
+ * 숨긴 세션이 alive로 오면 즉시 다시 보인다(살아 있는 세션은 숨기지 않는다, 스펙 6장)
+ */
+export function useHiddenFloors(sessions: SessionView[], hiddenFloors: number, announce?: (text: string) => void) {
+  const [held, setHeld] = useState<Map<string, number>>(new Map());
+  const [heldCount, setHeldCount] = useState<{ n: number; until: number } | null>(null);
+  const [reloadingUntil, setReloadingUntil] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [, tick] = useState(0);
+  const now = Date.now();
+
+  // 놓기: 스냅샷이 뺐거나, 살아났거나, 6초가 지났다
+  useEffect(() => {
+    if (held.size === 0) return;
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    let changed = false;
+    const next = new Map(held);
+    for (const [id, until] of held) {
+      const s = byId.get(id);
+      if (!s || s.alive || Date.now() >= until) {
+        next.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) setHeld(next);
+  }, [sessions, held]);
+  useEffect(() => {
+    if (heldCount && hiddenFloors === heldCount.n) setHeldCount(null);
+  }, [hiddenFloors, heldCount]);
+  useEffect(() => {
+    if (reloadingUntil && hiddenFloors === 0) setReloadingUntil(0);
+  }, [hiddenFloors, reloadingUntil]);
+  // 6초 상한(B127): 시간이 되면 다시 그려 스냅샷을 따른다
+  const nextEnd = Math.min(...[...held.values(), heldCount?.until ?? Infinity, reloadingUntil || Infinity]);
+  useEffect(() => {
+    if (!Number.isFinite(nextEnd)) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, nextEnd - Date.now()) + 1);
+    return () => clearTimeout(t);
+  }, [nextEnd]);
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(null), ERR_MS);
+    return () => clearTimeout(t);
+  }, [error]);
+
+  const visible = sessions.filter((s) => {
+    const until = held.get(s.id);
+    return until === undefined || s.alive || now >= until;
+  });
+  const count = heldCount && now < heldCount.until ? heldCount.n : hiddenFloors;
+  const reloading = reloadingUntil > now;
+
+  const onHidden = (id: string, n: number) => {
+    setHeld((m) => new Map(m).set(id, Date.now() + HOLD_MS));
+    setHeldCount({ n, until: Date.now() + HOLD_MS });
+  };
+  const unhideAll = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await floorsApi.unhideAll();
+    setBusy(false);
+    if (r.ok) {
+      setHeld(new Map());
+      setHeldCount(null);
+      setReloadingUntil(Date.now() + HOLD_MS);
+      announce?.(FLOOR_TEXT.unhidden);
+    } else if (!r.unauthorized) setError(FLOOR_TEXT.hideFailed);
+  };
+  return { visible, count, reloading, busy, error, onHidden, unhideAll };
 }
 

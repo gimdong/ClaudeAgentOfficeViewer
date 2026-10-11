@@ -2,15 +2,24 @@ import type { SessionView } from "../../src/shared/types";
 import { FLOOR_TEXT } from "../floors/useFloors";
 import { Icon } from "../pixel/Icon";
 
-// 작업 지시는 Phase 4b까지 모양만 보여준다(디자인 phase4a §1.4). 숨김은 Task 7
+// 작업 지시는 Phase 4b까지 모양만 보여준다(디자인 phase4a §1.4)
 const OFF = { "aria-disabled": true, title: FLOOR_TEXT.orderTitle } as const;
 
 /** 층 머리 컨트롤(디자인 phase4a §1). 스위치 상태(paused·busy)는 Floor의 useFloorSwitch가 든다 */
-export function FloorControls({ session, paused, busy, onToggle, onTerminate, noteId }: { session: SessionView; paused: boolean; busy: boolean; onToggle(): void; onTerminate(): void; noteId: string }) {
+export function FloorControls({ session, paused, busy, onToggle, onTerminate, onHide, hideBusy = false, noteId }: { session: SessionView; paused: boolean; busy: boolean; onToggle(): void; onTerminate(): void; onHide?(): void; hideBusy?: boolean; noteId: string }) {
   if (session.floorStatus === "ended") {
     return (
       <div className="controls">
-        <button type="button" className="pbtn pbtn--danger" data-floor-action="delete" {...OFF}>
+        {/* 확인 창 없이 숨긴다(되돌릴 수 있고 데이터를 지우지 않음, 스펙 6). 이름에 보이는 글자 "삭제"를 넣는다(§4.1) */}
+        <button
+          type="button"
+          className="pbtn pbtn--danger"
+          data-floor-action="delete"
+          aria-label={FLOOR_TEXT.hideLabel(session.name)}
+          title={FLOOR_TEXT.hideTitle}
+          aria-busy={hideBusy || undefined}
+          onClick={() => !hideBusy && onHide?.()}
+        >
           <Icon name="trash" />
           삭제
         </button>
