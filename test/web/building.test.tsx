@@ -81,15 +81,18 @@ describe("Floor 머리", () => {
     expect(screen.getByTestId("floor").querySelector(".stale")!.textContent).toBe("⚠ 갱신 지연");
   });
 
-  it("컨트롤: 스위치는 동작하고(Phase 4a), 작업 지시·종료는 아직 비활성 표시", () => {
+  it("컨트롤: 스위치·종료는 동작하고(Phase 4a), 작업 지시는 아직 비활성 표시", () => {
     render(<Floor session={makeSession({ name: "alpha", floorStatus: "working" })} />);
     const floor = screen.getByTestId("floor");
     const sw = within(floor).getByRole("switch", { name: "alpha 영업" });
     expect(sw.getAttribute("aria-checked")).toBe("true");
-    // B121: 스위치의 aria-disabled·title이 떨어졌다(단언 수는 그대로)
-    expect(sw.getAttribute("aria-disabled")).toBeNull();
-    expect(sw.getAttribute("title")).toBeNull();
-    for (const el of [within(floor).getByRole("button", { name: "작업 지시" }), within(floor).getByRole("button", { name: "종료" })]) {
+    // B121: 스위치·종료의 aria-disabled·title이 떨어졌다(단언 수는 그대로)
+    const stop = within(floor).getByRole("button", { name: "alpha 층 종료" });
+    for (const el of [sw, stop]) {
+      expect(el.getAttribute("aria-disabled")).toBeNull();
+      expect(el.getAttribute("title")).toBeNull();
+    }
+    for (const el of [within(floor).getByRole("button", { name: "작업 지시" })]) {
       expect(el.getAttribute("aria-disabled")).toBe("true");
       expect(el.getAttribute("title")).toBe("아직 사용할 수 없습니다");
     }

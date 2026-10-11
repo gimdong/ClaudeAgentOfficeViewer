@@ -9,7 +9,8 @@ import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
 import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
-import { FLOOR_TEXT, useFloorSwitch } from "../floors/useFloors";
+import { FLOOR_TEXT, useFloorSwitch, useFloorTerminate } from "../floors/useFloors";
+import { TerminateDialog } from "../floors/TerminateDialog";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
 
@@ -40,6 +41,14 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
   };
 
   const sw = useFloorSwitch(session, budgetCtx.announce);
+  const term = useFloorTerminate(session, budgetCtx.announce);
+  const sectionRef = useRef<HTMLElement>(null);
+  // 창이 닫히면 그 층의 "종료" 버튼으로(끝나 "삭제"로 바뀌었으면 그것으로, §3.1)
+  const prevStage = useRef(term.stage);
+  useEffect(() => {
+    if (prevStage.current !== 0 && term.stage === 0) sectionRef.current?.querySelector<HTMLElement>('[data-floor-action="terminate"], [data-floor-action="delete"]')?.focus();
+    prevStage.current = term.stage;
+  }, [term.stage]);
   // 화면 상태: 기다리는 값(응답)을 스냅샷보다 먼저 따른다(디자인 §1.2). 칩·셔터·LED도 같은 값
   const paused = session.floorStatus !== "ended" && sw.paused;
   const floorStatus = session.floorStatus === "ended" ? "ended" : paused ? "paused" : session.floorStatus !== "paused" ? session.floorStatus : session.members.some((m) => m.state === "working" || m.state === "decision") ? "working" : "idle";
@@ -57,7 +66,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
   const working = session.members.filter((m) => m.state === "working").length;
   const ended = floorStatus === "ended";
   // 칩은 하나(§1.5): 종료 중 → 멈춤 → 그 밖. TS가 ended 변수만으로는 좁히지 못해 조건을 다시 직접 검사한다
-  const terminating = !ended && session.terminating === true;
+  const terminating = !ended && term.terminating;
   const statusText = floorStatus === "ended" ? `종료됨 ${hhmm(session.endedAt)}`.trim() : terminating ? FLOOR_TEXT.terminating : STATUS_LABEL[floorStatus];
   const chipClass = terminating ? "terminating" : floorStatus;
   const noteId = `${id}-pause-note`;
@@ -68,6 +77,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
 
   return (
     <section
+      ref={sectionRef}
       className={`floor floor--${floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}`}
       id={id}
       aria-labelledby={`${id}-name`}
@@ -113,7 +123,7 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
               <BudgetBar ref={settingsBtn} budget={session.budget} floorName={session.name} onOpenSettings={() => setSettingsOpen(true)} />
             </span>
           )}
-          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} noteId={noteId} />
+          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} onTerminate={term.open} noteId={noteId} />
           {sw.error && (
             <span className="fc-err" role="alert">
               {sw.error}
@@ -136,6 +146,9 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
           </div>
         </div>
       </div>
+      {term.stage !== 0 && (
+        <TerminateDialog session={session} stage={term.stage} sending={term.sending} error={term.error} forceDisabled={term.forceDisabled} onConfirm={() => void term.confirm()} onClose={term.close} />
+      )}
       {settingsOpen && <BudgetDialog session={session} defaultTokens={budgetCtx.defaultTokens} announce={budgetCtx.announce} onClose={closeSettings} />}
     </section>
   );

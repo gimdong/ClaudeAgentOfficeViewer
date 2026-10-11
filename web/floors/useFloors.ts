@@ -18,6 +18,26 @@ export const FLOOR_TEXT = {
   paused: (name: string) => `${name} 층을 멈췄습니다`,
   resumed: (name: string) => `${name} 층을 다시 영업 중으로 돌렸습니다`,
   blocked: (n: number) => `· 막힌 호출 ${n.toLocaleString("en-US")}`,
+  // 종료 확인 창(§6.4)
+  terminateTitle: (name: string) => `${name} 층을 끌까요?`,
+  forceTitle: (name: string) => `${name} 층이 아직 끝나지 않았습니다`,
+  keyFolder: "폴더",
+  keyMembers: "구성원",
+  members: (n: number, m: number) => `팀원 ${n}명 · 작업 중 ${m}명`,
+  terminateBody: "이 세션을 끕니다. 대화 기록은 남지만, 하던 작업은 끊깁니다.",
+  currentWarn: "지금 이 대시보드를 켠 세션입니다. 끄면 이 터미널의 Claude Code도 끝납니다.",
+  forceBody: "아직 켜져 있습니다. 강제로 끌까요? 저장되지 않은 작업이 사라질 수 있습니다.",
+  cancel: "취소",
+  terminate: "끄기",
+  force: "강제로 끄기",
+  sending: "끄는 중…",
+  terminateEnded: "이미 끝난 층입니다.",
+  terminateUnverified: "이 세션의 프로세스를 확인하지 못해 끄지 않았습니다. 터미널에서 직접 끝내 주세요.",
+  terminateFailed: "끄지 못했습니다. 서버 연결을 확인하고 다시 시도해 주세요.",
+  terminateLabel: (name: string) => `${name} 층 종료`,
+  sentTerm: (name: string) => `${name} 층에 끄기 신호를 보냈습니다`,
+  sentKill: (name: string) => `${name} 층을 강제로 끄는 신호를 보냈습니다`,
+  gone: (name: string) => `${name} 층이 꺼졌습니다`,
 } as const;
 
 const KNOWN: ReadonlySet<string> = new Set(["ended", "alive", "self", "pid-reused", "unverified"]);
@@ -108,3 +128,102 @@ export function useFloorSwitch(session: SessionView, announce?: (text: string) =
 
   return { paused, busy, error, toggle };
 }
+
+/** 첫 창에서 [끄기]가 성공한 뒤 둘째 창을 띄우기까지(사용자 결정, 스펙 5.2) */
+export const FORCE_AFTER_MS = 10_000;
+
+/**
+ * 종료 확인 창 두 단계(디자인 phase4a §3). 창 단계·요청·실패 문구·10초 타이머·"종료 중" 칩 붙잡기(6초)를 든다.
+ * 10초가 됐을 때 최신 스냅샷의 alive를 본다(층이 끝났거나 사라졌으면 둘째 창 없음 — Floor가 사라지면 타이머도 함께 사라진다)
+ */
+export function useFloorTerminate(session: SessionView, announce?: (text: string) => void) {
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [holdUntil, setHoldUntil] = useState(0);
+  const sendingRef = useRef(false);
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  const alive = session.alive && session.floorStatus !== "ended";
+  const aliveRef = useRef(alive);
+  aliveRef.current = alive;
+  const sentHere = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [, tick] = useState(0);
+  const nameRef = useRef(session.name);
+  nameRef.current = session.name;
+  const announceRef = useRef(announce);
+  announceRef.current = announce;
+
+  const clearTimer = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  useEffect(() => clearTimer, []);
+  // 끝나면 타이머를 버리고, 이 화면에서 끈 층이면 "꺼짐"을 알린다(B124 ⑧). 둘째 창이 떠 있으면 실패 줄 자리에 안내(B124 ⑦)
+  useEffect(() => {
+    if (alive) return;
+    clearTimer();
+    setHoldUntil(0);
+    if (sentHere.current) {
+      sentHere.current = false;
+      announceRef.current?.(FLOOR_TEXT.gone(nameRef.current));
+    }
+    if (stageRef.current === 2) setError(FLOOR_TEXT.terminateEnded);
+  }, [alive]);
+  // 칩 붙잡기 6초 상한(B127)
+  useEffect(() => {
+    if (!holdUntil) return;
+    const t = setTimeout(() => {
+      setHoldUntil(0);
+      tick((n) => n + 1);
+    }, Math.max(0, holdUntil - Date.now()));
+    return () => clearTimeout(t);
+  }, [holdUntil]);
+  useEffect(() => {
+    if (session.terminating) setHoldUntil(0); // 스냅샷이 따라왔다
+  }, [session.terminating]);
+
+  const terminating = alive && (session.terminating === true || Date.now() < holdUntil);
+
+  const open = () => {
+    if (!alive) return;
+    setError(null);
+    setStage(terminating ? 2 : 1);
+  };
+  const close = () => {
+    setStage(0);
+    setError(null);
+  };
+  const confirm = async () => {
+    const force = stageRef.current === 2;
+    if (sendingRef.current || !aliveRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setError(null);
+    const r = await floorsApi.terminate(session.id, force);
+    sendingRef.current = false;
+    setSending(false);
+    if (!r.ok) {
+      if (r.unauthorized) return;
+      setError(r.error === "ended" ? FLOOR_TEXT.terminateEnded : r.error === "failed" ? FLOOR_TEXT.terminateFailed : FLOOR_TEXT.terminateUnverified);
+      return;
+    }
+    sentHere.current = true;
+    setHoldUntil(Date.now() + HOLD_MS);
+    announceRef.current?.(force ? FLOOR_TEXT.sentKill(session.name) : FLOOR_TEXT.sentTerm(session.name));
+    // 요청 중에 사용자가 창을 닫았으면 그 뜻을 따라 타이머를 시작하지 않는다(B127 ④)
+    const stillOpen = stageRef.current !== 0;
+    setStage(0);
+    if (!force && stillOpen) {
+      clearTimer();
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        if (aliveRef.current) setStage(2);
+      }, FORCE_AFTER_MS);
+    }
+  };
+
+  return { stage, sending, error, terminating, open, close, confirm, forceDisabled: stage === 2 && !alive };
+}
+
