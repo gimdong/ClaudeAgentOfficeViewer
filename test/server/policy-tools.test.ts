@@ -18,18 +18,16 @@ describe("policy tools", () => {
     ["Grep", "other"],
     ["Glob", "other"],
     ["TodoWrite", "other"],
-    ["TaskStop", "other"],
     ["ToolSearch", "other"],
     ["모르는이름", "other"],
   ])("묶음 표(스펙 5.2): %s → %s", (tool, group) => {
     expect(groupOf(tool)).toBe(group);
   });
 
-  it("빼는 도구 여덟 개는 null(B94)", () => {
-    const exempt = ["AskUserQuestion", "ExitPlanMode", "SendMessage", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "SubagentHandback"];
+  it("빼는 도구 아홉 개는 null(B94, TaskStop은 사용자 결정 2026-10-11)", () => {
+    const exempt = ["AskUserQuestion", "ExitPlanMode", "SendMessage", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "SubagentHandback", "TaskStop"];
     for (const t of exempt) expect(groupOf(t)).toBeNull();
-    expect(EXEMPT_TOOLS.size).toBe(8);
-    expect(EXEMPT_TOOLS.has("TaskStop")).toBe(false);
+    expect(EXEMPT_TOOLS.size).toBe(9);
     expect(EXEMPT_TOOLS.has("ToolSearch")).toBe(false);
   });
 

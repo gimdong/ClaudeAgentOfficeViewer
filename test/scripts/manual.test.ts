@@ -622,14 +622,15 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(s5).toContain("<code>from the reviewer agent</code>");
     });
 
-    it("빼는 도구 여덟 개가 EXEMPT_TOOLS와 같고, TaskStop·ToolSearch는 그 밖의 도구다(B94)", () => {
-      expect(EXEMPT_TOOLS.size).toBe(8);
+    it("빼는 도구 아홉 개가 EXEMPT_TOOLS와 같고, ToolSearch는 그 밖의 도구다(B94 + TaskStop 사용자 결정)", () => {
+      expect(EXEMPT_TOOLS.size).toBe(9);
       expect(s8).toContain(`: ${[...EXEMPT_TOOLS].map((t) => `<code>${t}</code>`).join(", ")}.</p>`);
       const other = s5.slice(s5.indexOf(`<tr><td>${GROUPS.other.label}</td>`), s5.indexOf("</tr>", s5.indexOf(`<tr><td>${GROUPS.other.label}</td>`)));
-      for (const t of ["ToolSearch", "TaskStop"]) {
+      for (const t of ["ToolSearch"]) {
         expect(EXEMPT_TOOLS.has(t), t).toBe(false);
         expect(other, t).toContain(`<code>${t}</code>`);
       }
+      expect(other).not.toContain("TaskStop");
     });
 
     it("doctor 덧붙임 문장이 doctor.ts와 같다(B98: hooks 안내 맨 앞)", () => {

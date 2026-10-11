@@ -27,7 +27,7 @@ const BY_TOOL = new Map<string, Exclude<PolicyGroup, "all">>([
  * 답하기·팀 통신 도구. 어떤 규칙도 적용하지 않는다 — 막으면 에이전트가 갇히고 "막혔다"는 보고도 못 한다(스펙 5.2).
  * SubagentHandback은 서브에이전트가 결과를 리드에게 돌려주는 도구다(스파이크 2.1.291, Ruling B94). TaskStop·ToolSearch는 여기 넣지 않는다(other)
  */
-export const EXEMPT_TOOLS: ReadonlySet<string> = new Set(["AskUserQuestion", "ExitPlanMode", "SendMessage", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "SubagentHandback"]);
+export const EXEMPT_TOOLS: ReadonlySet<string> = new Set(["AskUserQuestion", "ExitPlanMode", "SendMessage", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "SubagentHandback", "TaskStop"]); // TaskStop: 리드가 "모든 도구 금지"여도 팀을 내릴 수 있게(사용자 결정 2026-10-11)
 
 /** 도구 이름(대소문자 그대로, 스파이크 S6)의 묶음. 빼는 도구면 null */
 export function groupOf(toolName: string): Exclude<PolicyGroup, "all"> | null {
