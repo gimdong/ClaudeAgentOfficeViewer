@@ -13,6 +13,8 @@ import { errInfo, getLogger } from "./log";
 import type { PolicyVerdict } from "./policy/gate";
 import { isTargetKey, parseRules, type PolicyFile, type SetResult } from "./policy/store";
 import type { PolicyRules } from "../src/shared/types";
+import type { SessionRecord } from "./collectors/sessions";
+import type { TerminateResult } from "./floors/control";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -86,6 +88,18 @@ export function createApp(
     policy?: { preToolUse(input: Record<string, unknown>): PolicyVerdict | null; claim(input: Record<string, unknown>): boolean };
     /** 정책 API(스펙 7.4). 바뀌면 hub.poke()로 스냅샷을 다시 만든다 */
     policyApi?: { all(): PolicyFile; set(target: string, rules: PolicyRules): SetResult; remove(target: string): { ok: true; saved: boolean } };
+    /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
+    floors?: {
+      preToolUse(input: Record<string, unknown>): object | null;
+      pause(id: string): void;
+      resume(id: string): void;
+      isPaused(id: string): boolean;
+      terminate(record: SessionRecord | undefined, force: boolean): Promise<TerminateResult>;
+      hide(id: string): void;
+      unhideAll(): void;
+      hiddenCount(): number;
+      record(id: string): SessionRecord | undefined;
+    };
   } = {},
 ): Express {
   const app = express();
@@ -133,6 +147,17 @@ export function createApp(
       const input = body as Record<string, unknown>;
       opts.stats?.accept(input.hook_event_name as string);
       const isPre = input.hook_event_name === "PreToolUse";
+      // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다
+      // (막힌 호출이 "작업 중"으로 남지 않게, Phase 3 B79). 판정이 던지면 일시정지가 없는 것처럼 이어 간다
+      if (isPre) {
+        try {
+          const paused = opts.floors?.preToolUse(input);
+          if (paused) return void res.status(200).json(paused);
+        } catch (e) {
+          getLogger().error("floors", "pause check failed", { error: errInfo(e) });
+          if (res.headersSent) return;
+        }
+      }
       // 정책 판정(스펙 6.2). 판정에서 예외가 나면 로그만 남기고 정책이 없는 것처럼 이어 간다(스펙 6.4)
       let verdict: PolicyVerdict | null = null;
       if (isPre) {
@@ -372,6 +397,73 @@ export function createApp(
       res.status(200).json({ saved: r.saved });
     });
     app.use("/api/policy", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(err.status === 413 ? 413 : 400).json({});
+    });
+  }
+
+  if (opts.floors) {
+    const floors = opts.floors;
+    const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
+    const guard = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (!isSameOrigin(req.headers.origin, req.headers.host)) return void res.status(403).end();
+      if (!req.is("application/json")) return void res.status(415).end();
+      next();
+    };
+    // req.params는 Express가 디코드한 값이다. 깨진 퍼센트 인코딩은 Express가 400 오류로 넘기고 아래 오류 처리가 받는다
+    const idOf = (req: express.Request): string | null => {
+      const id = req.params.id;
+      return typeof id === "string" && SESSION_ID.test(id) ? id : null;
+    };
+    const poke = () => {
+      try {
+        hub.poke?.();
+      } catch (e) {
+        getLogger().error("floors", "poke failed", { error: errInfo(e) });
+      }
+    };
+    const pauseRoute = (pause: boolean) => (req: express.Request, res: express.Response) => {
+      const id = idOf(req);
+      if (!id) return void res.status(400).json({});
+      if (!floors.record(id)?.alive) return void res.status(409).json({ error: "ended" });
+      const before = floors.isPaused(id);
+      if (pause) floors.pause(id);
+      else floors.resume(id);
+      if (floors.isPaused(id) !== before) poke();
+      res.status(200).json({ paused: pause });
+    };
+    app.post("/api/floors/:id/pause", guard, pauseRoute(true));
+    app.post("/api/floors/:id/resume", guard, pauseRoute(false));
+    app.post("/api/floors/:id/terminate", guard, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
+      const id = idOf(req);
+      const b = req.body as unknown;
+      const ok = !!b && typeof b === "object" && !Array.isArray(b) && Object.keys(b).every((k) => k === "force") && ((b as { force?: unknown }).force === undefined || typeof (b as { force?: unknown }).force === "boolean");
+      if (!id || !ok) return void res.status(400).json({});
+      // 신호는 레코드의 pid로만 보낸다(본문·주소의 pid는 받지 않는다, 스펙 5.1)
+      const r = await floors.terminate(floors.record(id), (b as { force?: boolean }).force === true);
+      if (r.ok) {
+        if (r.sent) poke();
+        return void res.status(200).json({ signal: r.signal });
+      }
+      res.status(r.error === "self" ? 400 : 409).json({ error: r.error });
+    });
+    app.post("/api/floors/:id/hide", guard, (req, res) => {
+      const id = idOf(req);
+      if (!id) return void res.status(400).json({});
+      const r = floors.record(id);
+      if (!r) return void res.status(404).json({});
+      if (r.alive) return void res.status(409).json({ error: "alive" });
+      const before = floors.hiddenCount();
+      floors.hide(id);
+      if (floors.hiddenCount() !== before) poke();
+      res.status(200).json({ hidden: floors.hiddenCount() });
+    });
+    app.delete("/api/floors/hidden", guard, (_req, res) => {
+      const before = floors.hiddenCount();
+      floors.unhideAll();
+      if (before !== 0) poke();
+      res.status(200).json({ hidden: 0 });
+    });
+    app.use("/api/floors", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(err.status === 413 ? 413 : 400).json({});
     });
   }
