@@ -266,7 +266,8 @@ describe("층 관리 통계(Phase 4a)", () => {
       expect(b.floors).toEqual({ paused: 0, hidden: 0, terminating: 1 });
       const text = JSON.stringify(b);
       expect(text.includes('"src\\":\\"floors\\"')).toBe(true); // 층 관리 로그 줄이 실제로 들어갔다
-      for (const bad of [CMD, "FAKE-CWD-floor", "FAKE-NAME-floor", HOME]) {
+      // 로그의 세션 표시는 순번이다(B125·B129): 레코드의 세션 id도 진단 파일에 없어야 한다
+      for (const bad of [CMD, "FAKE-CWD-floor", "FAKE-NAME-floor", HOME, rec.sessionId]) {
         const leaked = text.includes(bad);
         expect(leaked, bad).toBe(false);
       }
