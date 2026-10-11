@@ -261,7 +261,7 @@ async function main(): Promise<void> {
   const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke() });
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors });
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),

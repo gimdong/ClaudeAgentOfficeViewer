@@ -229,8 +229,8 @@ describe("로그와 onChange", () => {
     f.resume("s1");
     const text = logText();
     expect([text.includes("FAKE-CMD-123"), text.includes("FAKE-CWD")]).toEqual([false, false]);
-    expect(floorLines().map((l) => l.msg)).toEqual(["pause", "paused-deny Bash", "terminate", "hide", "unhide", "resume"]);
-    expect(floorLines().find((l) => l.msg === "paused-deny Bash")?.data).toEqual({ session: 1, tool: "Bash" });
+    expect(floorLines().map((l) => l.msg)).toEqual(["pause", "paused-deny", "terminate", "hide", "unhide", "resume"]);
+    expect(floorLines().find((l) => l.msg === "paused-deny")?.data).toEqual({ session: 1, tool: "Bash" });
     // 세션 표시는 처음 본 순서의 순번(B123): s1=1, s2=2. 세션 id 문자열은 로그에 없다
     expect(floorLines().find((l) => l.msg === "hide")?.data).toEqual({ session: 2 });
     expect([text.includes("s1"), text.includes("s2")]).toEqual([false, false]);
@@ -242,6 +242,14 @@ describe("로그와 onChange", () => {
     for (let i = 0; i < 5; i++) f.preToolUse(pre());
     expect(floorLines().filter((l) => l.msg.startsWith("paused-deny"))).toHaveLength(1);
     expect(f.view("s1").pausedDenied).toBe(5);
+  });
+
+  it("같은 세션을 다른 도구 이름 100개로 막아도 로그는 한 줄(msg 고정, B128)", () => {
+    const f = fc();
+    f.pause("s1");
+    for (let i = 0; i < 100; i++) f.preToolUse(pre({ tool_name: `mcp__fake__t${i}` }));
+    expect(floorLines().filter((l) => l.msg.startsWith("paused-deny"))).toHaveLength(1);
+    expect(f.view("s1").pausedDenied).toBe(100);
   });
 
   it("세션 id가 길고 고유해도 로그 폴더 전체에 그 문자열이 없다(B123)", async () => {

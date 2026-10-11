@@ -473,18 +473,20 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
     alive = () => true;
     floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 999_999 });
   });
-  const builder = () => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: (pid) => alive(pid), floors });
+  // 실제 ps를 부르지 않게 matcher도 주입한다(B128). 가짜는 언제나 일치
+  const matchProcStart = vi.fn(async () => true as boolean | undefined);
+  const builder = () => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: (pid) => alive(pid), matchProcStart, floors });
   const by = (snap: Awaited<ReturnType<SnapshotBuilder["build"]>>) => Object.fromEntries(snap.sessions.map((s) => [s.id, s]));
 
   it("record(id)는 마지막 빌드의 레코드를 주고 procStart를 담는다, 없는 id는 undefined", async () => {
     await seedFloors();
-    // procStart가 있으면 readSessions가 실제 ps로 pid 재사용을 본다(읽기만). 여기서는 레코드에 남는지만 본다
     await h.write("sessions/4.json", { pid: 104, sessionId: "D", name: "d", cwd: "/d", status: "idle", startedAt: T - 500_000, updatedAt: T - 100, procStart: PS });
     const b = builder();
     expect(b.record("A")).toBeUndefined();
     await b.build(T);
     expect(b.record("A")).toMatchObject({ sessionId: "A", pid: 101, alive: true });
-    expect(b.record("D")?.procStart).toBe(PS);
+    expect(b.record("D")).toMatchObject({ procStart: PS, alive: true });
+    expect(matchProcStart).toHaveBeenCalledWith(104, PS); // 주입한 matcher를 쓴다(실제 ps 없음)
     expect(b.record("nope")).toBeUndefined();
   });
 

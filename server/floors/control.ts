@@ -44,8 +44,9 @@ export class FloorControl {
       if (typeof sessionId !== "string" || typeof tool !== "string" || !tool) return null;
       if (!this.paused.has(sessionId) || EXEMPT_TOOLS.has(tool)) return null;
       this.pausedDenied.set(sessionId, (this.pausedDenied.get(sessionId) ?? 0) + 1);
-      // warn이라 같은 도구의 되풀이 deny는 로거가 10분 동안 한 줄로 묶는다(B125, Phase 3 정책 deny와 같다)
-      getLogger().warn("floors", `paused-deny ${tool}`, { session: this.no(sessionId), tool });
+      // warn + 고정 msg라 되풀이 deny는 로거가 10분 동안 한 줄로 묶는다(B125·B128). 도구 이름은 data에만 —
+      // msg에 넣으면 이름을 바꿔 가며 오는 호출이 묶이지 않고 로거의 억제 표가 커진다
+      getLogger().warn("floors", "paused-deny", { session: this.no(sessionId), tool });
       this.changed();
       return preToolDeny(PAUSED_REASON);
     } catch (e) {

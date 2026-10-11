@@ -11,7 +11,7 @@ import { deriveAgent, lastSentence, type Derived } from "./events/derive";
 import type { EventStore } from "./events/store";
 import { readLimits } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
-import { pidAlive, readSessions, type SessionRecord } from "./collectors/sessions";
+import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
 import { errInfo, getLogger, warnCaught } from "./log";
@@ -24,6 +24,8 @@ export interface BuilderOptions {
   claudeHome: string;
   config: OfficeConfig;
   isAlive?: (pid: number) => boolean;
+  /** pid 재사용 확인(Phase 4a B128). 테스트는 가짜를 넣는다. 기본은 실제 ps */
+  matchProcStart?: ProcStartMatcher;
   /** hook 이벤트 저장소. 없으면 v1과 같이 파일로만 판정한다 */
   events?: Pick<EventStore, "agents" | "prune">;
   /** 결정 큐(Phase 2). 연결되면 손들기는 큐의 pending만 본다(Ruling B28·B40) — derive의 decision은 쓰지 않는다 */
@@ -132,7 +134,7 @@ export class SnapshotBuilder {
     };
 
     await guard("usage", () => this.usage.refresh(), undefined);
-    const sessions = (this.prevSessions = await guard("sessions", () => readSessions(claudeHome, now, this.opts.isAlive ?? pidAlive), this.prevSessions));
+    const sessions = (this.prevSessions = await guard("sessions", () => readSessions(claudeHome, now, this.opts.isAlive ?? pidAlive, this.opts.matchProcStart ?? defaultProcStartMatcher), this.prevSessions));
     const teams = (this.prevTeams = await guard("teams", () => readTeams(claudeHome), this.prevTeams));
     // readLimits에 now를 넘겨, 스냅샷이 판단하는 "현재 시각"과 rate limit 창의 만료 판정 기준을 맞춘다
     // (Task 7 fix round 1에서 readLimits가 now를 받아 이미 지난 창을 걸러내도록 바뀌었다).
