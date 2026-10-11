@@ -52,7 +52,7 @@ describe("activityLine (디자인 7.2 표)", () => {
   });
 
   it("휴업", () => {
-    expect(activityLine(member(), { paused: true })).toEqual({ icon: "pause", text: "저는 지금 휴업 중이라 쉬고 있습니다", decision: false });
+    expect(activityLine(member(), { paused: true })).toEqual({ icon: "pause", text: "저는 지금 휴업 중이라 도구를 쓰지 않고 기다립니다", decision: false });
   });
 
   it.each([

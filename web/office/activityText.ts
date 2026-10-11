@@ -102,7 +102,8 @@ export function activityLine(m: Member, opts: { paused?: boolean } = {}): Line {
   if (m.state === "decision" && m.decision) return line("ask", `저는 지금 ${WAITING_FOR[m.decision.kind]} 기다리고 있습니다`, true);
   // 결정 대기 다음이 정책으로 막힘(phase3 §6.3). 손은 들지 않는다(decision: false)
   if (m.policyDenied) return { icon: "lock", text: `정책으로 막힘: ${GROUP_LABEL[m.policyDenied.group]}`, decision: false, blocked: true };
-  if (opts.paused) return line("pause", "저는 지금 휴업 중이라 쉬고 있습니다");
+  // 멈춘 층도 쉬는 것이 아니라 도구만 막힌 채 기다린다(phase4a B126, Phase 1 7.2 문장 교정)
+  if (opts.paused) return line("pause", "저는 지금 휴업 중이라 도구를 쓰지 않고 기다립니다");
   if (m.state === "offline") return line("wait", "저는 퇴근했습니다");
   const a = m.activity;
   if (a?.kind === "tool") return toolLine(a.tool, a.target);

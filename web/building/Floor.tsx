@@ -1,4 +1,4 @@
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
@@ -9,6 +9,7 @@ import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
 import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
+import { FLOOR_TEXT, useFloorSwitch } from "../floors/useFloors";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
 
@@ -38,20 +39,36 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
     settingsBtn.current?.focus();
   };
 
+  const sw = useFloorSwitch(session, budgetCtx.announce);
+  // 화면 상태: 기다리는 값(응답)을 스냅샷보다 먼저 따른다(디자인 §1.2). 칩·셔터·LED도 같은 값
+  const paused = session.floorStatus !== "ended" && sw.paused;
+  const floorStatus = session.floorStatus === "ended" ? "ended" : paused ? "paused" : session.floorStatus !== "paused" ? session.floorStatus : session.members.some((m) => m.state === "working" || m.state === "decision") ? "working" : "idle";
+  // 셔터는 영업 중 → 멈춤으로 바뀐 순간에만 내려오는 애니메이션(첫 렌더에는 없음, §2.4)
+  const wasPaused = useRef(paused);
+  const [dropping, setDropping] = useState(false);
+  useEffect(() => {
+    if (paused && !wasPaused.current) setDropping(true);
+    if (!paused) setDropping(false);
+    wasPaused.current = paused;
+  }, [paused]);
+
   const id = floorDomId(session.id);
   const decisions = session.members.filter((m) => m.state === "decision").length;
   const working = session.members.filter((m) => m.state === "working").length;
-  const ended = session.floorStatus === "ended";
-  // TS가 별도의 ended 변수만으로는 floorStatus를 좁히지 못해 조건을 다시 직접 검사한다
-  const statusText = session.floorStatus === "ended" ? `종료됨 ${hhmm(session.endedAt)}`.trim() : STATUS_LABEL[session.floorStatus];
+  const ended = floorStatus === "ended";
+  // 칩은 하나(§1.5): 종료 중 → 멈춤 → 그 밖. TS가 ended 변수만으로는 좁히지 못해 조건을 다시 직접 검사한다
+  const terminating = !ended && session.terminating === true;
+  const statusText = floorStatus === "ended" ? `종료됨 ${hhmm(session.endedAt)}`.trim() : terminating ? FLOOR_TEXT.terminating : STATUS_LABEL[floorStatus];
+  const chipClass = terminating ? "terminating" : floorStatus;
+  const noteId = `${id}-pause-note`;
   // 예산 도달(§7): 결정 대기가 있으면 Phase 1처럼 결정(노랑)이 먼저
   const alarm = !!session.budget?.reached && !ended;
-  const led = decisions ? "decision" : alarm ? "budget" : session.floorStatus;
+  const led = decisions ? "decision" : alarm ? "budget" : floorStatus;
   const ctx = session.context;
 
   return (
     <section
-      className={`floor floor--${session.floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}`}
+      className={`floor floor--${floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}`}
       id={id}
       aria-labelledby={`${id}-name`}
       data-testid="floor"
@@ -74,7 +91,15 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
             )}
             {session.name}
           </h2>
-          <span className={`chip chip--${session.floorStatus}`}>{statusText}</span>
+          <span className={`chip chip--${chipClass}`} {...(paused && !terminating ? { title: FLOOR_TEXT.pauseNote } : {})}>
+            {statusText}
+          </span>
+          {paused && (session.pausedDenied ?? 0) > 0 && <span className="fl-blocked">{FLOOR_TEXT.blocked(session.pausedDenied ?? 0)}</span>}
+          {paused && (
+            <span className="sr-only" id={noteId}>
+              {FLOOR_TEXT.pauseNote}
+            </span>
+          )}
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
           {alarm && <span className="chip chip--budget">예산 도달</span>}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}
@@ -88,13 +113,25 @@ export function Floor({ session, bubble }: { session: SessionView; bubble?: Bubb
               <BudgetBar ref={settingsBtn} budget={session.budget} floorName={session.name} onOpenSettings={() => setSettingsOpen(true)} />
             </span>
           )}
-          <FloorControls session={session} />
+          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} noteId={noteId} />
+          {sw.error && (
+            <span className="fc-err" role="alert">
+              {sw.error}
+            </span>
+          )}
         </header>
         <div className="room" id={`${id}-room`}>
           <Backdrop />
+          {paused && (
+            <div className={`shutter${dropping ? " shutter-down" : ""}`} aria-hidden="true">
+              <span className="shutter-sign">
+                휴업<small>잠시 쉬는 중</small>
+              </span>
+            </div>
+          )}
           <div className="desks">
             {session.members.map((m) => (
-              <Desk key={m.name} member={m} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} />
+              <Desk key={m.name} member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} />
             ))}
           </div>
         </div>

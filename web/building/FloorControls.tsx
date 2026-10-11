@@ -1,10 +1,12 @@
 import type { SessionView } from "../../src/shared/types";
+import { FLOOR_TEXT } from "../floors/useFloors";
 import { Icon } from "../pixel/Icon";
 
-// Phase 1에서는 모양만 보여준다(디자인 A8). 동작은 Phase 4.
-const OFF = { "aria-disabled": true, title: "아직 사용할 수 없습니다" } as const;
+// 작업 지시는 Phase 4b까지 모양만 보여준다(디자인 phase4a §1.4). 종료 확인 창은 Task 6, 숨김은 Task 7
+const OFF = { "aria-disabled": true, title: FLOOR_TEXT.orderTitle } as const;
 
-export function FloorControls({ session }: { session: SessionView }) {
+/** 층 머리 컨트롤(디자인 phase4a §1). 스위치 상태(paused·busy)는 Floor의 useFloorSwitch가 든다 */
+export function FloorControls({ session, paused, busy, onToggle, noteId }: { session: SessionView; paused: boolean; busy: boolean; onToggle(): void; noteId: string }) {
   if (session.floorStatus === "ended") {
     return (
       <div className="controls">
@@ -17,11 +19,21 @@ export function FloorControls({ session }: { session: SessionView }) {
   }
   return (
     <div className="controls">
-      <button type="button" className="switch" role="switch" aria-checked={true} aria-label={`${session.name} 영업`} {...OFF}>
+      {/* disabled는 쓰지 않는다(포커스가 body로 떨어짐, B105). 요청 중 다시 누르면 훅이 무시한다 */}
+      <button
+        type="button"
+        className="switch"
+        role="switch"
+        aria-checked={!paused}
+        aria-label={`${session.name} 영업`}
+        aria-busy={busy || undefined}
+        aria-describedby={paused ? noteId : undefined}
+        onClick={onToggle}
+      >
         <span className="track">
           <span className="knob" />
         </span>
-        <span className="lbl">영업 중</span>
+        <span className="lbl">{paused ? FLOOR_TEXT.off : FLOOR_TEXT.on}</span>
       </button>
       <button type="button" className="pbtn" {...OFF}>
         <Icon name="send" />

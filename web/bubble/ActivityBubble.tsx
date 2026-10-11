@@ -6,11 +6,12 @@ import { NEON } from "../pixel/palette";
 import { placeBubble, type Placement } from "./place";
 import type { BubbleTarget } from "./useBubble";
 
-function findMember(sessions: SessionView[], key: string): Member | undefined {
+function findMember(sessions: SessionView[], key: string): { member?: Member; paused: boolean } {
   const i = key.indexOf(":");
   const sessionId = key.slice(0, i);
   const name = key.slice(i + 1);
-  return sessions.find((s) => s.id === sessionId)?.members.find((m) => m.name === name);
+  const s = sessions.find((x) => x.id === sessionId);
+  return { member: s?.members.find((m) => m.name === name), paused: s?.floorStatus === "paused" };
 }
 
 /** 모든 책상이 함께 쓰는 fixed 말풍선 하나(디자인 7.1). 등장 애니메이션은 없다 */
@@ -18,8 +19,10 @@ export function ActivityBubble({ target, sessions }: { target: BubbleTarget | nu
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<Placement | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const member = target ? findMember(sessions, target.key) : undefined;
-  const line = member ? activityLine(member) : undefined;
+  const found = target ? findMember(sessions, target.key) : undefined;
+  const member = found?.member;
+  // 일시정지 층의 구성원은 휴업 줄(phase4a §2.2, Phase 1 7.2 우선순위)
+  const line = member ? activityLine(member, { paused: found?.paused }) : undefined;
   const meta = member ? metaLine(member, now) : "";
 
   // "{경과}초째"가 흐르도록 보이는 동안 1초마다 다시 그린다
