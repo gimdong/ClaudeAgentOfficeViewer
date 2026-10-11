@@ -11,6 +11,7 @@ import { DecisionQueue } from "../../server/decisions/queue";
 import { Logger, setLogger } from "../../server/log";
 import { PolicyStore } from "../../server/policy/store";
 import { PolicyGate } from "../../server/policy/gate";
+import { FloorControl } from "../../server/floors/control";
 
 const NOW = Date.UTC(2026, 9, 1, 3);
 const HOME = "/Users/fakeuser";
@@ -235,6 +236,43 @@ describe("권한 정책 통계(Phase 3)", () => {
 
   it("policy를 주지 않으면 0으로 채운다", async () => {
     expect((await base()).policy).toEqual({ targets: 0, rulesByKind: { lead: 0, agent: 0, sub: 0, others: 0 }, decisions: { deny: 0, ask: 0 } });
+  });
+});
+
+describe("층 관리 통계(Phase 4a)", () => {
+  it("floors 수가 입력 그대로 들어간다", async () => {
+    const floors = { paused: 2, hidden: 3, terminating: 1 };
+    expect((await base({ floors })).floors).toEqual(floors);
+  });
+
+  it("floors를 주지 않으면 0으로 채운다", async () => {
+    expect((await base()).floors).toEqual({ paused: 0, hidden: 0, terminating: 0 });
+  });
+
+  it("진단 파일 전체에 명령 원문·cwd·홈 경로가 없다(실제 FloorControl·Logger)", async () => {
+    const CMD = "FAKE-CMD-123";
+    const CWD = `${HOME}/Code/FAKE-CWD-floor`;
+    setLogger(new Logger({ dir: logDir, now: () => NOW, home: HOME }));
+    try {
+      const signals: Array<[number, string]> = [];
+      const fc = new FloorControl({ signal: (pid, sig) => void signals.push([pid, sig]), matchProcStart: async () => true, selfPid: 1, now: () => NOW });
+      const rec = { pid: 4242, sessionId: "sess-floor-1", name: "FAKE-NAME-floor", cwd: CWD, status: "busy", startedAt: NOW, updatedAt: NOW, alive: true, procStart: "Mon Oct  6 10:00:00 2026" };
+      fc.pause(rec.sessionId);
+      for (const tool of ["Bash", "Edit"]) expect(fc.preToolUse({ hook_event_name: "PreToolUse", session_id: rec.sessionId, tool_name: tool, tool_input: { command: CMD, file_path: `${CWD}/${CMD}` }, cwd: CWD })).not.toBeNull();
+      fc.resume(rec.sessionId);
+      expect((await fc.terminate(rec, false)).ok).toBe(true);
+      expect(signals).toEqual([[4242, "SIGTERM"]]);
+      const b = await base({ floors: fc.stats() });
+      expect(b.floors).toEqual({ paused: 0, hidden: 0, terminating: 1 });
+      const text = JSON.stringify(b);
+      expect(text.includes('"src\\":\\"floors\\"')).toBe(true); // 층 관리 로그 줄이 실제로 들어갔다
+      for (const bad of [CMD, "FAKE-CWD-floor", "FAKE-NAME-floor", HOME]) {
+        const leaked = text.includes(bad);
+        expect(leaked, bad).toBe(false);
+      }
+    } finally {
+      setLogger(new Logger({ dir: "" }));
+    }
   });
 });
 

@@ -233,6 +233,46 @@ describe("권한 정책 절(Phase 3)", () => {
   });
 });
 
+describe("층 관리 절(Phase 4a)", () => {
+  const floors = { paused: 1, hidden: 2, terminating: 1 };
+  const floorLogs = [
+    log("2026-10-01T02:00:00.000Z", "info", "floors", "pause", { session: 1 }),
+    log("2026-10-01T02:01:00.000Z", "info", "floors", "paused-deny", { session: 1, tool: "Bash" }),
+    log("2026-10-01T02:02:00.000Z", "info", "floors", "paused-deny", { session: 1, tool: "Edit" }),
+    log("2026-10-01T02:03:00.000Z", "warn", "floors", "terminate failed", { session: 2, signal: "SIGTERM", error: "EPERM", suppressed: 2 }),
+    log("2026-10-01T02:04:00.000Z", "info", "floors", "terminate", { session: 2, signal: "SIGTERM" }),
+    log("2026-10-01T02:05:00.000Z", "info", "server", "start"),
+  ];
+
+  it("세 수를 보여 주고 권한 정책 절 뒤, [QA 인폼] 앞에 온다", async () => {
+    const md = analyze({ ...(await bundle()), floors });
+    const s = section(md, "층 관리");
+    expect(s).toContain("- 일시정지 1개 · 숨김 2개 · 종료 중 1개");
+    expect(md.indexOf("## 층 관리")).toBeGreaterThan(md.indexOf("## 권한 정책"));
+    expect(md.indexOf("## 층 관리")).toBeLessThan(md.indexOf("## [QA 인폼] 초안"));
+  });
+
+  it("로그의 floors 줄을 msg로 묶어 센다(warn은 suppressed를 더한다)", async () => {
+    const b = await bundle();
+    const s = section(analyze({ ...b, floors, logs: [{ file: "office-2026-10-01.log", lines: floorLogs }, ...b.logs] }), "층 관리");
+    expect(s).toContain("| paused-deny | 2 | 2026-10-01T02:01:00.000Z | 2026-10-01T02:02:00.000Z |");
+    expect(s).toContain("| terminate failed | 3 |");
+    expect(s).toContain("| pause | 1 |");
+    expect(s).not.toContain("start");
+  });
+
+  it("floors 줄이 없으면 없다고 쓴다", async () => {
+    expect(section(analyze({ ...(await bundle()), floors }), "층 관리")).toContain("로그에 floors 줄 없음");
+  });
+
+  it("floors 필드가 없는 옛 진단 파일도 읽는다", async () => {
+    const { floors: _drop, ...old } = (await bundle()) as DiagBundle & { floors?: unknown };
+    const md = analyze(old as DiagBundle);
+    expect(section(md, "층 관리")).toContain("층 관리 통계 없음(이전 버전 진단 파일)");
+    expect(md).toContain("## [QA 인폼] 초안");
+  });
+});
+
 describe("CLI", () => {
   const run = (args: string[]) => spawnSync(join("node_modules", ".bin", "tsx"), ["scripts/qa-analyze.ts", ...args], { encoding: "utf8" });
 

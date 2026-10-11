@@ -119,6 +119,17 @@ export function analyze(b: DiagBundle): string {
     else out.push("| msg | 횟수 | 처음 | 마지막 |", "|---|---|---|---|", ...pg.map((g) => `| ${cell(g.msg)} | ${g.count} | ${g.first} | ${g.last} |`), "");
   }
 
+  // Phase 4a 층 관리 통계. 이전 버전 진단 파일에는 이 필드가 없다
+  const fl = (b as Partial<DiagBundle>).floors;
+  out.push("## 층 관리", "");
+  if (!fl) out.push("층 관리 통계 없음(이전 버전 진단 파일)", "");
+  else {
+    out.push(`- 일시정지 ${fl.paused}개 · 숨김 ${fl.hidden}개 · 종료 중 ${fl.terminating}개`, "");
+    const fg = groupsOf(b, (l) => l.src === "floors");
+    if (!fg.length) out.push("로그에 floors 줄 없음", "");
+    else out.push("| msg | 횟수 | 처음 | 마지막 |", "|---|---|---|---|", ...fg.map((g) => `| ${cell(g.msg)} | ${g.count} | ${g.first} | ${g.last} |`), "");
+  }
+
   // 초안: 사람이 다듬어 director에게 보낸다. 형식은 팀 규칙 [QA 인폼] 증상 / 재현 조건 / 근거 / 추정 원인 / 제안
   const firstFail = b.doctor.find((i) => i.status === "fail");
   const top = groups[0];
