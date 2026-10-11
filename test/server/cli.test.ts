@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -272,6 +272,31 @@ describe("CLI", () => {
       const [file] = readdirSync(join(s.prefix, "diagnostics"));
       const bundle = JSON.parse(readFileSync(join(s.prefix, "diagnostics", file), "utf8")) as { policy: unknown };
       expect(bundle.policy).toEqual({ targets: 2, rulesByKind: { lead: 1, agent: 1, sub: 0, others: 0 }, decisions: { deny: 1, ask: 0 } });
+    } finally {
+      await s.stop();
+    }
+  }, 40_000);
+
+  it("진단 배선: 서버가 만든 진단 파일의 floors는 층 관리 상태의 수다(Phase 4a)", async () => {
+    const s = await startServer();
+    try {
+      // 살아 있는 가짜 세션(이 테스트 프로세스의 pid, procStart 없음 — 신호는 보내지 않는다)
+      mkdirSync(join(s.home, "sessions"), { recursive: true });
+      writeFileSync(join(s.home, "sessions", "1.json"), JSON.stringify({ pid: process.pid, sessionId: "fake-floor", name: "f", cwd: "/x", status: "idle", startedAt: Date.now() - 1000, updatedAt: Date.now() }));
+      const token = readFileSync(join(s.prefix, "token"), "utf8").trim();
+      const pause = async () => (await fetch(`http://127.0.0.1:${s.port}/api/floors/fake-floor/pause`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" })).status;
+      const end = Date.now() + 10_000;
+      let st = await pause();
+      while (st !== 200 && Date.now() < end) {
+        await new Promise((r) => setTimeout(r, 300)); // 스냅샷이 세션 레코드를 읽을 때까지
+        st = await pause();
+      }
+      expect(st).toBe(200);
+      const g = await run(["diag", "--claude-home", s.home, "--port", String(s.port)], s.env);
+      expect(g.code).toBe(0);
+      const [file] = readdirSync(join(s.prefix, "diagnostics"));
+      const bundle = JSON.parse(readFileSync(join(s.prefix, "diagnostics", file), "utf8")) as { floors: unknown };
+      expect(bundle.floors).toEqual({ paused: 1, hidden: 0, terminating: 0 });
     } finally {
       await s.stop();
     }

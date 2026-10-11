@@ -10,7 +10,7 @@ import { BudgetGate } from "./budget/gate";
 import { BudgetStore } from "./budget/store";
 import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
-import { FloorControl } from "./floors/control";
+import { FloorControl, type FloorStats } from "./floors/control";
 import { defaultProcStartMatcher } from "./collectors/sessions";
 import { PolicyStore } from "./policy/store";
 import { buildBundle, readClaudeVersion, writeBundle, type PolicyStats } from "./diag/bundle";
@@ -147,9 +147,9 @@ async function doctorCli(argv: string[]): Promise<void> {
 
 /** 진단 파일을 만들어 paths.diagDir에 쓰고 파일 이름을 돌려준다(서버 버튼과 CLI가 같이 쓴다) */
 /** decisions는 켜진 서버의 큐 통계. CLI가 직접 만들 때는 없다(진단 파일에는 0으로 들어간다). policy는 정책 통계(대상 이름 없음) */
-async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, policy: PolicyStats, decisions?: DecisionStats): Promise<string> {
+async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, policy: PolicyStats, decisions?: DecisionStats, floors?: FloorStats): Promise<string> {
   const claudeVersion = await readClaudeVersion(defaultWhich(process.env, process.platform)("claude"));
-  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions, policy }));
+  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions, policy, floors }));
 }
 
 /**
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
       logDir: scrub(paths.logDir, home) as string,
       diagDir: scrub(paths.diagDir, home) as string,
     }),
-    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, { ...policyStore.summary(), decisions: policy.totals() }, decisions.stats()),
+    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, { ...policyStore.summary(), decisions: policy.totals() }, decisions.stats(), floors.stats()),
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);
