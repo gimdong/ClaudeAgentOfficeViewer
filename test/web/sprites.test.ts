@@ -95,3 +95,15 @@ describe("format", () => {
     expect(remainingPct(Infinity, 1000)).toBe(0);
   });
 });
+
+import { modelLabel } from "../../web/format";
+describe("modelLabel(모델 이름 다듬기)", () => {
+  it.each([
+    ["claude-opus-5-5", "Opus 5.5"],
+    ["claude-fable-5-1", "Fable 5.1"],
+    ["claude-haiku-4-5-20251001", "Haiku 4.5"],
+    ["claude-sonnet-5", "Sonnet 5"],
+    ["opus", "Opus"],
+    ["gpt-x", "gpt-x"],
+  ])("%s → %s", (raw, want) => expect(modelLabel(raw)).toBe(want));
+});

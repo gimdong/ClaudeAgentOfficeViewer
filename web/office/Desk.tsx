@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
 import type { Member, MemberState } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
-import { stateLabel } from "../format";
+import { formatTokens, modelLabel, stateLabel } from "../format";
 import { NEON, roleOf, shirtColor } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
 import { characterRows, LOCK_DESK, LOCK_DESK_DENIED, QMARK, QRING, spriteRects } from "../pixel/sprites";
@@ -105,6 +105,17 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
     </svg>
   );
 
+  // 이름표 아래 한 줄: 모델 · 토큰 합계(항상 보임). 둘 다 없으면 그리지 않는다
+  // 92px 폭에서 숫자가 잘리지 않게 모델과 토큰을 두 줄로 둔다(정적 렌더 확인)
+  const metaModel = member.model ? modelLabel(member.model) : "";
+  const metaTokens = member.model || member.tokens.total > 0 ? formatTokens(member.tokens.total) : "";
+  const meta = metaTokens && (
+    <span className="desk-meta" data-testid="desk-meta" title={[metaModel, metaTokens].filter(Boolean).join(" · ")}>
+      {metaModel && <span className="dm-model">{metaModel}</span>}
+      <span className="dm-tokens">{metaTokens}</span>
+    </span>
+  );
+
   const handlers =
     bubble && bubbleKey
       ? {
@@ -138,6 +149,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
           {member.name}
           <span className="open-hint"> · 열기</span>
         </span>
+        {meta}
       </button>
     );
   }
@@ -160,6 +172,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
           {member.name}
           <span className="open-hint"> · 열기</span>
         </span>
+        {meta}
       </button>
     );
   }
@@ -175,6 +188,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
     >
       {svg}
       <span className="nametag">{member.name}</span>
+      {meta}
     </div>
   );
 }

@@ -80,6 +80,8 @@ export interface Member {
   state: MemberState;
   unread: number;
   tokens: TokenSum;
+  /** 대화 기록의 모델별 합계(큰 순). 기록이 없으면 싣지 않는다 */
+  byModel?: Array<{ model: string; total: number }>;
   lastActivityAt?: string;
   activity?: Activity;
   decision?: Decision;

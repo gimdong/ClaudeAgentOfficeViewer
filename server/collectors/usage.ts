@@ -118,6 +118,17 @@ export class UsageCollector {
     return sum;
   }
 
+  /** 한 파일(에이전트 한 명)의 모델별 합계, 큰 순. /model로 세션 중에 바꾼 경우를 보인다 */
+  fileByModel(file: string): Array<{ model: string; total: number }> {
+    const by = new Map<string, number>();
+    const winners = this.winners();
+    for (const key of this.fileRecords.get(file)?.keys() ?? []) {
+      const w = winners.get(key);
+      if (w && w.file === file) by.set(w.model, (by.get(w.model) ?? 0) + w.sum.total);
+    }
+    return [...by].map(([model, total]) => ({ model, total })).sort((a, b) => b.total - a.total);
+  }
+
   lastUsage(file: string): LastUsage | undefined {
     return this.last.get(file);
   }

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { formatTokens, modelLabel } from "../format";
 import { createPortal } from "react-dom";
 import type { Member, Snapshot } from "../../src/shared/types";
 import { Icon } from "../pixel/Icon";
@@ -70,7 +71,21 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
   const backLabel = !back ? null : back.view === "list" ? "정책 목록으로 돌아가기" : back.target === "lead" ? "리드 권한으로 돌아가기" : `${targetLabel(back.target)} 권한으로 돌아가기`;
   const goTo = (next: string) => policy.openAgent(next, undefined, { view: "agent", target });
 
-  const before = (target !== "others" || notOnScreen) && (
+  // 모델·토큰(사용자 요청 2026-10-13): 이름표 줄의 자세한 판. 화면에 있는 구성원(리드·팀원)만
+  const t = member?.tokens;
+  const usage = member && t && (
+    <section className="rp-sec ap-usage" aria-labelledby="ap-usage-h">
+      <h3 id="ap-usage-h">모델·토큰</h3>
+      <p>지금 모델: {member.model ? modelLabel(member.model) : "알 수 없음"}</p>
+      <p>
+        입력 {formatTokens(t.input)} · 출력 {formatTokens(t.output)} · 캐시 쓰기 {formatTokens(t.cacheWrite)} · 캐시 읽기 {formatTokens(t.cacheRead)}
+      </p>
+      <p>합계 {formatTokens(t.total)} <span className="ap-sub">(캐시 읽기는 합계에서 뺍니다)</span></p>
+      {(member.byModel?.length ?? 0) > 1 && <p>모델별: {member.byModel!.map((b) => `${modelLabel(b.model)} ${formatTokens(b.total)}`).join(" · ")}</p>}
+    </section>
+  );
+
+  const notes = (target !== "others" || notOnScreen) && (
     <section className="rp-sec ap-notes">
       {notOnScreen && <p className="ap-note">{TEXT.notOnScreen}</p>}
       {target !== "others" && (
@@ -131,7 +146,7 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
           </button>
         </div>
       </header>
-      <RuleEditor key={target} target={target} saved={own ?? {}} onSave={(rules) => policy.save(target, rules)} announce={announce} before={before} after={after} />
+      <RuleEditor key={target} target={target} saved={own ?? {}} onSave={(rules) => policy.save(target, rules)} announce={announce} before={<>{usage}{notes}</>} after={after} />
     </aside>,
     document.body,
   );

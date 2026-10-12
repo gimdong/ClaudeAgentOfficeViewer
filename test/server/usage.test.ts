@@ -152,6 +152,22 @@ describe("UsageCollector", () => {
     expect(models).toEqual({ "claude-opus-5-5": 10, "claude-sonnet-5": 9 });
   });
 
+  it("fileByModel: 한 파일 안의 모델별 합계(큰 순), 다른 파일 줄은 섞지 않는다", async () => {
+    await h.append(F, [
+      assistant({ requestId: "a", ts: NOW - 3000, model: "claude-fable-5-1", input: 5, output: 1 }),
+      assistant({ requestId: "b", ts: NOW - 2000, model: "claude-opus-5-5", input: 20, output: 2 }),
+      assistant({ requestId: "c", ts: NOW - 1000, model: "claude-fable-5-1", input: 1, output: 1 }),
+    ]);
+    await h.append("projects/-p/s2.jsonl", [assistant({ requestId: "d", ts: NOW - 500, model: "claude-haiku-4-5", output: 99 })]);
+    await c.refresh();
+    const file = c.findFile((p) => p.endsWith("/s1.jsonl"))!;
+    expect(c.fileByModel(file)).toEqual([
+      { model: "claude-opus-5-5", total: 22 },
+      { model: "claude-fable-5-1", total: 8 },
+    ]);
+    expect(c.fileByModel("nope")).toEqual([]);
+  });
+
   it("projects 폴더가 없으면 빈 결과", async () => {
     await c.refresh();
     expect(c.summary(NOW).last7d.total).toBe(0);

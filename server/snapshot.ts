@@ -269,6 +269,7 @@ export class SnapshotBuilder {
           state: status,
           unread: 0,
           tokens: leadFile ? this.usage.fileTotal(leadFile) : emptySum(),
+          ...(leadFile ? { byModel: this.usage.fileByModel(leadFile) } : {}),
           lastActivityAt: leadAt,
         },
         derived("team-lead"),
@@ -286,11 +287,13 @@ export class SnapshotBuilder {
           {
             name: m.name,
             role: m.name,
-            model: m.model,
+            // 설정의 별칭(띄울 때 준 값)보다 대화 기록이 말하는 실제 응답 모델이 먼저다
+            model: (m.transcript ? this.usage.lastUsage(m.transcript)?.model : undefined) ?? m.model,
             color: m.color,
             state: memberState({ sessionAlive: s.alive, unread: m.unread, transcriptMtime: mtime, lastEntry, now }),
             unread: m.unread,
             tokens: m.transcript ? this.usage.fileTotal(m.transcript) : emptySum(),
+            ...(m.transcript ? { byModel: this.usage.fileByModel(m.transcript) } : {}),
             lastActivityAt: at,
           },
           derived(m.name),

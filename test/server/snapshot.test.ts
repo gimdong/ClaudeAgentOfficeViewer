@@ -62,7 +62,10 @@ describe("SnapshotBuilder", () => {
     expect(s1.context).toEqual({ used: 10000, window: 1_000_000, pct: 1, estimated: false });
     expect(s1.members.map((m) => [m.name, m.state])).toEqual([["team-lead", "working"], ["developer", "working"], ["reviewer", "idle"]]);
     expect(s1.members[0]).toMatchObject({ role: "lead", model: "claude-opus-5-5", tokens: { total: 1050 } });
-    expect(s1.members[1]).toMatchObject({ model: "sonnet", tokens: { total: 7 } });
+    // 팀원 모델은 설정 별칭("sonnet")보다 대화 기록의 마지막 답변 모델이 먼저다. 모델별 합계도 싣는다
+    expect(s1.members[0].byModel).toEqual([{ model: "claude-opus-5-5", total: 1050 }]);
+    expect(s1.members[1]).toMatchObject({ model: "claude-opus-5-5", tokens: { total: 7 }, byModel: [{ model: "claude-opus-5-5", total: 7 }] });
+    expect(s1.members[2].byModel).toBeUndefined(); // 대화 기록이 없으면 싣지 않는다
     expect(s1.members[1].lastActivityAt).toBeDefined();
 
     expect(s2).toMatchObject({ alive: false, isCurrent: false, status: "offline", context: null });

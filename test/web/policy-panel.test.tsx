@@ -491,3 +491,32 @@ describe("서랍 관계와 포커스", () => {
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 });
+
+describe("모델·토큰 표시(사용자 요청 2026-10-13)", () => {
+  const tok = (input: number, output: number, cacheWrite: number, cacheRead: number) => ({ input, output, cacheWrite, cacheRead, total: input + output + cacheWrite });
+  it("이름표 아래 한 줄: 모델 · 토큰 합계, 모델이 없으면 토큰만, 둘 다 없으면 없음", () => {
+    show(snap({ members: [lead({ model: "claude-opus-5-5", tokens: tok(1_000_000, 200_000, 0, 5) }), makeMember({ name: "reviewer", role: "reviewer", tokens: tok(900, 0, 0, 0) }), makeMember({ name: "developer" })] }));
+    render(<App />);
+    const parts = (n: string) => [...within(screen.getByTestId(`desk-${n}`)).getByTestId("desk-meta").children].map((c) => c.textContent);
+    expect(parts("team-lead")).toEqual(["Opus 5.5", "1.20M"]);
+    expect(within(screen.getByTestId("desk-team-lead")).getByTestId("desk-meta").getAttribute("title")).toBe("Opus 5.5 · 1.20M");
+    expect(parts("reviewer")).toEqual(["900"]);
+    expect(within(screen.getByTestId("desk-developer")).queryByTestId("desk-meta")).toBeNull();
+  });
+
+  it("패널의 모델·토큰 절: 지금 모델, 나눔, 합계, 모델이 둘 이상이면 모델별", () => {
+    show(snap({ members: [lead({ model: "claude-opus-5-5", tokens: tok(1000, 2000, 300, 9999), byModel: [{ model: "claude-fable-5-1", total: 2500 }, { model: "claude-opus-5-5", total: 800 }] }), makeMember({ name: "reviewer", role: "reviewer", model: "opus", tokens: tok(5, 5, 0, 0), byModel: [{ model: "opus", total: 10 }] })] }));
+    render(<App />);
+    openDesk("team-lead");
+    const sec = panel().querySelector(".ap-usage")!;
+    expect(sec.textContent).toContain("지금 모델: Opus 5.5");
+    expect(sec.textContent).toContain("입력 1.0k · 출력 2.0k · 캐시 쓰기 300 · 캐시 읽기 10.0k");
+    expect(sec.textContent).toContain("합계 3.3k");
+    expect(sec.textContent).toContain("모델별: Fable 5.1 2.5k · Opus 5.5 800");
+    fireEvent.click(within(panel()).getByRole("button", { name: "닫기" }));
+    openDesk("reviewer");
+    const sec2 = panel().querySelector(".ap-usage")!;
+    expect(sec2.textContent).toContain("지금 모델: Opus");
+    expect(sec2.textContent).not.toContain("모델별");
+  });
+});
