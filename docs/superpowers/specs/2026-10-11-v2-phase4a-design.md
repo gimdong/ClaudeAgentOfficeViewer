@@ -183,11 +183,27 @@ interface FloorControl {
 - 신호는 우리가 기록한 PID에만 갔다(남은 sleep도 기록한 PID로만 정리, B113).
 
 ### 14.2 확인된 것 — 실제 세션 (Task 11 Part B)
-- (Part B 결과가 오면 채운다: 일시정지 중 리드·팀원의 Bash가 이유 문구로 막힘 → 재개 뒤 통과, SIGTERM으로 실험 claude가 끝나고 층이 `ended`, 팀원이 리드와 함께 끝나는지(P4), 끝난 층 숨김·모두 보이기.)
+구성: 실제 `claude`(절대 경로), `--plugin-dir` 사본(4319), `--model sonnet --permission-mode auto`, 팀원 in-process, 모든 창은 `caffeinate -s -i` 아래. 프롬프트 2개.
+
+| # | 확인 | 결과 |
+|---|---|---|
+| B0 | `CLAUDE_CONFIG_DIR`을 job tmp로 띄우기 | 온보딩(테마 선택) 화면이 떠 모델 호출 없이 내리고, Phase 3 구성(실제 HOME, 서버는 기본 claude home 읽기)으로 바꿨다(B119대로) |
+| B1 | 일시정지 → "팀원 rev를 만들어 Bash, 너도 Bash" | 리드의 `Agent`(팀원 만들기)와 `Bash`가 둘 다 막혔다. 이유는 `PreToolUse:Agent hook error:` / `PreToolUse:Bash hook error:` 앞말 뒤에 `PAUSED_REASON` 글자 그대로. 스냅샷 `paused`, `pausedDenied: 2` ✅ |
+| B2 | 재개 → 리드와 새 팀원 rev가 각각 Bash | 둘 다 통과(`p4-free`). 스냅샷 idle ✅ |
+| B3 | 종료(SIGTERM) | 세션 레코드의 pid(procStart 일치)인 실험 claude가 끝났다(종료 코드 143). **팀원 rev는 별도 프로세스가 아니었고 함께 끝났다(P4 맞음).** 층은 `ended`로 남지 않고 목록에서 사라졌다(아래 14.3) ✅ |
+| B4 | 끝난 층 숨김·모두 보이기 | 대상이 없어 생략. Part A의 숨김 항목으로 갈음했다(team-lead 판정 — 레코드를 남기려고 SIGKILL로 끝내면 사용자 claude home에 죽은 레코드를 남기게 된다) |
+
+- **B143(관찰):** 일시정지 중에는 `Agent`(팀원·서브에이전트 만들기)도 막힌다. 예외 도구 아홉 개에 `Agent`가 없으므로 스펙대로다. 그래서 계획 B1의 "rev의 Bash"는 rev가 생기지 않아 시도되지 않았다. 막힌 두 호출은 리드의 Agent·Bash다.
+- 재개 직후 한 번 찍은 스냅샷에는 아직 `paused`가 남아 있었다(스냅샷 주기, B117의 "들고 있기"가 화면에서 가리는 틈).
 - 대상 세션은 cwd가 job tmp 작업 폴더인 세션 id 하나뿐이었다. 실험 대시보드에 함께 보인 사용자 세션에는 아무 요청도 보내지 않았다.
 
 ### 14.3 스펙과 다른 점
 - **11장 4의 "가짜 pid·procStart로 `pid-reused`가 거부된다"는 실제 서버로 닿지 않는다(B123 I2, B140).** 세션 목록을 읽는 단계(`readSessions`)가 이미 procStart를 확인해 맞지 않는 레코드를 `alive: false`로 만든다. 그래서 `terminate`는 검사 1에서 `ended`를 돌려준다(14.1 첫 줄). `pid-reused` 분기는 "빌드 때는 맞았는데 그 뒤 3초 안에 pid가 재사용된" 경쟁에서만 닿는 방어선이다. 주입 레코드를 쓴 단위·API 테스트로만 덮는다.
+- **SIGTERM으로 끄면 층이 "종료됨"으로 남지 않고 목록에서 사라진다(B142, 5.2-4·11.4와 다름).**
+  - Claude Code는 SIGTERM에 정상 종료하며 자기 세션 레코드(`sessions/<pid>.json`)를 지운다. 그래서 스냅샷에서 층이 빠진다.
+  - 서버 쪽은 문제가 없다(sweep이 목록에 없는 id를 paused·terminating에서 비움).
+  - "종료됨" 층으로 남는 것은 레코드가 남는 경우, 곧 SIGKILL(강제로 끄기)이나 충돌뿐이다. 끝난 층의 삭제(숨김)도 그 경우에만 쓰인다.
+  - 화면의 "꺼짐" 알림(B124 ⑧)은 층이 `ended`로 바뀔 때만 나오게 되어 있어, 보통 경로(층이 사라짐)에서 빠졌다. 이 화면에서 끈 층이 사라질 때도 알리도록 고쳤다(developer #334).
 - **종료 검사를 하나 더 둔다(B123):** pid가 정수이고 1보다 클 때만 신호를 보낸다(`kill(0)`은 서버 자신의 프로세스 그룹, 1은 init). signal이 던지면 ESRCH는 `ended`, 그 밖은 `unverified`이고 "종료 중"으로 남기지 않는다.
 - **로그의 세션 표시는 세션 id가 아니라 순번이다(B123):** 9장의 "세션 id"보다 좁혔다(Phase 2 결정 큐와 같은 방식). `paused-deny` msg는 고정이고 도구 이름은 data에만 있다(B128).
 - **화면(B124, 7장):**
@@ -199,7 +215,7 @@ interface FloorControl {
 
 ### 14.4 남은 위험과 정리
 - **Windows 미검증(B141):** 코드상 종료는 늘 `unverified`(보내지 않음)다. readSessions가 win32에서 matcher를 건너뛰고, terminate의 matcher는 `ps` 실행·파싱에 실패하면 판단 불가이기 때문이다. 안전한 쪽이지만 실기 확인 전이다.
-- **팀원이 리드와 함께 끝나는지(P4):** 14.2에서 확인한다. 별도 프로세스로 남으면 목록에 그대로 보이고 설명서에 적는다.
+- **팀원이 리드와 함께 끝나는지(P4):** in-process 팀원은 확인됐다(14.2 B3). 팀원을 별도 터미널 창(tmux·iTerm 분할)으로 띄우는 방식은 확인 전이다(Phase 3 B94와 같음).
 - **범위 밖 화면 항목(B134):** 빈 층 안내 문장이 좁은 폭에서 한 글자씩 꺾이는 것은 Phase 1 화면이라 이번에 고치지 않았다.
 - **정리 항목(B135·B140, 증상 없음):**
   - 말풍선용 멈춤 값 `pausedOf`가 React 상태가 아닌 모듈 전역 Map이다(갱신이 렌더 순서와 다른 리렌더에 기댐, 테스트끼리 상태를 나눔).
