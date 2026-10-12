@@ -800,6 +800,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(s6).toContain('<h3 id="paused-still-talks">멈춤으로 했는데 계속 답해요</h3>');
       expect(s6).toContain('<h3 id="terminate-stuck">끄기를 눌렀는데 안 꺼져요</h3>');
       expect(between('<h3 id="terminate-stuck">', "<h3")).toContain(`<code>${FLOOR_TEXT.terminateUnverified}</code>`);
+      // B142: 강제로 끈 층이 "종료됨"으로 남는 것은 정상이다
+      expect(between('<h3 id="terminate-stuck">', "<h3")).toContain("강제로 끈 층은 세션 기록이 남아 끝난 층(<code>종료됨 HH:MM</code>)으로 보이는 것이 정상입니다.");
+      expect(prose).not.toContain("강제로 끈 뒤에도 층이 남아 있으면");
       for (const t of ["<code>SIGTERM</code>", "<code>SIGKILL</code>", "서버 메모리에만", "세션 <strong>순번</strong>(세션 id가 아니라", "명령·경로·도구 입력은 남지 않습니다"]) expect(s8, t).toContain(t);
       const control = read("server/floors/control.ts");
       expect(control).toContain("{ session: this.no(sessionId) }");
