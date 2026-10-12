@@ -17,6 +17,7 @@ export const FLOOR_TEXT = {
   pauseNote: "멈춤: Claude가 다음에 도구를 쓰려 할 때부터 막습니다. 지금 쓰고 있는 답과, 터미널에서 직접 말을 걸었을 때의 대답은 이어집니다. 사용자에게 묻기와 팀원끼리 연락은 막지 않습니다.",
   paused: (name: string) => `${name} 층을 멈췄습니다`,
   resumed: (name: string) => `${name} 층을 다시 영업 중으로 돌렸습니다`,
+  waiting: (n: number) => `? 결정 ${n}건이 기다립니다`,
   blocked: (n: number) => `· 막힌 호출 ${n.toLocaleString("en-US")}`,
   // 종료 확인 창(§6.4)
   terminateTitle: (name: string) => `${name} 층을 끌까요?`,
@@ -100,7 +101,7 @@ const ERR_MS = 10_000;
  * 층의 영업/멈춤 스위치(디자인 phase4a §1). 200 응답의 값을 "기다리는 값"으로 들고, 스냅샷이 같아지거나 6초가 지나면 놓는다 —
  * 스냅샷 주기(3초)만큼 스위치·칩·셔터가 거꾸로 튀지 않게. 실패는 누르기 전 상태로 되돌리고 그 층에 한 줄(role=alert, 10초)
  */
-export function useFloorSwitch(session: SessionView, announce?: (text: string) => void) {
+export function useFloorSwitch(session: SessionView, announce?: (text: string) => void, onResumed?: () => void) {
   const snapPaused = session.floorStatus === "paused";
   const [hold, setHold] = useState<{ paused: boolean; until: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -140,7 +141,13 @@ export function useFloorSwitch(session: SessionView, announce?: (text: string) =
     setBusy(false);
     if (r.ok) {
       setHold({ paused: r.body.paused, until: Date.now() + HOLD_MS });
-      announce?.(r.body.paused ? FLOOR_TEXT.paused(session.name) : FLOOR_TEXT.resumed(session.name));
+      if (r.body.paused) announce?.(FLOOR_TEXT.paused(session.name));
+      else {
+        // 재개하면 멈춘 동안 기다리던 결정으로 바로 안내한다(사용자 요청 2026-10-12)
+        const waiting = session.members.filter((m) => m.state === "decision").length;
+        announce?.(waiting ? `${FLOOR_TEXT.resumed(session.name)}. ${FLOOR_TEXT.waiting(waiting).slice(2)}` : FLOOR_TEXT.resumed(session.name));
+        if (waiting) onResumed?.();
+      }
       return;
     }
     // 401은 앱 전체가 열쇠 안내 화면으로 간다(UNAUTHORIZED_EVENT). 그 밖은 이 층에 한 줄

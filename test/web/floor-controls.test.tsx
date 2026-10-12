@@ -212,9 +212,67 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     expect(floor().querySelector(".shutter")!.className).not.toContain("shutter-down");
   });
 
-  it("멈춘 층의 결정 대기 책상만 셔터 위로(B130)", () => {
+  // 사용자 요청(2026-10-12): 셔터 뒤는 퇴근한 사무실 — 빈 의자만, 결정 대기는 셔터 쪽지로 알리고 재개하면 보고서를 연다(B130 대체)
+  const dv = (id: string, agent: string, createdAt: string) => ({
+    id, sessionId: "s1", agent, kind: "permission" as const, toolName: "Bash", state: "pending" as const,
+    createdAt, deadline: new Date(Date.parse(createdAt) + 590_000).toISOString(), detail: { command: "ls" }, answerable: true,
+  });
+  const T = Date.now();
+  const d1 = dv("d-old", "dev", new Date(T - 60_000).toISOString());
+  const d2 = dv("d-new", "team-lead", new Date(T - 1_000).toISOString());
+  const waitingFloor = (p: Partial<SessionView> = {}) =>
+    floorOf({
+      members: [
+        lead({ state: "decision", decision: { kind: "permission", since: d2.createdAt, id: d2.id, deadline: d2.deadline } }),
+        makeMember({ name: "dev", state: "decision", decision: { kind: "permission", since: d1.createdAt, id: d1.id, deadline: d1.deadline } }),
+      ],
+      ...p,
+    });
+  const snapD = (s: SessionView): Snapshot => makeSnapshot({ sessions: [s], decisions: [d1, d2] });
+
+  it("멈춘 층은 캐릭터 없이 빈 의자만, 결정 대기도 ?·손들기를 그리지 않고 셔터에 쪽지", () => {
+    show(snapD(waitingFloor({ floorStatus: "paused", pausedDenied: 0 })));
+    render(<App />);
+    for (const n of ["team-lead", "dev"]) {
+      const desk = within(floor()).getByTestId(`desk-${n}`);
+      expect(within(desk).getByTestId("empty-chair")).toBeTruthy();
+      expect(desk.querySelector(".char")).toBeNull();
+      expect(desk.querySelector(".qmark")).toBeNull();
+    }
+    expect(floor().querySelector(".shutter .shutter-note")?.textContent).toBe("? 결정 2건이 기다립니다");
+    expect(floor().querySelector(".chip--decision")?.textContent).toBe("? 결정 2"); // 머리 칩은 그대로
     const css = readFileSync(join(__dirname, "../../web/styles.css"), "utf8");
-    expect(css.includes(".floor--paused .desk--decision { position: relative; z-index: 3; }")).toBe(true);
+    expect(css.includes(".floor--paused .desk--decision")).toBe(false);
+  });
+
+  it("결정이 없으면 쪽지가 없다", () => {
+    show(snap(floorOf({ floorStatus: "paused", pausedDenied: 0 })));
+    render(<App />);
+    expect(floor().querySelector(".shutter-note")).toBeNull();
+  });
+
+  it("재개하면 그 층의 가장 오래된 결정 보고서를 열고, 닫으면 스위치로 돌아온다", async () => {
+    reply = { status: 200, body: { paused: false } };
+    show(snapD(waitingFloor({ floorStatus: "paused", pausedDenied: 0 })));
+    render(<App />);
+    fireEvent.click(sw());
+    await flush();
+    const report = document.getElementById("decision-report");
+    expect(report).not.toBeNull();
+    expect(report!.textContent).toContain("dev");
+    expect(status()).toBe("alpha 층을 다시 영업 중으로 돌렸습니다. 결정 2건이 기다립니다");
+    fireEvent.click(within(report!).getByRole("button", { name: "닫기" }));
+    expect(document.activeElement).toBe(sw());
+  });
+
+  it("결정이 없는 층을 재개하면 보고서를 열지 않는다", async () => {
+    reply = { status: 200, body: { paused: false } };
+    show(snap(floorOf({ floorStatus: "paused", pausedDenied: 0 })));
+    render(<App />);
+    fireEvent.click(sw());
+    await flush();
+    expect(document.getElementById("decision-report")).toBeNull();
+    expect(status()).toBe("alpha 층을 다시 영업 중으로 돌렸습니다");
   });
 
   it("말풍선은 스위치를 누른 직후(스냅샷 전)에도 들고 있는 값으로 휴업 줄을 쓴다(B129 M1)", async () => {

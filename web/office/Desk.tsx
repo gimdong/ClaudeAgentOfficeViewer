@@ -13,7 +13,7 @@ import { StatusBubble } from "./StatusBubble";
 
 interface DeskProps {
   member: Member;
-  /** 층이 휴업이면 캐릭터를 멈추고 모니터를 끈다(디자인 5.2). Phase 1에서는 쓰이지 않는다 */
+  /** 층이 휴업이면 캐릭터를 그리지 않고(빈 의자) 모니터를 끈다 */
   paused?: boolean;
   bubbleKey?: string;
   bubble?: BubbleHandlers;
@@ -50,7 +50,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
 
   const svg = (
     <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
-      {decision ? (
+      {decision && !paused ? (
         <>
           {/* 누를 수 있는 결정(id가 있음)만 호버·포커스일 때 점선 링을 보인다(디자인 4.4, 6장 "Phase 2 이후") */}
           {openable && <PixelSprite rects={spriteRects(QRING, { y: NEON.yellow })} x={1} y={-2} className="q-ring" />}
@@ -65,7 +65,8 @@ export function Desk({ member, paused = false, bubbleKey, bubble }: DeskProps) {
           </g>
         )
       )}
-      {member.state === "offline" ? (
+      {/* 휴업 층은 모두 퇴근한 사무실처럼 빈 의자만 둔다(사용자 요청 2026-10-12, B130 대체) */}
+      {member.state === "offline" || paused ? (
         <g data-testid="empty-chair">
           <rect x={3} y={13} width={6} height={6} fill={NEON.deskDark} />
           <rect x={4} y={19} width={1} height={2} fill={NEON.deskDark} />

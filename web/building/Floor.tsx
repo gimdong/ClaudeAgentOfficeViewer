@@ -9,6 +9,7 @@ import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
 import { BudgetDialog, BudgetSettingsContext } from "../budget/BudgetDialog";
 import { MiniBar } from "./MiniBar";
+import { OpenDecisionContext } from "../report/useDecisions";
 import { FLOOR_TEXT, useFloorHide, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
 
@@ -40,7 +41,15 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     settingsBtn.current?.focus();
   };
 
-  const sw = useFloorSwitch(session, budgetCtx.announce);
+  const openDecision = useContext(OpenDecisionContext);
+  // 재개 직후 이 층에서 가장 오래 기다린 결정의 보고서를 연다. 닫으면 스위치로 돌아온다
+  const openOldestDecision = () => {
+    const oldest = session.members
+      .flatMap((m) => (m.state === "decision" && m.decision?.id ? [m.decision] : []))
+      .sort((a, b) => Date.parse(a.since) - Date.parse(b.since))[0];
+    if (oldest?.id) openDecision?.(oldest.id, document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>('[role="switch"]'));
+  };
+  const sw = useFloorSwitch(session, budgetCtx.announce, openOldestDecision);
   const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
   const hider = useFloorHide(session, onHidden, budgetCtx.announce);
   const sectionRef = useRef<HTMLElement>(null);
@@ -140,6 +149,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
               <span className="shutter-sign">
                 휴업<small>잠시 쉬는 중</small>
               </span>
+              {decisions > 0 && <span className="shutter-note">{FLOOR_TEXT.waiting(decisions)}</span>}
             </div>
           )}
           <div className="desks">
