@@ -186,7 +186,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .hidden-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .hidden-bar .hb-text { font-size: 12px; color: var(--muted); }
 .pbtn[aria-busy="true"] { opacity: .4; cursor: progress; }
-.shutter { position: absolute; inset: 0 0 34% 0; z-index: 2; background: repeating-linear-gradient(var(--shutter) 0 6px, var(--shutter-gap) 6px 8px); opacity: .84; border-bottom: 6px solid var(--shutter-bar); pointer-events: none; transform-origin: top; }
+.shutter { position: absolute; inset: 0; z-index: 2; background: repeating-linear-gradient(var(--shutter) 0 6px, var(--shutter-gap) 6px 8px); opacity: .84; border-bottom: 6px solid var(--shutter-bar); pointer-events: none; transform-origin: top; }
 .shutter.shutter-down { animation: shutter-down .36s steps(6) both; }
 /* 멈춘 층에서 손든 책상만 셔터 위로(B130) */
 .floor--paused .desk--decision { position: relative; z-index: 3; }
