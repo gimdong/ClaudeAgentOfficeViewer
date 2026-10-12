@@ -87,13 +87,13 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
   });
 
-  it("designer 그림(베타 11개 + Phase 2 10개 + Phase 3 5개)이 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
+  it("designer 그림(베타 11개 + Phase 2 10개 + Phase 3 5개 + Phase 4a 3개)이 인라인으로 들어가 있고 자리 표시가 남지 않았다", () => {
     const ids = [...html.matchAll(/<figure class="fig" data-fig="([\w-]+)">\s*(?:<!--[\s\S]*?-->\s*)?<svg /g)].map((m) => m[1]).sort();
     expect(ids).toEqual(
       [
         "fig-budget-alarm", "fig-budget-bar", "fig-budget-settings", "fig-decision-report", "fig-decision-result", "fig-diag-chip-panel", "fig-diag-file",
         "fig-err-401", "fig-err-already-answered", "fig-err-managed", "fig-err-no-browser", "fig-err-nobubble", "fig-err-node", "fig-err-offline", "fig-err-port",
-        "fig-first-screen", "fig-install-ok", "fig-overview", "fig-plan-report", "fig-policy-list", "fig-policy-lock", "fig-policy-panel", "fig-policy-report", "fig-policy-unreadable", "fig-question-answer", "fig-screen-guide",
+        "fig-first-screen", "fig-floor-hidden", "fig-floor-switch", "fig-floor-terminate", "fig-install-ok", "fig-overview", "fig-plan-report", "fig-policy-list", "fig-policy-lock", "fig-policy-panel", "fig-policy-report", "fig-policy-unreadable", "fig-question-answer", "fig-screen-guide",
       ],
     );
     expect(html).not.toMatch(/<!-- FIG2?\(fig-/);
@@ -104,7 +104,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
 
   it("그림이 designer 원본 SVG와 같다(같은 이름이면 나중 Phase판이 우선)", () => {
     const pick = new Map<string, string>();
-    for (const d of ["beta", "phase2", "phase3"]) {
+    for (const d of ["beta", "phase2", "phase3", "phase4a"]) {
       const dir = join(__dirname, `../../docs/design/${d}/manual-figures`);
       for (const f of readdirSync(dir).filter((n) => n.endsWith(".svg"))) pick.set(f, join(dir, f));
     }
