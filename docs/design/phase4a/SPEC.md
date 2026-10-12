@@ -54,6 +54,7 @@
 - `aria-label`은 Phase 1 그대로 `{층 이름} 영업`입니다. `aria-checked`가 켜짐/꺼짐을 알리므로 라벨 글자를 aria-label에 넣지 않습니다.
 - 멈춤일 때 스위치에 `aria-describedby`로 한계 2 문장(§2.3)을 연결합니다(화면에 보이지 않는 `.sr-only` 요소, 층마다 id 하나).
 - `aria-disabled`와 `title`은 뗍니다(Ruling B121).
+- 라벨은 `.switch .lbl { white-space: nowrap }`(B134). 좁은 화면에서 버튼 셋이 한 줄을 채워도 `영업 중`이 두 줄로 꺾이지 않게 합니다.
 
 ### 1.2 요청 중
 
