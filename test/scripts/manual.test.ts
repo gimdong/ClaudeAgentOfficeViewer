@@ -776,6 +776,18 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(read("server/collectors/sessions.ts")).toMatch(/const line = await psLstart\(pid\);\n  if \(!line\) return undefined;/);
       expect(read("server/floors/control.ts")).toContain('if (match !== true) return { ok: false, error: "unverified" };');
       expect(prose).toContain(`<p id="floors-windows">Windows에서는 세션이 맞는지 확인할 방법이 없어 종료가 늘 <code>${FLOOR_TEXT.terminateUnverified}</code>가 됩니다.`);
+      expect(prose).toContain("그 층의 Claude Code 창에서 직접 끝내 주세요. (Windows 화면은 베타에서 확인 전입니다)</p>");
+    });
+
+    it("종료 뒤: 정상 종료면 목록에서 사라지고, 팀원은 리드와 함께 끝난다(Task 11 B3, P4)", () => {
+      expect(s5).toContain("보통 몇 초 안에 그 층이 <strong>목록에서 사라집니다</strong>. Claude Code가 정상적으로 끝나면서 자기 세션 기록을 정리하기 때문입니다");
+      expect(s5).toContain("세션 기록이 남으면 끝난 층(<code>종료됨 HH:MM</code>)으로 남습니다");
+      expect(s5).toContain("같은 창 안에서 함께 일하던 팀원도 리드와 함께 끝납니다(팀원을 별도 터미널 창으로 띄우는 방식은 확인 전입니다)");
+      expect(s5).not.toContain("보통 몇 초 안에 끝난 층(<code>종료됨 HH:MM</code>)이 됩니다");
+      expect(s5).toContain("끝난 층은 강제로 껐거나 Claude Code가 갑자기 꺼져 세션 기록이 남은 경우에 보입니다");
+      // B143: 일시정지 중에는 Agent(팀원·서브에이전트 만들기)도 막힌다 — 예외 도구가 아니다
+      expect(EXEMPT_TOOLS.has("Agent")).toBe(false);
+      expect(s5).toContain("팀원·서브에이전트 만들기는 도구라서, 멈춘 동안에는 새 팀원도 만들 수 없습니다");
     });
 
     it("숨김 문구가 FLOOR_TEXT와 같다", () => {
@@ -791,6 +803,12 @@ describe("사용설명서(docs/manual/index.html)", () => {
       for (const t of ["<code>SIGTERM</code>", "<code>SIGKILL</code>", "서버 메모리에만", "세션 <strong>순번</strong>(세션 id가 아니라", "명령·경로·도구 입력은 남지 않습니다"]) expect(s8, t).toContain(t);
       const control = read("server/floors/control.ts");
       expect(control).toContain("{ session: this.no(sessionId) }");
+      // 실패 줄(B141): 코드의 msg 그대로, 무엇이 남는지까지
+      for (const [m, kept] of [["terminate failed", "세션 순번·신호 이름·오류 코드"], ["pause check failed", null], ["poke failed", "오류 코드만"]] as const) {
+        expect(read("server/floors/control.ts") + read("server/app.ts"), m).toContain(`("floors", "${m}"`);
+        expect(s8, m).toContain(`<code>${m}</code>`);
+        if (kept) expect(s8).toContain(`<code>${m}</code>(${kept})`);
+      }
       for (const m of ["pause", "resume", "paused-deny", "terminate", "hide", "unhide"]) {
         expect(control, m).toMatch(new RegExp(`getLogger\\(\\)\\.(info|warn)\\("floors", "${m}"`));
         expect(s8, m).toContain(`<code>${m}</code>`);
