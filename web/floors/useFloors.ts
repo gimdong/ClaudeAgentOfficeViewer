@@ -188,7 +188,14 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   };
-  useEffect(() => clearTimer, []);
+  // 이 화면에서 끈 층이 목록에서 사라져도(SIGTERM이면 Claude Code가 레코드를 지운다) "꺼짐"을 알린다(B142). announce는 상위 것이라 unmount 뒤에도 산다
+  useEffect(
+    () => () => {
+      clearTimer();
+      if (sentHere.current) announceRef.current?.(FLOOR_TEXT.gone(nameRef.current));
+    },
+    [],
+  );
   // 끝나면 타이머를 버리고, 이 화면에서 끈 층이면 "꺼짐"을 알린다(B124 ⑧). 둘째 창이 떠 있으면 실패 줄 자리에 안내(B124 ⑦)
   useEffect(() => {
     if (alive) return;

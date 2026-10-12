@@ -246,6 +246,23 @@ describe("둘째 창(§3.3)과 타이머(Review Focus 1)", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("이 화면에서 끈 층이 목록에서 사라져도 '꺼짐'을 알린다(B142 — SIGTERM이면 레코드가 지워진다)", async () => {
+    show(snap(fl()));
+    const { rerender } = render(<App />);
+    await sendFirst();
+    show(snap());
+    rerender(<App />);
+    expect(status()).toBe("fake-shop 층이 꺼졌습니다");
+  });
+
+  it("끄지 않은 층이 목록에서 사라질 때는 '꺼짐'을 알리지 않는다", () => {
+    show(snap(fl()));
+    const { rerender } = render(<App />);
+    show(snap());
+    rerender(<App />);
+    expect(status()).not.toContain("꺼졌습니다");
+  });
+
   it("[끄기] 요청 중에 [취소]로 닫으면 요청이 성공해도 10초 타이머를 시작하지 않고, 다시 누르면 둘째 창부터", async () => {
     reply = "hold";
     show(snap(fl()));
