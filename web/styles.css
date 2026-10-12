@@ -172,6 +172,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .switch[aria-checked="true"] .track { border-color: var(--green); }
 .switch[aria-checked="true"] .knob { left: 18px; background: var(--green); box-shadow: 0 0 4px var(--green); }
 .switch[aria-checked="false"] .lbl { color: var(--yellow); }
+.switch .lbl { white-space: nowrap; }
 .switch[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 /* Phase 4a 층 관리(디자인 phase4a §1·§2) */
 .switch[aria-busy="true"] { cursor: progress; }
@@ -405,7 +406,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .dlg-input input[aria-invalid="true"] { border-color: var(--red); }
 .dlg-input .unit { font-size: 12px; color: var(--muted); }
 .dlg-help { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; line-height: 1.6; color: var(--muted); }
-.dlg-err { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--red); }
+.dlg-err { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--red); word-break: keep-all; overflow-wrap: anywhere; }
 .dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dlg-buttons .pbtn { height: 36px; padding: 0 16px; font-size: 13px; }
 /* 종료 확인 창(디자인 phase4a §3): 위험 동작이라 분홍 테두리. .td-kv는 행·열 모두 명시(FB-6) */

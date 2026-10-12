@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, type SyntheticEvent } from "react";
+import { useId, useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import type { SessionView } from "../../src/shared/types";
 import { FLOOR_TEXT } from "./useFloors";
 
@@ -13,11 +13,10 @@ export function TerminateDialog(p: { session: SessionView; stage: 1 | 2; sending
   const ref = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const id = useId();
-  useEffect(() => {
+  // 모달을 먼저 연 뒤 [취소]에 포커스(B133 f)
+  useLayoutEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
-  }, []);
-  useLayoutEffect(() => {
     cancel.current?.focus();
   }, [p.stage]);
   const onCancel = (e: SyntheticEvent) => {

@@ -190,6 +190,40 @@ describe("둘째 창(§3.3)과 타이머(Review Focus 1)", () => {
     expect(within(dialog()!).getByRole("heading").textContent).toBe("fake-shop 층이 아직 끝나지 않았습니다");
   });
 
+  it("다른 층의 종료 창이 열려 있어도 닫힐 때까지 미룬다(B133 g)", async () => {
+    show(snap(fl(), fl({ id: "s2", name: "other", floor: 2 })));
+    const { rerender } = render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "fake-shop 층 종료" }));
+    fireEvent.click(within(dialog()!).getByRole("button", { name: "끄기" }));
+    await flush();
+    show(snap(fl({ terminating: true }), fl({ id: "s2", name: "other", floor: 2 })));
+    rerender(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "other 층 종료" }));
+    await advance(11_000);
+    expect(screen.queryAllByRole("dialog").map((d) => d.querySelector("h2")?.textContent)).toEqual([FLOOR_TEXT.terminateTitle("other")]);
+    fireEvent.click(within(dialog()!).getByRole("button", { name: "취소" }));
+    await advance(500);
+    expect(within(dialog()!).getByRole("heading").textContent).toBe("fake-shop 층이 아직 끝나지 않았습니다");
+  });
+
+  it("10초 안에 다시 연 둘째 창을 [취소]하거나 [강제로 끄기]하면 옛 10초 타이머가 다시 창을 띄우지 않는다(B133 e)", async () => {
+    for (const how of ["취소", "강제로 끄기"]) {
+      reply = { status: 200, body: { signal: "SIGTERM" } };
+      show(snap(fl()));
+      const { rerender, unmount } = render(<App />);
+      await sendFirst();
+      show(snap(fl({ terminating: true })));
+      rerender(<App />);
+      await advance(3_000);
+      fireEvent.click(termBtn());
+      fireEvent.click(within(dialog()!).getByRole("button", { name: how }));
+      await flush();
+      await advance(8_000);
+      expect(dialog(), how).toBeNull();
+      unmount();
+    }
+  });
+
   it("10초 전에 층이 끝나면 둘째 창이 뜨지 않고, 이 화면에서 끈 층이 끝나면 '꺼짐'을 알린다(B124 ⑧)", async () => {
     show(snap(fl()));
     const { rerender } = render(<App />);

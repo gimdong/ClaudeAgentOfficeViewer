@@ -16,9 +16,11 @@ export function Building({ sessions, bubble, hiddenFloors = 0 }: { sessions: Ses
   /** 다음 렌더 뒤 포커스: 숨긴 뒤 "모두 보이기" 버튼, 모두 보이기 뒤 줄, 층이 돌아오면 1F 접기 버튼(§4.4) */
   const focusNext = useRef<"bar-button" | "bar" | "first-floor" | null>(null);
   const wasReloading = useRef(h.reloading);
+  /** 포커스가 숨긴 층 줄(또는 그 버튼) 안에 있는지. 줄이 사라지면 blur가 오지 않으므로 마지막 값이 남는다(B135 ②) */
+  const focusInBar = useRef(false);
 
   useEffect(() => {
-    if (wasReloading.current && !h.reloading) focusNext.current = "first-floor";
+    if (wasReloading.current && !h.reloading && focusInBar.current) focusNext.current = "first-floor";
     wasReloading.current = h.reloading;
   });
   useEffect(() => {
@@ -54,13 +56,13 @@ export function Building({ sessions, bubble, hiddenFloors = 0 }: { sessions: Ses
       </div>
       <div className="tower" ref={towerRef}>
         <VacantFloor />
-        {floors.length === 0 && <p className="empty">빌딩이 비어 있습니다. 빈 층에서 새 세션을 시작하세요</p>}
+        {floors.length === 0 && h.count === 0 && !h.reloading && <p className="empty">빌딩이 비어 있습니다. 빈 층에서 새 세션을 시작하세요</p>}
         {floors.map((s) => (
           <Floor key={s.id} session={s} bubble={bubble} onHidden={onHidden} />
         ))}
       </div>
       {(h.count > 0 || h.reloading) && (
-        <div className="hidden-bar" ref={barRef} tabIndex={h.reloading ? -1 : undefined}>
+        <div className="hidden-bar" ref={barRef} tabIndex={h.reloading ? -1 : undefined} onFocus={() => (focusInBar.current = true)} onBlur={() => (focusInBar.current = false)}>
           {h.reloading ? (
             <span className="hb-text">{FLOOR_TEXT.reloading}</span>
           ) : (

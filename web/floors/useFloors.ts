@@ -152,6 +152,8 @@ export function useFloorSwitch(session: SessionView, announce?: (text: string) =
   return { paused, busy, error, toggle };
 }
 
+const modalOpen = () => document.querySelector("dialog[open]") !== null;
+
 /** 첫 창에서 [끄기]가 성공한 뒤 둘째 창을 띄우기까지(사용자 결정, 스펙 5.2) */
 export const FORCE_AFTER_MS = 10_000;
 
@@ -171,7 +173,7 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
   const aliveRef = useRef(alive);
   aliveRef.current = alive;
   const sentHere = useRef(false);
-  /** 10초가 됐는데 다른 대화상자(예산 설정)가 열려 있어 미룬 둘째 창(B131) */
+  /** 10초가 됐는데 다른 대화상자(예산 설정, 다른 층의 종료 창 등)가 열려 있어 미룬 둘째 창(B131, B133 g) */
   const [deferred, setDeferred] = useState(false);
   const blockedRef = useRef(blocked);
   blockedRef.current = blocked;
@@ -211,21 +213,32 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
     if (session.terminating) setHoldUntil(0); // 스냅샷이 따라왔다
   }, [session.terminating]);
 
-  // 미룬 둘째 창은 다른 대화상자가 닫히면 그때 연다(두 모달이 겹치지 않게)
+  // 미룬 둘째 창은 다른 대화상자가 닫히면 그때 연다(두 모달이 겹치지 않게). 다른 층의 창은 알림이 없어 짧게 다시 본다
   useEffect(() => {
-    if (!deferred || blocked) return;
-    setDeferred(false);
-    if (aliveRef.current) setStage(2);
+    if (!deferred) return;
+    const check = () => {
+      if (blockedRef.current || modalOpen()) return;
+      setDeferred(false);
+      if (aliveRef.current) setStage(2);
+    };
+    check();
+    const t = setInterval(check, 200);
+    return () => clearInterval(t);
   }, [deferred, blocked]);
 
   const terminating = alive && (session.terminating === true || Date.now() < holdUntil);
 
+  // 창을 직접 열거나 닫으면 옛 10초 타이머와 미룬 창은 버린다(B133 e)
   const open = () => {
     if (!alive) return;
+    clearTimer();
+    setDeferred(false);
     setError(null);
     setStage(terminating ? 2 : 1);
   };
   const close = () => {
+    clearTimer();
+    setDeferred(false);
     setStage(0);
     setError(null);
   };
@@ -254,7 +267,7 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
       timer.current = setTimeout(() => {
         timer.current = null;
         if (!aliveRef.current) return;
-        if (blockedRef.current) setDeferred(true);
+        if (blockedRef.current || modalOpen()) setDeferred(true);
         else setStage(2);
       }, FORCE_AFTER_MS);
     }

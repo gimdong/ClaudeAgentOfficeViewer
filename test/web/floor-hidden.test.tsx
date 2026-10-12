@@ -134,6 +134,26 @@ describe("숨긴 층 줄(§4.3·§4.4)", () => {
     expect(document.activeElement).toBe(floorNamed("beta")!.querySelector(".fold"));
   });
 
+  it("모든 층을 숨겼으면 빈 빌딩 안내 없이 줄만(B135 ①)", () => {
+    show(snap([], 2));
+    render(<App />);
+    expect(screen.queryByText(/빌딩이 비어 있습니다/)).toBeNull();
+    expect(within(bar() as HTMLElement).getByRole("button").textContent).toBe("숨긴 층 2개 · 모두 보이기");
+  });
+
+  it("다시 불러오는 동안 포커스를 다른 곳으로 옮겼으면 층이 돌아와도 포커스를 옮기지 않는다(B135 ②)", async () => {
+    reply = { status: 200, body: { hidden: 0 } };
+    show(snap([live("a", "alpha", 1)], 2));
+    const { rerender } = render(<App />);
+    fireEvent.click(within(bar() as HTMLElement).getByRole("button"));
+    await flush();
+    const mine = floorNamed("alpha")!.querySelector<HTMLElement>(".fold")!;
+    act(() => mine.focus());
+    show(snap([live("a", "alpha", 2), ended("b", "beta", 1)], 0));
+    rerender(<App />);
+    expect(document.activeElement).toBe(mine);
+  });
+
   it("모두 보이기 실패면 버튼 옆에 안내, 포커스는 버튼에", async () => {
     reply = "network";
     show(snap([live("a", "alpha", 1)], 2));
