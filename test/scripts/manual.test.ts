@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { EXEMPT_TOOLS, GROUP_KEYS, GROUPS, VALUE_LABELS, ruleLabel } from "../../server/policy/tools";
 import { policyAskReason, policyDenyReason } from "../../server/decisions/protocol";
 import { GROUP_LABEL, LIST_TEXT, TEMPLATES, TEXT, VALUE_LABEL, countsLine, summaryOf } from "../../web/policy/text";
+import { FLOOR_TEXT } from "../../web/floors/useFloors";
+import { PAUSED_REASON } from "../../server/decisions/protocol";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -728,6 +730,76 @@ describe("사용설명서(docs/manual/index.html)", () => {
 
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
       for (const old of ["외에 결정을 돌려주는 hook은 이것 하나입니다.", "여러분이 대시보드에서 직접 누른 답(허용·거부 등)만 Claude Code로 돌려보냅니다."]) expect(prose, old).not.toContain(old);
+    });
+  });
+
+  describe("Phase 4a 층 관리(화면·서버 문구와 대조)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const between = (from: string, to: string) => {
+      const at = prose.indexOf(from);
+      return at < 0 ? "" : prose.slice(at, prose.indexOf(to, at + from.length));
+    };
+    const s5 = between('<h3 id="floors">', "<h3>위쪽 막대의 숫자</h3>");
+    const s8 = between('<h2 id="s8">', '<h2 id="s9">');
+    const spec = read("docs/design/phase4a/SPEC.md");
+    // 한계 1·3·4는 화면에 없는 설명서용 문장이라 디자인 명세 §6.3 표의 글자와 대조한다(B126)
+    const limit = (n: number) => new RegExp(`^\\| 한계 ${n} \\([^)]*\\) \\| \`([^\`]+)\` \\|$`, "m").exec(spec)?.[1] ?? `없음-${n}`;
+
+    it("첫 상자가 한계 1이고, 알아 둘 점에 한계 네 가지가 있다", () => {
+      expect(s5.slice(0, s5.indexOf("</div>"))).toContain(`<strong>${limit(1)}</strong>`);
+      const list = s5.slice(s5.indexOf('<ul class="floor-limits">'), s5.indexOf("</ul>", s5.indexOf('<ul class="floor-limits">')));
+      for (const t of [limit(1), FLOOR_TEXT.pauseNote, limit(3), limit(4)]) expect(list, t).toContain(`<li>${t}</li>`);
+      expect(limit(1)).toContain("보안 장치가 아닙니다");
+    });
+
+    it("Claude가 받는 이유 문구가 PAUSED_REASON과 글자까지 같다(B122)", () => {
+      expect(s5).toContain(`<pre class="out">${PAUSED_REASON}</pre>`);
+      expect(s5).toContain("<code>PreToolUse:Bash hook error: </code>");
+    });
+
+    it("스위치·칩·막힌 호출·멈춤 설명이 FLOOR_TEXT와 같다", () => {
+      for (const t of [FLOOR_TEXT.on, FLOOR_TEXT.off, FLOOR_TEXT.orderTitle, FLOOR_TEXT.blocked(12), FLOOR_TEXT.pauseNote, FLOOR_TEXT.terminating]) expect(s5, t).toContain(`<code>${t}</code>`);
+      expect(read("web/building/Floor.tsx")).toContain("휴업<small>잠시 쉬는 중</small>");
+      expect(s5).toContain("<code>휴업</code> / <code>잠시 쉬는 중</code>");
+    });
+
+    it("종료 확인 창 두 단계·★ 경고·실패 문구가 FLOOR_TEXT와 같다", () => {
+      for (const t of [FLOOR_TEXT.terminateTitle("fake-shop"), FLOOR_TEXT.members(3, 1), FLOOR_TEXT.terminateBody, `★ ${FLOOR_TEXT.currentWarn}`, FLOOR_TEXT.forceTitle("fake-shop"), FLOOR_TEXT.forceBody, FLOOR_TEXT.terminateEnded, FLOOR_TEXT.terminateUnverified, FLOOR_TEXT.terminateFailed]) {
+        expect(s5, t).toContain(`<code>${t}</code>`);
+      }
+      for (const t of [FLOOR_TEXT.keyFolder, FLOOR_TEXT.keyMembers, FLOOR_TEXT.terminate, FLOOR_TEXT.force]) expect(s5, t).toContain(`<strong>${t}</strong>`);
+      expect(s5).toContain("리드를 포함한 수");
+    });
+
+    it("Windows에서는 종료가 늘 '확인하지 못함'이다(B123: ps가 없으면 matcher가 판단 불가)", () => {
+      expect(read("server/collectors/sessions.ts")).toMatch(/const line = await psLstart\(pid\);\n  if \(!line\) return undefined;/);
+      expect(read("server/floors/control.ts")).toContain('if (match !== true) return { ok: false, error: "unverified" };');
+      expect(prose).toContain(`<p id="floors-windows">Windows에서는 세션이 맞는지 확인할 방법이 없어 종료가 늘 <code>${FLOOR_TEXT.terminateUnverified}</code>가 됩니다.`);
+    });
+
+    it("숨김 문구가 FLOOR_TEXT와 같다", () => {
+      for (const t of [FLOOR_TEXT.hideTitle, FLOOR_TEXT.hiddenBar(3), FLOOR_TEXT.reloading]) expect(s5, t).toContain(`<code>${t}</code>`);
+      expect(s5).toContain("<strong>대화 기록은 지우지 않고</strong>");
+    });
+
+    it("6장 두 절과 부록 A(신호·메모리·로그는 세션 순번, B125)", () => {
+      const s6 = between('<h2 id="s6">', '<h2 id="s7">');
+      expect(s6).toContain('<h3 id="paused-still-talks">멈춤으로 했는데 계속 답해요</h3>');
+      expect(s6).toContain('<h3 id="terminate-stuck">끄기를 눌렀는데 안 꺼져요</h3>');
+      expect(between('<h3 id="terminate-stuck">', "<h3")).toContain(`<code>${FLOOR_TEXT.terminateUnverified}</code>`);
+      for (const t of ["<code>SIGTERM</code>", "<code>SIGKILL</code>", "서버 메모리에만", "세션 <strong>순번</strong>(세션 id가 아니라", "명령·경로·도구 입력은 남지 않습니다"]) expect(s8, t).toContain(t);
+      const control = read("server/floors/control.ts");
+      expect(control).toContain("{ session: this.no(sessionId) }");
+      for (const m of ["pause", "resume", "paused-deny", "terminate", "hide", "unhide"]) {
+        expect(control, m).toMatch(new RegExp(`getLogger\\(\\)\\.(info|warn)\\("floors", "${m}"`));
+        expect(s8, m).toContain(`<code>${m}</code>`);
+      }
+    });
+
+    it("옛 문장이 남아 있지 않다(제어 버튼 전체가 '아직 사용할 수 없습니다'였던 표현)", () => {
+      expect(prose).not.toMatch(/(영업 스위치|종료)[^<]{0,40}아직 사용할 수 없습니다/);
+      expect(prose.split("아직 사용할 수 없습니다").length - 1).toBe(1); // 작업 지시 한 곳뿐
     });
   });
 
