@@ -599,6 +599,16 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li>리드·팀원·서브에이전트를 따로 멈출 수는 없습니다. 한 에이전트만 막으려면 권한 정책의 "모든 도구 금지"를 쓰세요.</li>
 </ul>
 
+<h3 id="channels">작업 지시와 새 층(실험 기능)</h3>
+<p class="note"><strong>실험 기능입니다.</strong> 작업 지시와 새 층은 Claude Code의 연구 프리뷰 기능(channel)을 씁니다. Claude Code가 바뀌면 동작이 바뀌거나 멈출 수 있습니다. 새 층을 띄울 때마다 Claude Code가 개발용 channel 경고를 띄웁니다. 회사 계정(Team·Enterprise)에서는 관리자가 허용하기 전까지 동작하지 않습니다.</p>
+<ul>
+  <li><strong>켜기</strong>: 위쪽 막대의 <strong>실험 기능</strong>을 누르고 설명에 동의한 뒤 <strong>켜기</strong>를 누릅니다. 대시보드를 다시 켜도 켠 상태가 남습니다. tmux가 있어야 새 층을 띄울 수 있습니다(macOS·Linux). Windows에서는 쓸 수 없습니다.</li>
+  <li><strong>새 층 띄우기</strong>: 빈 층의 <strong>새 세션 시작</strong>을 누르고 폴더(전체 경로 또는 <code>~/</code>로 시작), 이름, 모델, 첫 지시를 정한 뒤 <strong>띄우기</strong>를 누릅니다. 대시보드가 그 폴더에서 tmux 안에 Claude Code를 띄웁니다. 터미널에서 아래 명령으로 붙어 확인 창 두 개(폴더 신뢰, 개발용 channel 경고)를 확인해 주세요. 확인하기 전에는 Claude가 시작하지 않습니다. 대시보드는 이 확인 창을 대신 누르지 않습니다. 확인하면 층이 빌딩에 나타나고 층 머리에 <code>대시보드가 띄움 · 연결됨</code>이 붙습니다.</li>
+  <li><strong>작업 지시</strong>: 층 머리의 <strong>작업 지시</strong>를 눌러 글을 보내면 그 세션에 사용자가 입력한 것처럼 들어갑니다. 작업 중이면 하던 일을 마친 뒤 읽습니다. 직접 터미널에서 띄운 층에는 보낼 수 없습니다(<code>대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)</code>).</li>
+  <li><strong>휴업 중 지시</strong>: 멈춘 층에 보낸 지시는 바로 보내지 않고 보관합니다(층 머리 <code>보관 N</code>). 스위치를 <code>영업 중</code>으로 돌리면 <strong>재개 전 확인</strong> 창이 먼저 열려, 보관한 지시를 고치거나 지운 뒤 <strong>보내고 재개</strong>로 보낼 수 있습니다. <strong>취소</strong>를 누르면 멈춘 채로 둡니다. 보관한 지시는 대시보드가 켜져 있는 동안만 남습니다.</li>
+  <li><strong>다시 이어 보기</strong>: 그 세션을 터미널에서 다시 보려면 <code>tmux attach -t co-…</code>(창에 나온 이름)로 붙습니다. 대시보드 기능 없이 이어 쓰려면 <code>claude --resume</code>을 씁니다.</li>
+</ul>
+
 <h3>위쪽 막대의 숫자</h3>
 <ul>
   <li><strong>토큰</strong>: Claude가 읽고 쓴 글자의 양입니다. 오늘·최근 5시간·최근 7일 합계가 보입니다.</li>

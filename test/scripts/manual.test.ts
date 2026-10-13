@@ -832,3 +832,12 @@ describe("사용설명서(docs/manual/index.html)", () => {
     if (name !== "fakeuser") expect(html).not.toMatch(new RegExp(`[\\\\/]${name}[\\\\/]`));
   });
 });
+
+import { CH_TEXT } from "../../web/floors/ChannelDialogs";
+describe("Phase 4b 설명서(작업 지시와 새 층)", () => {
+  it("화면 문구를 글자 그대로 싣는다", () => {
+    const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
+    for (const t of [CH_TEXT.expBody, CH_TEXT.attachBody, CH_TEXT.notLaunched, CH_TEXT.briefMemory, CH_TEXT.expUnavailable]) expect(html.includes(t)).toBe(true);
+    expect(html).toContain('id="channels"');
+  });
+});
