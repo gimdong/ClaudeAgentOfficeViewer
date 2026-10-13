@@ -18,7 +18,9 @@ export interface ChannelView {
 export interface HeldItem { id: string; text: string; at: string }
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "not-connected" | "held-full" };
 
-interface Floor { key: string; tmux: string; conn?: ServerResponse; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+interface Floor { key: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
+export const UNSEEN_MS = 10 * 60_000;
 
 /**
  * 대시보드가 띄운 층과 channel 연결(Phase 4b). 층 열쇠·지시 글은 메모리에만 두고 로그·스냅샷에 넣지 않는다.
@@ -28,7 +30,7 @@ export class ChannelHub {
   private readonly floors = new Map<string, Floor>();
   private enabledFlag = false;
   private readonly no = new Map<string, number>();
-  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void }) {}
+  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number }) {}
 
   load(): void {
     try {
@@ -63,7 +65,7 @@ export class ChannelHub {
   register(sessionId: string, tmux: string): string | null {
     if (this.floors.size >= MAX_LAUNCHED) return null;
     const key = randomBytes(32).toString("hex");
-    this.floors.set(sessionId, { key, tmux, held: [] });
+    this.floors.set(sessionId, { key, tmux, at: (this.o.now ?? Date.now)(), seen: false, held: [] });
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
     this.changed();
     return key;
@@ -74,6 +76,21 @@ export class ChannelHub {
     f.conn?.end();
     this.floors.delete(sessionId);
     this.changed();
+  }
+  /**
+   * 스냅샷 빌드마다(리뷰 #410 I3): 살아 있는 세션 목록에 나타났다가 사라진 층(정상 종료는 레코드를 지운다, B142)과
+   * UNSEEN_MS 넘게 한 번도 나타나지 않고 연결도 없는 층을 정리한다
+   */
+  sweep(alive: ReadonlySet<string>): void {
+    const now = (this.o.now ?? Date.now)();
+    for (const [id, f] of [...this.floors]) {
+      if (alive.has(id)) f.seen = true;
+      else if (f.seen || (!f.conn && now - f.at > UNSEEN_MS)) this.unregister(id);
+    }
+  }
+  /** 연결이 있는지(재개하며 보낼 수 있는지) */
+  connected(sessionId: string): boolean {
+    return !!this.floors.get(sessionId)?.conn;
   }
   launchedCount(): number {
     return this.floors.size;

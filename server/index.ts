@@ -12,8 +12,8 @@ import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
 import { FloorControl, type FloorStats } from "./floors/control";
 import { ChannelHub } from "./floors/channels";
-import { findExecutable, launchArgs, type LaunchInput } from "./floors/launch";
-import { execFile } from "node:child_process";
+import { findExecutable, launchArgs, tmuxVersionOk, type LaunchInput } from "./floors/launch";
+import { execFile, execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { defaultProcStartMatcher } from "./collectors/sessions";
@@ -265,7 +265,8 @@ async function main(): Promise<void> {
   // 층 관리(Phase 4a). 실제 신호(process.kill)는 이 한 줄에만 묶는다 — 서버·테스트는 주입된 signal만 쓴다(스펙 5.1)
   const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke() });
   // 작업 지시·새 층(Phase 4b, 실험 기능). tmux와 claude 실제 경로가 있어야 켤 수 있다(Windows 제외)
-  const tmuxBin = platform() === "win32" ? undefined : findExecutable("tmux");
+  const tmuxFound = platform() === "win32" ? undefined : findExecutable("tmux");
+  const tmuxBin = tmuxFound && tmuxVersionOk((() => { try { return execFileSync(tmuxFound, ["-V"], { encoding: "utf8", timeout: 3000 }); } catch { return ""; } })()) ? tmuxFound : undefined;
   const claudeBin = platform() === "win32" ? undefined : process.env.CLAUDE_OFFICE_CLAUDE_BIN ?? findExecutable("claude", process.env.PATH, [join(homedir(), ".local/bin")]);
   const channels = new ChannelHub({
     file: join(dirname(paths.stateFile), "experimental.json"),

@@ -39,7 +39,7 @@ export interface BuilderOptions {
   /** 층 관리(Phase 4a): 일시정지·종료 중·숨김. 빌드마다 sweep으로 끝난 세션을 정리한다 */
   floors?: Pick<FloorControl, "sweep" | "view" | "isHidden" | "hiddenCount">;
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
-  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "unregister">;
+  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
 
@@ -147,6 +147,7 @@ export class SnapshotBuilder {
     // 층 관리(Phase 4a): 끝난 세션을 정리하고, 숨긴 세션을 뺀 나머지로 층 번호·현재 세션을 매긴다(스펙 6, B118)
     const floors = this.opts.floors;
     floors?.sweep(sessions);
+    this.opts.channels?.sweep(new Set(sessions.filter((x) => x.alive).map((x) => x.sessionId)));
     const shown = floors ? sessions.filter((s) => !floors.isHidden(s.sessionId)) : sessions;
     const byStart = [...shown].sort((a, b) => a.startedAt - b.startedAt || a.sessionId.localeCompare(b.sessionId));
     const floorOf = new Map(byStart.map((s, i) => [s.sessionId, i + 1]));
@@ -332,12 +333,7 @@ export class SnapshotBuilder {
 
   private channelField(s: SessionRecord): { channel?: NonNullable<SessionView["channel"]> } {
     const ch = this.opts.channels;
-    if (!ch) return {};
-    // 끝난 층은 channel 기록을 지운다(열쇠도 함께 사라진다)
-    if (!s.alive) {
-      ch.unregister(s.sessionId);
-      return {};
-    }
+    if (!ch || !s.alive) return {};
     const v = ch.view(s.sessionId);
     return v ? { channel: v } : {};
   }

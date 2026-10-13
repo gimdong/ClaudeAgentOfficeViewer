@@ -441,10 +441,13 @@ export function createApp(
       const id = idOf(req);
       if (!id) return void res.status(400).json({});
       if (!floors.record(id)?.alive) return void res.status(409).json({ error: "ended" });
+      const sendHeld = (req.body as { sendHeld?: unknown } | undefined)?.sendHeld === true;
+      // 연결 전이면 보낼 수 없으니 재개하지 않는다 — 재개만 되고 보관 지시가 남는 어긋남을 막는다(리뷰 #410 M2)
+      if (sendHeld && opts.channels && (opts.channels.hub.view(id)?.held ?? 0) > 0 && !opts.channels.hub.connected(id)) return void res.status(409).json({ error: "not-connected" });
       const before = floors.isPaused(id);
       floors.resume(id);
       if (floors.isPaused(id) !== before) poke();
-      const sent = (req.body as { sendHeld?: unknown } | undefined)?.sendHeld === true ? (opts.channels?.hub.flushHeld(id) ?? 0) : undefined;
+      const sent = sendHeld ? (opts.channels?.hub.flushHeld(id) ?? 0) : undefined;
       res.status(200).json({ paused: false, ...(sent !== undefined ? { sent } : {}) });
     });
     app.post("/api/floors/:id/terminate", guard, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
@@ -499,7 +502,7 @@ export function createApp(
         if (!r.ok) return void res.status(r.error === "not-launched" ? 404 : 409).json({ error: r.error });
         res.status(200).json({ id: r.id, state: r.state });
       });
-      app.put("/api/experimental", express.json({ limit: "1kb", type: () => true }), (req, res) => {
+      app.put("/api/experimental", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
         const v = (req.body as { channels?: unknown } | undefined)?.channels;
         if (typeof v !== "boolean") return void res.status(400).json({});
         if (v && !hub.available().ok) return void res.status(409).json({ error: "unavailable" });

@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, MAX_HELD } from "../../server/floors/channels";
+import { ChannelHub, MAX_HELD, MAX_LAUNCHED } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
-import { launchArgs, validateLaunch, type LaunchInput } from "../../server/floors/launch";
+import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
 import { makeSession, makeSnapshot } from "../web/fixtures";
 
@@ -195,5 +195,51 @@ describe("새 층·지시·보관(스펙 4·6·7장)", () => {
     hub.register("s1", "co-1");
     expect((await post("/api/floors/s1/instruct", { text: "  " })).status).toBe(400);
     expect((await post("/api/floors/s1/instruct", { text: "x".repeat(8001) })).status).toBe(400);
+  });
+});
+
+describe("리뷰 #410 수정", () => {
+  it("I1: 첫 지시·이름이 -로 시작하면 claude 옵션으로 읽히므로 거부(앞 공백도)", () => {
+    const dir = join(tmp, "w");
+    mkdirSync(dir);
+    for (const prompt of ["--dangerously-skip-permissions", "-p x", "  --mcp-config=/x.json"]) expect(validateLaunch({ cwd: dir, prompt })).toEqual({ ok: false, error: "prompt-dash" });
+    expect(validateLaunch({ cwd: dir, name: "--settings=x" })).toEqual({ ok: false, error: "name" });
+    const dash = join(tmp, "-rf");
+    mkdirSync(dash);
+    expect(validateLaunch({ cwd: dash })).toMatchObject({ ok: true, value: { name: "rf" } });
+    expect(validateLaunch({ cwd: dir, prompt: "x -p y" })).toMatchObject({ ok: true });
+  });
+
+  it("I2: tmux 3.0 미만은 쓸 수 없다(명령이 셸로 실행됨)", () => {
+    expect(["tmux 3.5a", "tmux 3.0", "tmux next-3.4", "tmux 10.1"].map(tmuxVersionOk)).toEqual([true, true, true, true]);
+    expect(["tmux 2.9a", "tmux 1.8", "", "garbage"].map(tmuxVersionOk)).toEqual([false, false, false, false]);
+  });
+
+  it("I3: 세션 목록에서 사라진 층(정상 종료)과 10분 넘게 안 나타난 층은 정리되어 다시 띄울 수 있다", () => {
+    let now = 0;
+    const h = new ChannelHub({ file: join(tmp, "e.json"), available: { ok: true }, now: () => now });
+    const ids = Array.from({ length: MAX_LAUNCHED }, (_, i) => `f${i}`);
+    for (const id of ids) expect(h.register(id, "co")).not.toBeNull();
+    expect(h.register("over", "co")).toBeNull();
+    h.sweep(new Set(["f0", "f1"])); // f0·f1은 나타났다
+    now = 5 * 60_000;
+    h.sweep(new Set(["f1"])); // f0은 나타났다가 사라짐(정상 종료) → 바로 정리
+    expect(h.view("f0")).toBeUndefined();
+    expect(h.view("f2")).toBeDefined(); // 아직 10분 안
+    now = 11 * 60_000;
+    h.sweep(new Set(["f1"]));
+    expect(h.launchedCount()).toBe(1);
+    expect(h.register("next", "co")).not.toBeNull();
+  });
+
+  it("M2: 연결 전인 층을 [보내고 재개]하면 재개하지 않고 409 not-connected(보관 지시는 남는다)", async () => {
+    hub.setEnabled(true);
+    hub.register("s1", "co-1");
+    floors.pause("s1");
+    hub.instruct("s1", "남김", true);
+    const r = await post("/api/floors/s1/resume", { sendHeld: true });
+    expect([r.status, JSON.parse(r.body)]).toEqual([409, { error: "not-connected" }]);
+    expect(floors.isPaused("s1")).toBe(true);
+    expect(hub.view("s1")?.held).toBe(1);
   });
 });

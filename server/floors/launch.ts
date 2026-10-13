@@ -6,7 +6,9 @@ import { MAX_TEXT } from "./channels";
 export const MODELS = ["opus", "sonnet", "haiku"] as const;
 export type LaunchModel = (typeof MODELS)[number];
 export interface LaunchInput { cwd: string; name: string; model?: LaunchModel; prompt?: string }
-const NAME = /^[\p{L}\p{N} ._-]{1,40}$/u;
+// 앞이 "-"이면 claude가 옵션으로 읽는다(리뷰 #410 I1) — 이름·첫 지시 모두 막는다
+const NAME = /^(?!-)[\p{L}\p{N} ._-]{1,40}$/u;
+const CHAR = /^[\p{L}\p{N} ._-]$/u;
 
 /** 본문 검사(스펙 4.2). 폴더는 realpath 뒤 실제 디렉터리여야 한다 */
 export function validateLaunch(b: unknown, home = homedir()): { ok: true; value: LaunchInput } | { ok: false; error: string } {
@@ -25,11 +27,12 @@ export function validateLaunch(b: unknown, home = homedir()): { ok: true; value:
   }
   let nm: string;
   if (name === undefined || name === "") {
-    nm = [...basename(real)].filter((c) => NAME.test(c)).join("").slice(0, 40) || "floor";
+    nm = [...basename(real)].filter((c) => CHAR.test(c)).join("").replace(/^-+/, "").slice(0, 40) || "floor";
   } else if (typeof name === "string" && NAME.test(name)) nm = name;
   else return { ok: false, error: "name" };
   if (model !== undefined && !MODELS.includes(model as LaunchModel)) return { ok: false, error: "model" };
   if (prompt !== undefined && (typeof prompt !== "string" || prompt.length > MAX_TEXT || prompt.includes("\0"))) return { ok: false, error: "prompt" };
+  if (typeof prompt === "string" && prompt.trimStart().startsWith("-")) return { ok: false, error: "prompt-dash" };
   return { ok: true, value: { cwd: real, name: nm, ...(model ? { model: model as LaunchModel } : {}), ...(prompt ? { prompt } : {}) } };
 }
 
@@ -65,4 +68,10 @@ export function findExecutable(name: string, path = process.env.PATH ?? "", firs
     }
   }
   return undefined;
+}
+
+/** tmux 3.0부터 new-session이 명령을 여러 인자로 받아 셸 없이 실행한다. 그 전은 sh -c로 넘긴다(리뷰 #410 I2) */
+export function tmuxVersionOk(v: string): boolean {
+  const m = /(\d+)\.(\d+)/.exec(v);
+  return !!m && Number(m[1]) >= 3;
 }
