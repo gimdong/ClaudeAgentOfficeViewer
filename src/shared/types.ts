@@ -121,6 +121,8 @@ export interface SessionView {
   members: Member[];
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
   budget?: BudgetView;
+  /** 대시보드가 channel을 붙여 띄운 층만(Phase 4b) */
+  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered" };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
   pausedDenied?: number;
   /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */
@@ -174,6 +176,8 @@ export interface Snapshot {
   policy?: PolicySnapshot;
   /** 대시보드에서 숨긴 끝난 층의 수(Phase 4a 스펙 6) */
   hiddenFloors: number;
+  /** 실험 기능(Phase 4b 3장). available=false면 켤 수 없다(reason: "tmux"|"claude"|"windows") */
+  experimental?: { channels: boolean; available: boolean; reason?: string };
 }
 
 // ───────── 진단(베타): 서버와 화면이 같이 쓴다 ─────────

@@ -1,0 +1,113 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+const SCRIPT = join(__dirname, "../../plugins/claude-office/channel/server.mjs");
+const KEY = "ab".repeat(32);
+const FAKE_MSG_TOKEN = "fake-messaging-token-should-never-leave";
+
+let child: ChildProcess | undefined;
+let server: Server | undefined;
+afterEach(async () => {
+  child?.kill();
+  child = undefined;
+  await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
+  server = undefined;
+});
+
+/** 가짜 대시보드: /channel/stream에 SSE로 instruction을 하나 보내고, 받은 요청을 모두 기록한다 */
+async function fakeDashboard(onStream?: (res: ServerResponse) => void) {
+  const seen: Array<{ url: string; auth?: string; body: string; headers: IncomingMessage["headers"] }> = [];
+  server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (d) => (body += d));
+    req.on("end", () => {
+      seen.push({ url: req.url ?? "", auth: req.headers.authorization, body, headers: req.headers });
+      if (req.url === "/channel/stream") {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        (onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text: 'say "hi" $(rm -rf /)\nline2' })}\n\n`)))(res);
+      } else res.end("{}");
+    });
+  });
+  await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+  return { port: (server.address() as AddressInfo).port, seen };
+}
+
+function start(env: Record<string, string>) {
+  const out: string[] = [];
+  child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_CODE_MESSAGING_TOKEN: FAKE_MSG_TOKEN, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  let buf = "";
+  child.stdout!.on("data", (d) => {
+    buf += String(d);
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      out.push(buf.slice(0, i));
+      buf = buf.slice(i + 1);
+    }
+  });
+  const write = (m: object) => child!.stdin!.write(JSON.stringify(m) + "\n");
+  write({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+  write({ jsonrpc: "2.0", method: "notifications/initialized" });
+  return out;
+}
+const until = async (f: () => boolean, ms = 4000) => {
+  const t = Date.now();
+  while (!f()) {
+    if (Date.now() - t > ms) throw new Error("timeout");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+};
+
+describe("channel 서버(Phase 4b 스펙 5장)", () => {
+  it("열쇠가 없으면 대시보드에 연결하지 않고, channel 능력·안내 문구도 내지 않는다", async () => {
+    const d = await fakeDashboard();
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port) });
+    await until(() => out.length >= 1);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(d.seen).toEqual([]);
+    const init = JSON.parse(out[0]).result;
+    expect(init.protocolVersion).toBe("2025-11-25");
+    expect(init.capabilities.experimental).toBeUndefined();
+    expect(init.instructions).toBeUndefined();
+    expect(out).toHaveLength(1);
+  });
+
+  it("열쇠가 있으면 SSE로 받은 지시를 그대로 channel 알림으로 넣고 ack를 보낸다. 메시징 토큰은 어디에도 보내지 않는다", async () => {
+    const d = await fakeDashboard();
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    await until(() => d.seen.some((s) => s.url === "/channel/ack"));
+    const init = JSON.parse(out[0]).result;
+    expect(init.capabilities.experimental).toEqual({ "claude/channel": {} });
+    const note = out.map((l) => JSON.parse(l)).find((m) => m.method === "notifications/claude/channel");
+    expect(note.params.content).toBe('say "hi" $(rm -rf /)\nline2');
+    expect(d.seen.every((s) => s.auth === `Floor ${KEY}`)).toBe(true);
+    expect(JSON.parse(d.seen.find((s) => s.url === "/channel/ack")!.body)).toEqual({ id: "i1" });
+    const leaked = d.seen.some((s) => JSON.stringify(s).includes(FAKE_MSG_TOKEN)) || out.some((l) => l.includes(FAKE_MSG_TOKEN));
+    expect(leaked).toBe(false);
+  });
+
+  it("스트림이 끊기면 다시 잇는다", async () => {
+    let n = 0;
+    const d = await fakeDashboard((res) => {
+      n++;
+      res.end();
+    });
+    start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    await until(() => n >= 2, 5000);
+  });
+
+  it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
+    const src = readFileSync(SCRIPT, "utf8");
+    const names = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
+    expect([...new Set(names)].sort()).toEqual(["CLAUDE_OFFICE_FLOOR_KEY", "CLAUDE_OFFICE_PORT"]);
+    expect(/process\.env\[/.test(src) || /Object\.(keys|entries)\(process\.env\)/.test(src)).toBe(false);
+  });
+
+  it("플러그인 .mcp.json이 이 스크립트를 node로 띄운다", () => {
+    const cfg = JSON.parse(readFileSync(join(__dirname, "../../plugins/claude-office/.mcp.json"), "utf8"));
+    expect(cfg.mcpServers["office-channel"]).toEqual({ command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/channel/server.mjs"] });
+  });
+});

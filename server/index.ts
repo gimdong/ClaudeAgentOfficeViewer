@@ -11,6 +11,11 @@ import { BudgetStore } from "./budget/store";
 import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
 import { FloorControl, type FloorStats } from "./floors/control";
+import { ChannelHub } from "./floors/channels";
+import { findExecutable, launchArgs, type LaunchInput } from "./floors/launch";
+import { execFile } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import { defaultProcStartMatcher } from "./collectors/sessions";
 import { PolicyStore } from "./policy/store";
 import { buildBundle, readClaudeVersion, writeBundle, type PolicyStats } from "./diag/bundle";
@@ -18,7 +23,7 @@ import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorIte
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
-import { Logger, errInfo, scrub, setLogger } from "./log";
+import { Logger, errInfo, getLogger, scrub, setLogger } from "./log";
 import { resolvePaths, type OfficePaths } from "./paths";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import type { Snapshot } from "../src/shared/types";
@@ -259,9 +264,32 @@ async function main(): Promise<void> {
   const policy = new PolicyGate(policyStore, { onChange: () => hub.poke() });
   // 층 관리(Phase 4a). 실제 신호(process.kill)는 이 한 줄에만 묶는다 — 서버·테스트는 주입된 signal만 쓴다(스펙 5.1)
   const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke() });
+  // 작업 지시·새 층(Phase 4b, 실험 기능). tmux와 claude 실제 경로가 있어야 켤 수 있다(Windows 제외)
+  const tmuxBin = platform() === "win32" ? undefined : findExecutable("tmux");
+  const claudeBin = platform() === "win32" ? undefined : process.env.CLAUDE_OFFICE_CLAUDE_BIN ?? findExecutable("claude", process.env.PATH, [join(homedir(), ".local/bin")]);
+  const channels = new ChannelHub({
+    file: join(dirname(paths.stateFile), "experimental.json"),
+    available: platform() === "win32" ? { ok: false, reason: "windows" } : !tmuxBin ? { ok: false, reason: "tmux" } : !claudeBin ? { ok: false, reason: "claude" } : { ok: true },
+    onChange: () => hub.poke(),
+  });
+  channels.load();
+  const launchFloor = async (input: LaunchInput) => {
+    if (!tmuxBin || !claudeBin) return { ok: false as const, error: "tmux" as const };
+    const sessionId = randomUUID();
+    const tmuxName = `co-${randomBytes(4).toString("hex")}`;
+    const key = channels.register(sessionId, tmuxName);
+    if (!key) return { ok: false as const, error: "limit" as const };
+    const args = launchArgs({ ...input, tmuxName, claude: claudeBin, channelSpec: process.env.CLAUDE_OFFICE_CHANNEL_SPEC ?? "plugin:claude-office@claude-office", sessionId, key, port: opts.port, socket: process.env.CLAUDE_OFFICE_TMUX_SOCKET });
+    const ok = await new Promise<boolean>((r) => execFile(tmuxBin, args, { timeout: 10_000 }, (e) => (e && getLogger().warn("floors", "launch failed", { error: errInfo(e) }), r(!e))));
+    if (!ok) {
+      channels.unregister(sessionId);
+      return { ok: false as const, error: "tmux" as const };
+    }
+    return { ok: true as const, sessionId, tmux: tmuxName };
+  };
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, matchProcStart: defaultProcStartMatcher });
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -310,7 +338,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

@@ -19,6 +19,7 @@ import { readLastEntry } from "./lib/jsonlTail";
 import { POLICY_DENIED_SHOW_MS, memberKeyOf, type PolicyGate } from "./policy/gate";
 import type { PolicyStore } from "./policy/store";
 import type { FloorControl } from "./floors/control";
+import type { ChannelHub } from "./floors/channels";
 
 export interface BuilderOptions {
   claudeHome: string;
@@ -37,6 +38,8 @@ export interface BuilderOptions {
   /** 권한 정책(Phase 3 스펙 7.4). 구성원마다 걸린 규칙·횟수·방금 막힘을 싣고, 스냅샷에 정책 전체를 싣는다(Ruling B77) */
   /** 층 관리(Phase 4a): 일시정지·종료 중·숨김. 빌드마다 sweep으로 끝난 세션을 정리한다 */
   floors?: Pick<FloorControl, "sweep" | "view" | "isHidden" | "hiddenCount">;
+  /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
+  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "unregister">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
 }
 
@@ -189,7 +192,7 @@ export class SnapshotBuilder {
     const unreadable = p?.store.unreadable() ?? false;
     const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
-    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0 };
+    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0, ...this.experimentalField() };
   }
 
   /** 마지막 빌드의 세션 레코드(Phase 4a B114·B117). 종료 API가 pid·procStart를 이것으로 검사한다. 스냅샷에는 싣지 않는다 */
@@ -323,6 +326,26 @@ export class SnapshotBuilder {
       ...(stale ? { stale: true } : {}),
       context: contextInfo(last, this.opts.config.contextWindows),
       members,
+      ...this.channelField(s),
     };
+  }
+
+  private channelField(s: SessionRecord): { channel?: NonNullable<SessionView["channel"]> } {
+    const ch = this.opts.channels;
+    if (!ch) return {};
+    // 끝난 층은 channel 기록을 지운다(열쇠도 함께 사라진다)
+    if (!s.alive) {
+      ch.unregister(s.sessionId);
+      return {};
+    }
+    const v = ch.view(s.sessionId);
+    return v ? { channel: v } : {};
+  }
+
+  private experimentalField(): { experimental?: NonNullable<Snapshot["experimental"]> } {
+    const ch = this.opts.channels;
+    if (!ch) return {};
+    const a = ch.available();
+    return { experimental: { channels: ch.enabled(), available: a.ok, ...(a.reason ? { reason: a.reason } : {}) } };
   }
 }

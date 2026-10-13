@@ -15,6 +15,8 @@ import { isTargetKey, parseRules, type PolicyFile, type SetResult } from "./poli
 import type { PolicyRules } from "../src/shared/types";
 import type { SessionRecord } from "./collectors/sessions";
 import type { TerminateResult } from "./floors/control";
+import { MAX_TEXT, type ChannelHub } from "./floors/channels";
+import { validateLaunch, type LaunchInput } from "./floors/launch";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -88,6 +90,8 @@ export function createApp(
     policy?: { preToolUse(input: Record<string, unknown>): PolicyVerdict | null; claim(input: Record<string, unknown>): boolean };
     /** 정책 API(스펙 7.4). 바뀌면 hub.poke()로 스냅샷을 다시 만든다 */
     policyApi?: { all(): PolicyFile; set(target: string, rules: PolicyRules): SetResult; remove(target: string): { ok: true; saved: boolean } };
+    /** 작업 지시·새 층(Phase 4b). launch는 tmux를 띄우고 세션 id를 돌려준다 */
+    channels?: { hub: ChannelHub; launch(input: LaunchInput): Promise<{ ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" }> };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
       preToolUse(input: Record<string, unknown>): object | null;
@@ -432,7 +436,17 @@ export function createApp(
       res.status(200).json({ paused: pause });
     };
     app.post("/api/floors/:id/pause", guard, pauseRoute(true));
-    app.post("/api/floors/:id/resume", guard, pauseRoute(false));
+    // 재개 브리핑의 [보내고 재개](Phase 4b 7장): 본문 { sendHeld: true }면 재개한 뒤 보관 지시를 보낸다
+    app.post("/api/floors/:id/resume", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
+      const id = idOf(req);
+      if (!id) return void res.status(400).json({});
+      if (!floors.record(id)?.alive) return void res.status(409).json({ error: "ended" });
+      const before = floors.isPaused(id);
+      floors.resume(id);
+      if (floors.isPaused(id) !== before) poke();
+      const sent = (req.body as { sendHeld?: unknown } | undefined)?.sendHeld === true ? (opts.channels?.hub.flushHeld(id) ?? 0) : undefined;
+      res.status(200).json({ paused: false, ...(sent !== undefined ? { sent } : {}) });
+    });
     app.post("/api/floors/:id/terminate", guard, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
       const id = idOf(req);
       const b = req.body as unknown;
@@ -463,6 +477,51 @@ export function createApp(
       if (before !== 0) poke();
       res.status(200).json({ hidden: 0 });
     });
+    if (opts.channels) {
+      const { hub, launch } = opts.channels;
+      const textOf = (b: unknown): string | null => {
+        const t = (b as { text?: unknown } | undefined)?.text;
+        return typeof t === "string" && t.trim() && t.length <= MAX_TEXT && !t.includes("\0") ? t : null;
+      };
+      const on = (_req: express.Request, res: express.Response, next: express.NextFunction) => (hub.enabled() ? next() : void res.status(403).json({ error: "off" }));
+      app.post("/api/floors/launch", guard, on, express.json({ limit: "16kb", type: () => true }), async (req, res) => {
+        const v = validateLaunch(req.body);
+        if (!v.ok) return void res.status(400).json({ error: v.error });
+        const r = await launch(v.value);
+        if (!r.ok) return void res.status(r.error === "limit" ? 429 : 502).json({ error: r.error });
+        res.status(200).json({ sessionId: r.sessionId, tmux: r.tmux });
+      });
+      app.post("/api/floors/:id/instruct", guard, on, express.json({ limit: "16kb", type: () => true }), (req, res) => {
+        const id = idOf(req);
+        const text = textOf(req.body);
+        if (!id || !text) return void res.status(400).json({});
+        const r = hub.instruct(id, text, floors.isPaused(id));
+        if (!r.ok) return void res.status(r.error === "not-launched" ? 404 : 409).json({ error: r.error });
+        res.status(200).json({ id: r.id, state: r.state });
+      });
+      app.put("/api/experimental", express.json({ limit: "1kb", type: () => true }), (req, res) => {
+        const v = (req.body as { channels?: unknown } | undefined)?.channels;
+        if (typeof v !== "boolean") return void res.status(400).json({});
+        if (v && !hub.available().ok) return void res.status(409).json({ error: "unavailable" });
+        res.status(200).json(hub.setEnabled(v));
+      });
+      app.get("/api/floors/:id/held", (req, res) => {
+        const id = idOf(req);
+        if (!id) return void res.status(400).json({});
+        res.status(200).json({ held: hub.held(id) });
+      });
+      app.put("/api/floors/:id/held/:hid", guard, express.json({ limit: "16kb", type: () => true }), (req, res) => {
+        const id = idOf(req);
+        const text = textOf(req.body);
+        if (!id || !text) return void res.status(400).json({});
+        res.status(hub.editHeld(id, String(req.params.hid), text) ? 200 : 404).json({});
+      });
+      app.delete("/api/floors/:id/held/:hid", guard, (req, res) => {
+        const id = idOf(req);
+        if (!id) return void res.status(400).json({});
+        res.status(hub.dropHeld(id, String(req.params.hid)) ? 200 : 404).json({});
+      });
+    }
     app.use("/api/floors", (err: { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(err.status === 413 ? 413 : 400).json({});
     });
@@ -483,6 +542,24 @@ export function createApp(
       clearInterval(heartbeat);
     });
   });
+
+  // channel 서버(플러그인)가 거는 나가는 연결(Phase 4b 스펙 5장). 쿠키가 아니라 층 열쇠로만 인증하고, 브라우저(Origin 있음)는 거부한다
+  if (opts.channels) {
+    const { hub: ch } = opts.channels;
+    const keyOf = (req: express.Request) => /^Floor ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];
+    app.get("/channel/stream", (req, res) => {
+      if (req.headers.origin !== undefined) return void res.status(403).end();
+      if (!ch.attach(keyOf(req), res)) return void res.status(401).end();
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+      res.flushHeaders(); // 첫 지시나 심장박동을 기다리지 않고 연결됨을 알린다
+      const heartbeat = setInterval(() => res.write(": ping\n\n"), opts.heartbeatMs ?? 15_000);
+      req.on("close", () => clearInterval(heartbeat));
+    });
+    app.post("/channel/ack", express.json({ limit: "1kb", type: () => true }), (req, res) => {
+      if (req.headers.origin !== undefined) return void res.status(403).end();
+      res.status(ch.ack(keyOf(req), (req.body as { id?: unknown } | undefined)?.id) ? 200 : 401).json({});
+    });
+  }
 
   const staticDir = opts.staticDir;
   if (staticDir && existsSync(join(staticDir, "index.html"))) {
