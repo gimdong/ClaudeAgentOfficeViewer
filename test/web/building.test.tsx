@@ -92,9 +92,10 @@ describe("Floor 머리", () => {
       expect(el.getAttribute("aria-disabled")).toBeNull();
       expect(el.getAttribute("title")).toBeNull();
     }
+    // Phase 4b: 대시보드가 띄우지 않은 층은 작업 지시 비활성 + 이유(Claude Code 제약)
     for (const el of [within(floor).getByRole("button", { name: "작업 지시" })]) {
       expect(el.getAttribute("aria-disabled")).toBe("true");
-      expect(el.getAttribute("title")).toBe("아직 사용할 수 없습니다");
+      expect(el.getAttribute("title")).toBe("대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)");
     }
     expect(within(floor).queryByRole("button", { name: "삭제" })).toBeNull();
   });

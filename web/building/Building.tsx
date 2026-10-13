@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef } from "react";
-import type { SessionView } from "../../src/shared/types";
+import type { Snapshot, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { BudgetSettingsContext } from "../budget/BudgetDialog";
 import { FLOOR_TEXT, useHiddenFloors } from "../floors/useFloors";
@@ -7,7 +7,7 @@ import { Floor } from "./Floor";
 import { VacantFloor } from "./VacantFloor";
 
 /** 야근 빌딩(디자인 5.1). 위가 최신 층, 맨 위는 빈 층, 1F가 가장 오래된 세션. 숨긴 층 줄은 탑 아래·땅 위(phase4a §4.3) */
-export function Building({ sessions, bubble, hiddenFloors = 0 }: { sessions: SessionView[]; bubble?: BubbleHandlers; hiddenFloors?: number }) {
+export function Building({ sessions, bubble, hiddenFloors = 0, experimental }: { sessions: SessionView[]; bubble?: BubbleHandlers; hiddenFloors?: number; experimental?: Snapshot["experimental"] }) {
   const { announce } = useContext(BudgetSettingsContext);
   const h = useHiddenFloors(sessions, hiddenFloors, announce);
   const floors = [...h.visible].sort((a, b) => b.floor - a.floor);
@@ -55,7 +55,7 @@ export function Building({ sessions, bubble, hiddenFloors = 0 }: { sessions: Ses
         <div className="roof-sign">CLAUDE 야근 빌딩</div>
       </div>
       <div className="tower" ref={towerRef}>
-        <VacantFloor />
+        <VacantFloor experimental={experimental} />
         {floors.length === 0 && h.count === 0 && !h.reloading && <p className="empty">빌딩이 비어 있습니다. 빈 층에서 새 세션을 시작하세요</p>}
         {floors.map((s) => (
           <Floor key={s.id} session={s} bubble={bubble} onHidden={onHidden} />

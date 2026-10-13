@@ -12,6 +12,7 @@ import { MiniBar } from "./MiniBar";
 import { OpenDecisionContext } from "../report/useDecisions";
 import { FLOOR_TEXT, useFloorHide, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
+import { BriefingDialog, CH_TEXT, InstructDialog } from "../floors/ChannelDialogs";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
 
@@ -50,6 +51,11 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     if (oldest?.id) openDecision?.(oldest.id, document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>('[role="switch"]'));
   };
   const sw = useFloorSwitch(session, budgetCtx.announce, openOldestDecision);
+  // Phase 4b: 작업 지시 창과 재개 브리핑 창
+  const [instructOpen, setInstructOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const ch = session.channel;
+  const swEl = () => document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>('[role="switch"]');
   const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
   const hider = useFloorHide(session, onHidden, budgetCtx.announce);
   const sectionRef = useRef<HTMLElement>(null);
@@ -123,6 +129,12 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           )}
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
           {alarm && <span className="chip chip--budget">예산 도달</span>}
+          {ch && (
+            <span className="chip chip--channel" data-testid="channel-chip">
+              {CH_TEXT.chipLaunched} · {ch.connected ? CH_TEXT.chipConnected : CH_TEXT.chipWaiting}
+              {ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
+            </span>
+          )}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}
           <span className="summary">
             팀원 {session.members.length} · 작업 중 {working}
@@ -134,7 +146,18 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
               <BudgetBar ref={settingsBtn} budget={session.budget} floorName={session.name} onOpenSettings={() => setSettingsOpen(true)} />
             </span>
           )}
-          <FloorControls session={session} paused={paused} busy={sw.busy} onToggle={() => void sw.toggle()} onTerminate={term.open} onHide={() => void hider.hide()} hideBusy={hider.busy} noteId={noteId} />
+          <FloorControls
+            session={session}
+            paused={paused}
+            busy={sw.busy}
+            // 보관 지시가 있는 층을 재개할 때는 브리핑 창부터(스펙 7장)
+            onToggle={() => (paused && (ch?.held ?? 0) > 0 ? setBriefOpen(true) : void sw.toggle())}
+            onTerminate={term.open}
+            onHide={() => void hider.hide()}
+            hideBusy={hider.busy}
+            noteId={noteId}
+            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: CH_TEXT.notConnected, onClick: () => {} }}
+          />
           {(sw.error ?? hider.error) && (
             <span className="fc-err" role="alert">
               {sw.error ?? hider.error}
@@ -161,6 +184,35 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
       </div>
       {term.stage !== 0 && (
         <TerminateDialog session={session} stage={term.stage} sending={term.sending} error={term.error} forceDisabled={term.forceDisabled} onConfirm={() => void term.confirm()} onClose={term.close} />
+      )}
+      {instructOpen && (
+        <InstructDialog
+          id={session.id}
+          name={session.name}
+          paused={paused}
+          working={session.members.some((m) => m.state === "working")}
+          announce={budgetCtx.announce}
+          onClose={() => {
+            setInstructOpen(false);
+            document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>(".controls [aria-haspopup='dialog']:not([data-floor-action])")?.focus();
+          }}
+        />
+      )}
+      {briefOpen && (
+        <BriefingDialog
+          id={session.id}
+          name={session.name}
+          decisions={session.members.filter((m) => m.state === "decision").length}
+          onGoDecision={() => {
+            setBriefOpen(false);
+            openOldestDecision();
+          }}
+          onResume={(sendHeld) => sw.toggle({ sendHeld })}
+          onClose={() => {
+            setBriefOpen(false);
+            swEl()?.focus();
+          }}
+        />
       )}
       {settingsOpen && <BudgetDialog session={session} defaultTokens={budgetCtx.defaultTokens} announce={budgetCtx.announce} onClose={closeSettings} />}
     </section>

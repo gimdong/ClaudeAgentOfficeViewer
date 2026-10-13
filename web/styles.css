@@ -566,3 +566,17 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
   .siren .siren-off { opacity: 0 !important; }
   .floor--alarm .shaft { background: var(--alarm-wash); }
 }
+
+/* Phase 4b: 작업 지시·새 층(실험 기능) */
+.ch-dlg { max-width: 520px; }
+.ch-body, .ch-note { word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }
+.ch-note { color: var(--muted); font-size: 12px; }
+.ch-check { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; word-break: keep-all; }
+.ch-field { display: grid; gap: 4px; margin: 10px 0; font-size: 12px; color: var(--muted); }
+.ch-field input, .ch-field select, .ch-field textarea, .ch-text { width: 100%; box-sizing: border-box; background: var(--slab, #0b0a17); color: var(--ink, #e8e4ff); border: 2px solid var(--line, #3b3460); padding: 6px 8px; font: inherit; }
+.ch-sub { font-size: 13px; margin: 8px 0 4px; }
+.brief-list { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 6px; }
+.brief-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.held-text { flex: 1 1 200px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+.chip--channel { border-color: var(--cyan, #3fd0ff); color: var(--cyan, #3fd0ff); }
+.exp-chip.on { color: var(--green, #39ffb6); }

@@ -6,7 +6,7 @@ import { Icon } from "../pixel/Icon";
 const OFF = { "aria-disabled": true, title: FLOOR_TEXT.orderTitle } as const;
 
 /** 층 머리 컨트롤(디자인 phase4a §1). 스위치 상태(paused·busy)는 Floor의 useFloorSwitch가 든다 */
-export function FloorControls({ session, paused, busy, onToggle, onTerminate, onHide, hideBusy = false, noteId }: { session: SessionView; paused: boolean; busy: boolean; onToggle(): void; onTerminate(): void; onHide?(): void; hideBusy?: boolean; noteId: string }) {
+export function FloorControls({ session, paused, busy, onToggle, onTerminate, onHide, hideBusy = false, noteId, instruct }: { session: SessionView; paused: boolean; busy: boolean; onToggle(): void; onTerminate(): void; onHide?(): void; hideBusy?: boolean; noteId: string; instruct?: { enabled: boolean; title?: string; onClick(): void } }) {
   if (session.floorStatus === "ended") {
     return (
       <div className="controls">
@@ -44,7 +44,8 @@ export function FloorControls({ session, paused, busy, onToggle, onTerminate, on
         </span>
         <span className="lbl">{paused ? FLOOR_TEXT.off : FLOOR_TEXT.on}</span>
       </button>
-      <button type="button" className="pbtn" {...OFF}>
+      {/* Phase 4b: 대시보드가 띄운 층만(실험 기능). 그 밖은 이유를 툴팁으로 */}
+      <button type="button" className="pbtn" aria-haspopup="dialog" {...(instruct?.enabled ? { onClick: instruct.onClick } : { "aria-disabled": true, title: instruct?.title ?? OFF.title })}>
         <Icon name="send" />
         작업 지시
       </button>

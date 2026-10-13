@@ -311,11 +311,11 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
 });
 
 describe("버튼(§1.4)", () => {
-  it("작업 지시는 여전히 aria-disabled이고 제목이 '아직 사용할 수 없습니다'", () => {
+  it("작업 지시는 대시보드가 띄우지 않은 층에서 aria-disabled이고 제목이 이유(Phase 4b)", () => {
     show(snap(floorOf({ floorStatus: "paused", pausedDenied: 0 })));
     render(<App />);
     const b = within(floor()).getByRole("button", { name: "작업 지시" });
-    expect([b.getAttribute("aria-disabled"), b.getAttribute("title")]).toEqual(["true", "아직 사용할 수 없습니다"]);
+    expect([b.getAttribute("aria-disabled"), b.getAttribute("title")]).toEqual(["true", "대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)"]);
   });
 
   it("끝난 층에는 삭제 버튼만", () => {

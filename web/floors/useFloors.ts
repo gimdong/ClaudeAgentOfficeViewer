@@ -74,7 +74,7 @@ async function call<T>(method: "POST" | "DELETE", path: string, body: object = {
 const at = (id: string, action: string) => `/api/floors/${encodeURIComponent(id)}/${action}`;
 export const floorsApi = {
   pause: (id: string) => call<{ paused: boolean }>("POST", at(id, "pause")),
-  resume: (id: string) => call<{ paused: boolean }>("POST", at(id, "resume")),
+  resume: (id: string, body: object = {}) => call<{ paused: boolean; sent?: number }>("POST", at(id, "resume"), body),
   terminate: (id: string, force: boolean) => call<{ signal: string }>("POST", at(id, "terminate"), force ? { force: true } : {}),
   hide: (id: string) => call<{ hidden: number }>("POST", at(id, "hide")),
   unhideAll: () => call<{ hidden: number }>("DELETE", "/api/floors/hidden"),
@@ -130,13 +130,14 @@ export function useFloorSwitch(session: SessionView, announce?: (text: string) =
 
   const paused = hold && Date.now() < hold.until ? hold.paused : snapPaused;
 
-  const toggle = async () => {
-    if (busyRef.current || session.floorStatus === "ended") return;
+  /** sendHeld: 재개 브리핑의 [보내고 재개](Phase 4b 7장). 성공하면 true */
+  const toggle = async (o: { sendHeld?: boolean } = {}): Promise<boolean> => {
+    if (busyRef.current || session.floorStatus === "ended") return false;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     const want = !paused;
-    const r = await (want ? floorsApi.pause(session.id) : floorsApi.resume(session.id));
+    const r = await (want ? floorsApi.pause(session.id) : floorsApi.resume(session.id, o.sendHeld ? { sendHeld: true } : {}));
     busyRef.current = false;
     setBusy(false);
     if (r.ok) {
@@ -148,12 +149,13 @@ export function useFloorSwitch(session: SessionView, announce?: (text: string) =
         announce?.(waiting ? `${FLOOR_TEXT.resumed(session.name)}. ${FLOOR_TEXT.waiting(waiting).slice(2)}` : FLOOR_TEXT.resumed(session.name));
         if (waiting) onResumed?.();
       }
-      return;
+      return true;
     }
     // 401은 앱 전체가 열쇠 안내 화면으로 간다(UNAUTHORIZED_EVENT). 그 밖은 이 층에 한 줄
-    if (r.unauthorized) return;
+    if (r.unauthorized) return false;
     if (r.error === "ended") setError(FLOOR_TEXT.switchEnded);
     else setError(FLOOR_TEXT.switchFailed);
+    return false;
   };
 
   return { paused, busy, error, toggle };

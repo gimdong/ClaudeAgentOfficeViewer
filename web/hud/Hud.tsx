@@ -9,6 +9,7 @@ import { DecisionChip } from "./DecisionChip";
 import { Elevator } from "./Elevator";
 import { HeartBar } from "./HeartBar";
 import { PolicyChip } from "./PolicyChip";
+import { ExperimentalChip } from "./ExperimentalChip";
 import { TokenCounter } from "./TokenCounter";
 
 export function Hud({
@@ -87,6 +88,7 @@ export function Hud({
       <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
       <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
       <DecisionChip snapshot={snapshot} onOpen={onOpenDecision} />
+      {snapshot.experimental && <ExperimentalChip exp={snapshot.experimental} />}
       <PolicyChip count={policyCount} open={policyOpen} unreadable={policyUnreadable} onToggle={(el) => onPolicyToggle?.(el)} />
       <DiagnosticsChip
         ref={chip}

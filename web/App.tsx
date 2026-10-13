@@ -115,7 +115,7 @@ export function App() {
           policyUnreadable={snapshot.policy?.unreadable === true}
           onPolicyToggle={(el) => (policy.open?.view === "list" ? policy.close() : policy.openList(el))}
         />
-        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} />
+        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} experimental={snapshot.experimental} />
         <ActivityBubble target={target} sessions={snapshot.sessions} />
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
         <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />
