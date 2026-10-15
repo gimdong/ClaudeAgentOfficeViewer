@@ -210,9 +210,11 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .desk-meta > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 서브에이전트 임시 책상(docs/design/subagent-desks/SPEC.md §1~§7): 리드 오른쪽 묶음, 72×90, 점선 --muted + "임시" 딱지, 누를 수 없음 */
 .sub-desks { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-left: -8px; max-width: 100%; }
-.desk--sub { width: 76px; border: 2px dashed var(--muted); padding: 4px 2px 2px; cursor: default; box-sizing: border-box; }
+.desk--sub { width: 76px; border: 2px dashed var(--muted); padding: 4px 0 2px; cursor: default; box-sizing: border-box; }
 .desk--sub svg { width: 72px; height: 90px; display: block; margin: 0 auto; }
 .desk--sub .nametag, .desk--sub .desk-meta { max-width: 70px; }
+.desk--sub .nametag { padding: 0 2px; }
+.desk--sub .desk-meta { min-height: 3.9em; } /* 줄 수가 달라도 상자·딱지 높이를 맞춘다(§5) */
 .desk--sub-done { opacity: .55; }
 .sub-tag { position: absolute; top: -8px; left: 4px; padding: 0 3px; background: var(--wall); font-size: 10px; line-height: 14px; color: var(--muted); }
 .sub-more { align-self: center; border-style: dashed; border-color: var(--muted); color: var(--muted); font-size: 11px; cursor: default; }

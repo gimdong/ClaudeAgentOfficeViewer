@@ -28,7 +28,6 @@ function Sub({ s, paused }: { s: SubagentDesk; paused: boolean }) {
   const tokens = model || s.tokens > 0 ? formatTokens(s.tokens) : "";
   const working = s.working && !paused;
   const done = !s.working;
-  const meta2 = [model, tokens].filter(Boolean).join(" · ");
   const tip = [SUB_TEXT.what, task && SUB_TEXT.task(task), [type, model, tokens && `토큰 ${tokens}`, done && SUB_TEXT.done].filter(Boolean).join(" · ")].filter(Boolean).join("\n");
   const label = done
     ? ["임시 책상", `서브에이전트 ${type}`, task && SUB_TEXT.task(task), SUB_TEXT.done]
@@ -37,8 +36,9 @@ function Sub({ s, paused }: { s: SubagentDesk; paused: boolean }) {
   return (
     // 누를 수 없는 책상: 포커스를 받지 않고 말풍선도 띄우지 않는다(§6). 한 일은 리드 말풍선에 합쳐 보인다
     <div className={`desk desk--sub state-${working ? "working" : "idle"}${done ? " desk--sub-done" : ""}`} role="img" aria-label={label.filter(Boolean).join(", ")} title={tip}>
+      {/* 끝나면 딱지 글자가 "끝남"(§3·§5, B178) */}
       <span className="sub-tag" aria-hidden="true">
-        {SUB_TEXT.tag}
+        {done ? SUB_TEXT.done : SUB_TEXT.tag}
       </span>
       <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
         {working ? (
@@ -68,9 +68,11 @@ function Sub({ s, paused }: { s: SubagentDesk; paused: boolean }) {
         <rect x={21} y={21} width={2} height={8} fill={NEON.deskDark} />
       </svg>
       <span className="nametag">{task || s.type || SUB_TEXT.noName}</span>
+      {/* 세 줄: 종류 / 모델 / 토큰. 모델이 없으면 토큰이 올라간다(§5, B178) */}
       <span className="desk-meta">
-        <span>{done ? `${type} · ${SUB_TEXT.done}` : type}</span>
-        {meta2 && <span>{meta2}</span>}
+        <span>{type}</span>
+        {model && <span>{model}</span>}
+        {tokens && <span>{tokens}</span>}
       </span>
     </div>
   );

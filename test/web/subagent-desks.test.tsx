@@ -28,10 +28,11 @@ describe("임시 책상(서브에이전트 임시 책상 SPEC)", () => {
       expect(d.tagName).toBe("DIV");
       expect(d.getAttribute("role")).toBe("img");
       expect(d.hasAttribute("tabindex")).toBe(false);
-      expect(d.querySelector(".sub-tag")!.textContent).toBe("임시");
     }
+    expect(w.querySelector(".sub-tag")!.textContent).toBe("임시");
+    expect(e.querySelector(".sub-tag")!.textContent).toBe("끝남"); // 끝남은 딱지 글자로(§3·§5, B178)
     expect(w.querySelector(".nametag")!.textContent).toBe("API 문서 조사");
-    expect([...w.querySelectorAll(".desk-meta > span")].map((x) => x.textContent)).toEqual(["Explore", "Sonnet 5.5 · 12.3k"]);
+    expect([...w.querySelectorAll(".desk-meta > span")].map((x) => x.textContent)).toEqual(["Explore", "Sonnet 5.5", "12.3k"]);
     expect(w.getAttribute("aria-label")).toBe("임시 책상, 서브에이전트 Explore, 일하는 중, 맡긴 일: API 문서 조사, Sonnet 5.5, 토큰 12.3k");
     expect(w.getAttribute("title")).toBe("서브에이전트(리드가 잠깐 부른 도우미)\n맡긴 일: API 문서 조사\nExplore · Sonnet 5.5 · 토큰 12.3k");
     expect(w.className).toContain("state-working");
@@ -39,7 +40,7 @@ describe("임시 책상(서브에이전트 임시 책상 SPEC)", () => {
     expect(e.className).toContain("desk--sub-done");
     expect(e.querySelector('[data-testid="empty-chair"]')).not.toBeNull();
     expect(e.querySelector(".nametag")!.textContent).toBe("테스트 로그 정리");
-    expect([...e.querySelectorAll(".desk-meta > span")].map((x) => x.textContent)).toEqual(["general-purpose · 끝남", "800"]);
+    expect([...e.querySelectorAll(".desk-meta > span")].map((x) => x.textContent)).toEqual(["general-purpose", "800"]); // 모델이 없으면 토큰이 둘째 줄로
     expect(e.getAttribute("aria-label")).toBe("임시 책상, 서브에이전트 general-purpose, 맡긴 일: 테스트 로그 정리, 끝남");
     expect(e.getAttribute("title")).toBe("서브에이전트(리드가 잠깐 부른 도우미)\n맡긴 일: 테스트 로그 정리\ngeneral-purpose · 토큰 800 · 끝남");
   });
