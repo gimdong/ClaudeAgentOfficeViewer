@@ -831,7 +831,13 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
     const at = prose.indexOf('<li id="sub-desks">');
     const line = at < 0 ? "" : prose.slice(at, prose.indexOf("</li>", at));
-    for (const t of [`<code>${SUB_TEXT.tag}</code> 딱지`, `<code>{종류} · ${SUB_TEXT.done}</code>`, `${SUBAGENT_LINGER_MS / 1000}초 뒤 사라집니다`, `${SUB_MAX}개까지`, "<code>+2</code> 같은 칩", `<code>${SUB_TEXT.more(2)}</code>`, "<strong>맡긴 일</strong>", "누를 수 없습니다", "빈 의자"]) {
+    // B178: 아래 줄은 세 줄(종류 / 모델 / 토큰), 끝나면 딱지 글자가 임시 → 끝남
+    const sub = read("web/office/SubDesks.tsx");
+    expect(sub).toContain("{done ? SUB_TEXT.done : SUB_TEXT.tag}");
+    expect(sub).toMatch(/<span>\{type\}<\/span>\s*\{model && <span>\{model\}<\/span>\}\s*\{tokens && <span>\{tokens\}<\/span>\}/);
+    expect(line).not.toContain(`· ${SUB_TEXT.done}`);
+    expect(line).not.toContain("아래 두 줄");
+    for (const t of [`<code>${SUB_TEXT.tag}</code> 딱지`, `딱지 글자가 <code>${SUB_TEXT.tag}</code>에서 <code>${SUB_TEXT.done}</code>으로 바뀌었다가`, "아래 세 줄은 종류(예: <code>Explore</code>), 모델, 토큰입니다", `${SUBAGENT_LINGER_MS / 1000}초 뒤 사라집니다`, `${SUB_MAX}개까지`, "<code>+2</code> 같은 칩", `<code>${SUB_TEXT.more(2)}</code>`, "<strong>맡긴 일</strong>", "누를 수 없습니다", "빈 의자"]) {
       expect(line, t).toContain(t);
     }
     expect(read("web/office/SubDesks.tsx")).toContain("+{rest}"); // 칩에 보이는 글자는 +N
