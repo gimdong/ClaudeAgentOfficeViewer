@@ -65,12 +65,12 @@ export async function readSubagents(
   tracker: SubagentTracker | undefined,
   now: number,
 ): Promise<SubagentDesk[]> {
-  const out: SubagentDesk[] = [];
+  const out: Array<{ desk: SubagentDesk; start: number }> = [];
   let projects: string[];
   try {
     projects = await readdir(projectsDir);
   } catch {
-    return out;
+    return [];
   }
   for (const project of projects) {
     const dir = join(projectsDir, project, sessionId, "subagents");
@@ -94,14 +94,16 @@ export async function readSubagents(
       const file = join(dir, `agent-${id}.jsonl`);
       const mtime = usage.mtime(file);
       const run = tracker?.get(sessionId, id);
-      const running = !!run && run.stoppedAt === undefined;
-      const fresh = mtime !== undefined && now - mtime <= SUBAGENT_LINGER_MS;
+      // 기록이 있으면 기록이 우선(Stop 직후에도 mtime은 새것이라 "끝남"이 안 보이게 된다, B175). 기록이 없을 때(서버 재시작)만 mtime 30초
+      const working = run ? run.stoppedAt === undefined : mtime !== undefined && now - mtime <= SUBAGENT_LINGER_MS;
       const end = Math.max(run?.stoppedAt ?? 0, mtime ?? 0);
-      const working = running || fresh;
       if (!working && !(end && now - end < SUBAGENT_LINGER_MS)) continue;
       const model = usage.lastUsage(file)?.model;
-      out.push({ id, type: str(meta.agentType), description: str(meta.description), ...(model ? { model } : {}), tokens: usage.fileTotal(file).total, working });
+      const desk: SubagentDesk = { id, type: str(meta.agentType), description: str(meta.description), ...(model ? { model } : {}), tokens: usage.fileTotal(file).total, working };
+      out.push({ desk, start: run?.startedAt ?? mtime ?? 0 });
     }
   }
-  return out.sort((a, b) => a.id.localeCompare(b.id));
+  // 일하는 중 먼저, 그 안에서 먼저 시작한 것부터(기록이 없으면 mtime). 스냅샷마다 순서가 흔들리지 않게 id로 끝을 맺는다(명세 §7, B175)
+  out.sort((a, b) => Number(b.desk.working) - Number(a.desk.working) || a.start - b.start || a.desk.id.localeCompare(b.desk.id));
+  return out.map((x) => x.desk);
 }

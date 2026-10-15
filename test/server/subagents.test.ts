@@ -77,8 +77,8 @@ describe("SessionView.subagents", () => {
     const t = new SubagentTracker();
     t.onEvent(ev("SubagentStart"), NOW - 60_000);
     t.onEvent(ev("SubagentStop"), NOW - 40_000);
-    // mtime이 30초 안이면 Stop 뒤여도 working
-    expect((await build(t)).sessions[0].subagents?.map((x) => x.working)).toEqual([true]);
+    // 기록이 있으면 기록이 우선: Stop 뒤면 mtime이 새것이어도 working:false(B175), 끝(mtime)에서 30초 안이라 보인다
+    expect((await build(t)).sessions[0].subagents?.map((x) => x.working)).toEqual([false]);
     // mtime 31초 전, Stop 40초 전 → working 아님, 끝(늦은 쪽 = mtime)에서 30초 지남 → 없음
     await utimes(h.path(`${SUB}/agent-${ID}.jsonl`), new Date(NOW - 31_000), new Date(NOW - 31_000));
     expect((await build(t)).sessions[0].subagents).toBeUndefined();
@@ -89,6 +89,26 @@ describe("SessionView.subagents", () => {
     t2.onEvent(ev("SubagentStop"), NOW - 5_000);
     expect((await build(t2)).sessions[0].subagents?.map((x) => x.working)).toEqual([false]);
     expect((await build(t2, NOW + SUBAGENT_LINGER_MS)).sessions[0].subagents).toBeUndefined();
+  });
+
+  it("Stop 직후(대화 기록 mtime이 새것)에도 기록이 있으면 기록이 우선이라 working:false로 보인다(B175)", async () => {
+    await subagent(ID, { ageMs: 500 });
+    const t = new SubagentTracker();
+    t.onEvent(ev("SubagentStart"), NOW - 10_000);
+    t.onEvent(ev("SubagentStop"), NOW - 400);
+    expect((await build(t)).sessions[0].subagents).toEqual([expect.objectContaining({ id: ID, working: false })]);
+  });
+
+  it("정렬: 일하는 중 먼저, 그 안에서 먼저 시작한 것부터(기록이 없으면 mtime)(B175, 명세 §7)", async () => {
+    const [A, B, C, D] = ["af000000000000001", "ae000000000000002", "ad000000000000003", "ac000000000000004"];
+    for (const id of [A, B, C]) await subagent(id, { ageMs: 1_000 });
+    await subagent(D, { ageMs: 20_000 }); // 기록 없음 → mtime 20초 전 = 시작으로 봄, working
+    const t = new SubagentTracker();
+    t.onEvent(ev("SubagentStart", A), NOW - 50_000);
+    t.onEvent(ev("SubagentStart", B), NOW - 10_000);
+    t.onEvent(ev("SubagentStart", C), NOW - 90_000);
+    t.onEvent(ev("SubagentStop", C), NOW - 5_000); // 끝남은 뒤로
+    expect((await build(t)).sessions[0].subagents?.map((x) => [x.id, x.working])).toEqual([[A, true], [D, true], [B, true], [C, false]]);
   });
 
   it("기록이 없으면(서버를 다시 켬) mtime만으로: 30초 안에 바뀐 것만 working으로 보인다", async () => {
