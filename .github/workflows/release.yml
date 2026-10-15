@@ -1,0 +1,61 @@
+# 태그(v<버전>)를 push하면 검사 → 패키징 → GitHub Release(설치 파일 첨부)까지 한다.
+# 버전 올리기·태그는 사람이 하고(team-lead), 산출물 만들기·올리기는 이 워크플로가 한다.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # Release를 만들고 파일을 올린다
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # 개발·검증이 macOS에서 이뤄졌고(ps lstart, fs.watch, python3 zip, qlmanage 없음) 패키징도 그 환경을 그대로 쓴다
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 태그와 package.json 버전이 같은지
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "::error::태그 ${GITHUB_REF_NAME} ≠ package.json v$v"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package:beta
+
+      - name: 설치 파일과 체크섬
+        run: |
+          cd release
+          ls -la "claude-office-${VERSION}.tar.gz" "claude-office-${VERSION}.zip"
+          shasum -a 256 "claude-office-${VERSION}.tar.gz" "claude-office-${VERSION}.zip" > "claude-office-${VERSION}.sha256"
+          cat "claude-office-${VERSION}.sha256"
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          case "$VERSION" in *-*) pre="--prerelease" ;; esac
+          cat > notes.md <<NOTES
+          ## 설치 파일
+          - **macOS·Linux:** \`claude-office-${VERSION}.tar.gz\` → \`tar -xzf claude-office-${VERSION}.tar.gz && cd claude-office-${VERSION} && sh install.sh\`
+          - **Windows:** \`claude-office-${VERSION}.zip\` → 압축을 풀고 \`install.ps1\` 실행
+          - 체크섬: \`claude-office-${VERSION}.sha256\`
+          - 자세한 순서는 압축 안의 \`사용설명서.html\` 4장
+          NOTES
+          gh release create "${GITHUB_REF_NAME}" $pre --title "${GITHUB_REF_NAME}" --notes-file notes.md --generate-notes \
+            "release/claude-office-${VERSION}.tar.gz" "release/claude-office-${VERSION}.zip" "release/claude-office-${VERSION}.sha256"
