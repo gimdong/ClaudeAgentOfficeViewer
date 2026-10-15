@@ -19,6 +19,21 @@ export const CH_TEXT = {
   fName: "이름(비우면 폴더 이름)",
   fModel: "모델",
   fPrompt: "첫 지시(선택)",
+  fMode: "일하는 방식",
+  modeSub: "서브에이전트(기본)",
+  modeTeam: "agent team(실험)",
+  teamGood: ["팀원마다 이 층에 책상이 생기고, 각자 무엇을 하는지·모델·토큰이 따로 보입니다.", "팀원끼리 메시지로 의논하고 일을 나눕니다.", "결정 대기와 권한 정책을 팀원 이름별로 다룰 수 있습니다."],
+  teamWarn: [
+    "Claude Code의 실험 기능입니다. 버전에 따라 동작이 바뀔 수 있습니다.",
+    "팀원마다 따로 생각하기 때문에 토큰을 훨씬 많이 씁니다. 사용 한도에 빨리 닿을 수 있습니다.",
+    "팀원의 권한 확인 창은 리드의 터미널(tmux)에 뜹니다. 대시보드에서도 답할 수 있습니다.",
+    "팀원끼리 서로 답을 기다리다 함께 멈출 수 있습니다. 이때는 리드에게 \"다시 진행해\"라고 지시해 주세요.",
+    "한 팀원이 사용 한도에 걸리면 그 팀원만 멈출 수 있습니다.",
+    "리드를 끄면 팀원도 함께 끝납니다.",
+  ],
+  teamGoodTitle: "agent team으로 하면",
+  teamWarnTitle: "알아 둘 점",
+  teamHint: "간단한 일이나 처음 써 보는 경우에는 서브에이전트(기본)를 권합니다.",
   modelDefault: "기본",
   launch: "띄우기",
   launching: "띄우는 중…",
@@ -82,7 +97,7 @@ const at = (id: string, p: string) => `/api/floors/${encodeURIComponent(id)}/${p
 export interface Held { id: string; text: string; at: string }
 export const chApi = {
   setExperimental: (on: boolean) => req<{ saved: boolean }>("PUT", "/api/experimental", { channels: on }),
-  launch: (b: { cwd: string; name?: string; model?: string; prompt?: string }) => req<{ sessionId: string; tmux: string }>("POST", "/api/floors/launch", b),
+  launch: (b: { cwd: string; name?: string; model?: string; prompt?: string; mode?: string }) => req<{ sessionId: string; tmux: string }>("POST", "/api/floors/launch", b),
   instruct: (id: string, text: string) => req<{ id: string; state: "sent" | "held" }>("POST", at(id, "instruct"), { text }),
   held: (id: string) => req<{ held: Held[] }>("GET", at(id, "held")),
   editHeld: (id: string, hid: string, text: string) => req<object>("PUT", at(id, `held/${encodeURIComponent(hid)}`), { text }),
@@ -157,7 +172,7 @@ export function ExperimentalDialog({ exp, onClose, announce }: { exp: NonNullabl
 }
 
 export function LaunchDialog({ onClose, announce }: { onClose(): void; announce?(t: string): void }) {
-  const [f, setF] = useState({ cwd: "", name: "", model: "", prompt: "" });
+  const [f, setF] = useState({ cwd: "", name: "", model: "", prompt: "", mode: "subagents" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -166,7 +181,7 @@ export function LaunchDialog({ onClose, announce }: { onClose(): void; announce?
     if (busy) return;
     setBusy(true);
     setErr(null);
-    const r = await chApi.launch({ cwd: f.cwd.trim(), ...(f.name.trim() ? { name: f.name.trim() } : {}), ...(f.model ? { model: f.model } : {}), ...(f.prompt.trim() ? { prompt: f.prompt } : {}) });
+    const r = await chApi.launch({ cwd: f.cwd.trim(), ...(f.name.trim() ? { name: f.name.trim() } : {}), ...(f.model ? { model: f.model } : {}), ...(f.prompt.trim() ? { prompt: f.prompt } : {}), ...(f.mode === "team" ? { mode: "team" } : {}) });
     setBusy(false);
     if (!r.ok) return setErr(errText(r.error));
     setDone(r.body.tmux);
@@ -211,6 +226,23 @@ export function LaunchDialog({ onClose, announce }: { onClose(): void; announce?
           <option value="haiku">Haiku</option>
         </select>
       </label>
+      <fieldset className="ch-field ch-mode">
+        <legend>{CH_TEXT.fMode}</legend>
+        {(["subagents", "team"] as const).map((m) => (
+          <label key={m}>
+            <input type="radio" name="mode" value={m} checked={f.mode === m} onChange={() => setF({ ...f, mode: m })} /> {m === "team" ? CH_TEXT.modeTeam : CH_TEXT.modeSub}
+          </label>
+        ))}
+      </fieldset>
+      {f.mode === "team" && (
+        <div className="ch-team" data-testid="team-note">
+          <p className="ch-sub">{CH_TEXT.teamGoodTitle}</p>
+          <ul>{CH_TEXT.teamGood.map((t) => <li key={t}>{t}</li>)}</ul>
+          <p className="ch-sub">{CH_TEXT.teamWarnTitle}</p>
+          <ul>{CH_TEXT.teamWarn.map((t) => <li key={t}>{t}</li>)}</ul>
+          <p className="ch-note">{CH_TEXT.teamHint}</p>
+        </div>
+      )}
       <label className="ch-field">
         {CH_TEXT.fPrompt}
         <textarea rows={4} maxLength={8000} {...field("prompt")} />

@@ -580,3 +580,9 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .held-text { flex: 1 1 200px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
 .chip--channel { border-color: var(--cyan, #3fd0ff); color: var(--cyan, #3fd0ff); }
 .exp-chip.on { color: var(--green, #39ffb6); }
+.ch-mode { border: 0; padding: 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.ch-mode legend { padding: 0; margin-bottom: 4px; }
+.ch-mode label { color: var(--ink, #e8e4ff); }
+.ch-team { border-left: 4px solid var(--yellow); padding: 4px 10px; margin: 8px 0; font-size: 12px; }
+.ch-team ul { margin: 2px 0 6px; padding-left: 18px; }
+.ch-team li { word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }

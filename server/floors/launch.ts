@@ -5,7 +5,7 @@ import { MAX_TEXT } from "./channels";
 
 export const MODELS = ["opus", "sonnet", "haiku"] as const;
 export type LaunchModel = (typeof MODELS)[number];
-export interface LaunchInput { cwd: string; name: string; model?: LaunchModel; prompt?: string }
+export interface LaunchInput { cwd: string; name: string; model?: LaunchModel; prompt?: string; mode?: "subagents" | "team" }
 // 앞이 "-"이면 claude가 옵션으로 읽는다(리뷰 #410 I1) — 이름·첫 지시 모두 막는다
 const NAME = /^(?!-)[\p{L}\p{N} ._-]{1,40}$/u;
 const CHAR = /^[\p{L}\p{N} ._-]$/u;
@@ -13,7 +13,7 @@ const CHAR = /^[\p{L}\p{N} ._-]$/u;
 /** 본문 검사(스펙 4.2). 폴더는 realpath 뒤 실제 디렉터리여야 한다 */
 export function validateLaunch(b: unknown, home = homedir()): { ok: true; value: LaunchInput } | { ok: false; error: string } {
   if (!b || typeof b !== "object" || Array.isArray(b)) return { ok: false, error: "body" };
-  const { cwd, name, model, prompt, ...rest } = b as Record<string, unknown>;
+  const { cwd, name, model, prompt, mode, ...rest } = b as Record<string, unknown>;
   if (Object.keys(rest).length) return { ok: false, error: "body" };
   if (typeof cwd !== "string" || !cwd || cwd.length > 1024 || cwd.includes("\0")) return { ok: false, error: "cwd" };
   const expanded = cwd === "~" ? home : cwd.startsWith("~/") ? join(home, cwd.slice(2)) : cwd;
@@ -31,9 +31,10 @@ export function validateLaunch(b: unknown, home = homedir()): { ok: true; value:
   } else if (typeof name === "string" && NAME.test(name)) nm = name;
   else return { ok: false, error: "name" };
   if (model !== undefined && !MODELS.includes(model as LaunchModel)) return { ok: false, error: "model" };
+  if (mode !== undefined && mode !== "subagents" && mode !== "team") return { ok: false, error: "mode" };
   if (prompt !== undefined && (typeof prompt !== "string" || prompt.length > MAX_TEXT || prompt.includes("\0"))) return { ok: false, error: "prompt" };
   if (typeof prompt === "string" && prompt.trimStart().startsWith("-")) return { ok: false, error: "prompt-dash" };
-  return { ok: true, value: { cwd: real, name: nm, ...(model ? { model: model as LaunchModel } : {}), ...(prompt ? { prompt } : {}) } };
+  return { ok: true, value: { cwd: real, name: nm, ...(model ? { model: model as LaunchModel } : {}), ...(prompt ? { prompt } : {}), ...(mode === "team" ? { mode: "team" as const } : {}) } };
 }
 
 /**
@@ -45,6 +46,8 @@ export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: s
     ...(o.socket ? ["-L", o.socket] : []),
     "new-session", "-d", "-s", o.tmuxName, "-c", o.cwd,
     "-e", `CLAUDE_OFFICE_FLOOR_KEY=${o.key}`, "-e", `CLAUDE_OFFICE_PORT=${o.port}`,
+    // agent team은 Claude Code의 실험 기능이라 이 환경변수가 있어야 켜진다. 사용자 설정 파일은 건드리지 않는다
+    ...(o.mode === "team" ? ["-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"] : []),
     "--",
     o.claude, "--session-id", o.sessionId, "--name", o.name,
     ...(o.model ? ["--model", o.model] : []),

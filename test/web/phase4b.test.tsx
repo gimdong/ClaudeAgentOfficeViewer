@@ -166,3 +166,21 @@ describe("실험 기능 창(스펙 3장)", () => {
     expect(screen.getByRole("button", { name: CH_TEXT.expOn }).getAttribute("aria-disabled")).toBe("true");
   });
 });
+
+describe("일하는 방식 선택", () => {
+  it("기본은 서브에이전트(설명 없음). agent team을 고르면 효과·알아 둘 점이 보이고 mode: team으로 띄운다", async () => {
+    show([]);
+    render(<App />);
+    fireEvent.click(within(screen.getByTestId("vacant-floor")).getByRole("button", { name: /새 세션 시작/ }));
+    expect((screen.getByRole("radio", { name: CH_TEXT.modeSub }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId("team-note")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: CH_TEXT.modeTeam }));
+    const note = screen.getByTestId("team-note").textContent ?? "";
+    for (const t of [...CH_TEXT.teamGood, ...CH_TEXT.teamWarn, CH_TEXT.teamHint]) expect(note.includes(t)).toBe(true);
+    replies["POST /api/floors/launch"] = { status: 200, body: { sessionId: "n1", tmux: "co-1" } };
+    fireEvent.change(screen.getByLabelText(CH_TEXT.fCwd), { target: { value: "~/w" } });
+    fireEvent.click(screen.getByRole("button", { name: CH_TEXT.launch }));
+    await flush();
+    expect(calls()).toContainEqual(["/api/floors/launch", "POST", JSON.stringify({ cwd: "~/w", mode: "team" })]);
+  });
+});

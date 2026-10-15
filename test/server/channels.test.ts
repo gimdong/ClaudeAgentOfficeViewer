@@ -243,3 +243,16 @@ describe("리뷰 #410 수정", () => {
     expect(hub.view("s1")?.held).toBe(1);
   });
 });
+
+describe("일하는 방식(서브에이전트/agent team)", () => {
+  it("team이면 tmux -e로 agent team 환경변수를 넘기고, 기본(서브에이전트)은 넘기지 않는다. 모르는 값은 400", () => {
+    const base = { tmuxName: "co-1", claude: "/c", channelSpec: "s", sessionId: "u", key: "k", port: 1, cwd: "/w", name: "n" };
+    expect(launchArgs({ ...base, mode: "team" })).toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
+    expect(launchArgs(base).some((a) => a.includes("AGENT_TEAMS"))).toBe(false);
+    const a = launchArgs({ ...base, mode: "team" });
+    expect(a.indexOf("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")).toBeLessThan(a.indexOf("--"));
+    expect(validateLaunch({ cwd: tmp, mode: "team" })).toMatchObject({ ok: true, value: { mode: "team" } });
+    expect(validateLaunch({ cwd: tmp, mode: "subagents" })).toMatchObject({ ok: true });
+    expect(validateLaunch({ cwd: tmp, mode: "swarm" })).toEqual({ ok: false, error: "mode" });
+  });
+});
