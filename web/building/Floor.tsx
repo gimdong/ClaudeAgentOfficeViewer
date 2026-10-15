@@ -1,7 +1,8 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
+import { SubDesks } from "../office/SubDesks";
 import { Icon } from "../pixel/Icon";
 import { Backdrop } from "./Backdrop";
 import { FloorControls } from "./FloorControls";
@@ -176,8 +177,12 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             </div>
           )}
           <div className="desks">
-            {session.members.map((m) => (
-              <Desk key={m.name} member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} />
+            {session.members.map((m, i) => (
+              <Fragment key={m.name}>
+                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} />
+                {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
+                {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
+              </Fragment>
             ))}
           </div>
         </div>

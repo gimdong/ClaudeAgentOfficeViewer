@@ -208,6 +208,14 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .nametag { display: inline-block; max-width: 92px; margin-top: 2px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 .desk-meta { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 1.3; color: var(--muted); }
 .desk-meta > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 서브에이전트 임시 책상(docs/design/subagent-desks/SPEC.md §1~§7): 리드 오른쪽 묶음, 72×90, 점선 --muted + "임시" 딱지, 누를 수 없음 */
+.sub-desks { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-left: -8px; max-width: 100%; }
+.desk--sub { width: 76px; border: 2px dashed var(--muted); padding: 4px 2px 2px; cursor: default; box-sizing: border-box; }
+.desk--sub svg { width: 72px; height: 90px; display: block; margin: 0 auto; }
+.desk--sub .nametag, .desk--sub .desk-meta { max-width: 70px; }
+.desk--sub-done { opacity: .55; }
+.sub-tag { position: absolute; top: -8px; left: 4px; padding: 0 3px; background: var(--wall); font-size: 10px; line-height: 14px; color: var(--muted); }
+.sub-more { align-self: center; border-style: dashed; border-color: var(--muted); color: var(--muted); font-size: 11px; cursor: default; }
 .desk--decision .nametag { background: var(--yellow); color: var(--wall); }
 /* Phase 2: 보고서를 열 수 있는 결정 대기 책상은 버튼이다(디자인 6장 "Phase 2 이후" 열, 11장) */
 button.desk { cursor: pointer; font: inherit; color: inherit; }
@@ -538,7 +546,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
   .floor-name { max-width: 60vw; }
   .controls { margin-left: 0; flex-basis: 100%; }
   .bars { flex-basis: 100%; }
-  .backdrop { display: none; }
+  svg.backdrop { display: none; } /* svg.px(display: block)보다 구체적이어야 숨는다 */
   .diag-panel { width: 100vw; top: 8vh; border-left: 0; border-top: 4px solid var(--cyan); }
   .rp { width: 100vw; top: 8vh; border-left: 0; border-top: 4px solid var(--yellow); }
   .fc-err { max-width: none; flex-basis: 100%; }
