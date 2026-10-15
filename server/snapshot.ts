@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot, SubagentDesk } from "../src/shared/types";
 import { emptySum } from "../src/shared/tokens";
 import type { OfficeConfig } from "./config";
@@ -331,15 +331,16 @@ export class SnapshotBuilder {
       ...(stale ? { stale: true } : {}),
       context: contextInfo(last, this.opts.config.contextWindows),
       members,
-      ...(await this.subagentField(s, now)),
+      ...(await this.subagentField(s, leadFile, now)),
       ...this.channelField(s),
     };
   }
 
   /** 살아 있는 층만. 수집이 실패해도 층은 그대로 보인다 */
-  private async subagentField(s: SessionRecord, now: number): Promise<{ subagents?: SubagentDesk[] }> {
-    if (!s.alive) return {};
-    const list = await readSubagents(join(this.opts.claudeHome, "projects"), s.sessionId, this.usage, this.opts.subagents, now).catch(
+  private async subagentField(s: SessionRecord, leadFile: string | undefined, now: number): Promise<{ subagents?: SubagentDesk[] }> {
+    if (!s.alive || !leadFile) return {};
+    // 리드 대화 기록과 같은 프로젝트 폴더의 <sessionId>/subagents 하나만(B177 M1)
+    const list = await readSubagents(join(dirname(leadFile), s.sessionId, "subagents"), s.sessionId, this.usage, this.opts.subagents, now).catch(
       (e) => (warnCaught("snapshot", "cannot read subagents", e), []),
     );
     return list.length ? { subagents: list } : {};

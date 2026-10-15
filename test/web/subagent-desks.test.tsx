@@ -73,6 +73,8 @@ describe("임시 책상(서브에이전트 임시 책상 SPEC)", () => {
     expect(d.querySelector('[data-testid="empty-chair"]')).not.toBeNull();
     expect(d.querySelector(".frame-b")).toBeNull();
     expect(d.className).not.toContain("state-working");
+    // 그림이 빈 의자이므로 "일하는 중"이라 읽지 않는다. 휴업 층 책상(Desk)의 그림 상태와 같은 말(B177 M3)
+    expect(d.getAttribute("aria-label")).toBe("임시 책상, 서브에이전트 Explore, 대기, 맡긴 일: API 문서 조사, Sonnet 5.5, 토큰 12.3k");
   });
 
   it("서브에이전트가 없으면 묶음이 없다", () => {

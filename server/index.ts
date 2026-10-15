@@ -23,7 +23,7 @@ import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorIte
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
-import { Logger, errInfo, getLogger, scrub, setLogger } from "./log";
+import { Logger, errInfo, getLogger, scrub, setLogger, warnCaught } from "./log";
 import { resolvePaths, type OfficePaths } from "./paths";
 import { SubagentTracker } from "./collectors/subagents";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
@@ -302,7 +302,11 @@ async function main(): Promise<void> {
   const stats = new HookStats();
   setInterval(() => stats.summarize(), 60_000).unref();
   const onHookEvent = (input: Record<string, unknown>) => {
-    subagents.onEvent(input);
+    try {
+      subagents.onEvent(input);
+    } catch (e) {
+      warnCaught("subagents", "tracker failed", e); // 기록기가 실패해도 아래 저장·관문은 계속(B177 M2)
+    }
     if (events.add(input, Date.now())) hub.poke();
     gate.onEvent(input);
   };

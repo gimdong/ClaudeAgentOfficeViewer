@@ -1,5 +1,5 @@
 import type { SubagentDesk } from "../../src/shared/types";
-import { formatTokens, modelLabel } from "../format";
+import { formatTokens, modelLabel, stateLabel } from "../format";
 import { NEON } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
 import { characterRows, spriteRects } from "../pixel/sprites";
@@ -32,7 +32,7 @@ function Sub({ s, paused }: { s: SubagentDesk; paused: boolean }) {
   const tip = [SUB_TEXT.what, task && SUB_TEXT.task(task), [type, model, tokens && `토큰 ${tokens}`, done && SUB_TEXT.done].filter(Boolean).join(" · ")].filter(Boolean).join("\n");
   const label = done
     ? ["임시 책상", `서브에이전트 ${type}`, task && SUB_TEXT.task(task), SUB_TEXT.done]
-    : ["임시 책상", `서브에이전트 ${type}`, "일하는 중", task && SUB_TEXT.task(task), model, tokens && `토큰 ${tokens}`];
+    : ["임시 책상", `서브에이전트 ${type}`, working ? "일하는 중" : stateLabel("idle"), task && SUB_TEXT.task(task), model, tokens && `토큰 ${tokens}`]; // 휴업 층은 빈 의자 — Desk의 그림 상태(idle)와 같은 말(B177 M3)
   const colors = { h: NEON.hair, s: NEON.skin, e: NEON.eye, c: MUTED, p: NEON.pants, g: NEON.glasses, t: NEON.pink };
   return (
     // 누를 수 없는 책상: 포커스를 받지 않고 말풍선도 띄우지 않는다(§6). 한 일은 리드 말풍선에 합쳐 보인다

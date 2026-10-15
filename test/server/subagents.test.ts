@@ -4,7 +4,7 @@ import { utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SnapshotBuilder } from "../../server/snapshot";
-import { SubagentTracker, SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
+import { SubagentTracker, SUBAGENT_LINGER_MS, SUBAGENT_MAX_RUNS } from "../../server/collectors/subagents";
 import { buildBundle } from "../../server/diag/bundle";
 import { HookStats } from "../../server/events/stats";
 import { Logger, setLogger } from "../../server/log";
@@ -50,6 +50,16 @@ describe("SubagentTracker (B171 — 메모리만)", () => {
     t.onEvent(ev("SubagentStart", "a1111111111111111", ""), NOW); // 턴 뒤 내부 보조(agent_type 빈 값)
     t.onEvent({ hook_event_name: "PreToolUse", session_id: "s1", agent_id: "a2222222222222222", agent_type: "Explore" }, NOW);
     expect(t.size()).toBe(1);
+  });
+
+  it("Stop 없는 기록도 시작 뒤 1시간이면 prune이 지우고, 기록 총수는 상한 안이다(B177 I1 b)", () => {
+    const t = new SubagentTracker();
+    t.onEvent(ev("SubagentStart"), NOW - 2 * 3_600_000);
+    t.prune(NOW);
+    expect(t.get("s1", ID)).toBeUndefined();
+    for (let i = 0; i < 10_000; i++) t.onEvent(ev("SubagentStart", `a${i.toString(16).padStart(16, "0")}`, "Explore", `s${i % 7}`), NOW + i);
+    expect(t.size()).toBeLessThanOrEqual(SUBAGENT_MAX_RUNS);
+    expect(t.get(`s${9_999 % 7}`, `a${(9_999).toString(16).padStart(16, "0")}`)).toBeDefined(); // 오래된 것부터 버린다
   });
 
   it("끝난 지 오래된 기록은 prune이 지운다", () => {
@@ -111,6 +121,23 @@ describe("SessionView.subagents", () => {
     expect((await build(t)).sessions[0].subagents?.map((x) => [x.id, x.working])).toEqual([[A, true], [D, true], [B, true], [C, false]]);
   });
 
+  it("Stop을 못 받아도 대화 기록이 10분 넘게 그대로면 working이 아니고 끝 시각은 그 mtime이라 사라진다(B177 I1 a)", async () => {
+    await subagent(ID, { ageMs: 9 * 60_000 });
+    const t = new SubagentTracker();
+    t.onEvent(ev("SubagentStart"), NOW - 20 * 60_000);
+    expect((await build(t)).sessions[0].subagents?.map((x) => x.working)).toEqual([true]);
+    await utimes(h.path(`${SUB}/agent-${ID}.jsonl`), new Date(NOW - 11 * 60_000), new Date(NOW - 11 * 60_000));
+    expect((await build(t)).sessions[0].subagents).toBeUndefined();
+  });
+
+  it("리드 대화 기록과 같은 프로젝트 폴더의 <sessionId>/subagents만 읽는다(B177 M1)", async () => {
+    await h.write(`projects/-other/s1/subagents/agent-${ID}.meta.json`, { agentType: "Explore", description: DESC });
+    await h.append(`projects/-other/s1/subagents/agent-${ID}.jsonl`, [assistant({ requestId: "o", ts: NOW - 1000, output: 1 })]);
+    const t = new SubagentTracker();
+    t.onEvent(ev("SubagentStart"), NOW - 2000);
+    expect((await build(t)).sessions[0].subagents).toBeUndefined();
+  });
+
   it("기록이 없으면(서버를 다시 켬) mtime만으로: 30초 안에 바뀐 것만 working으로 보인다", async () => {
     await subagent(ID, { ageMs: 5_000 });
     await subagent("a9999999999999999", { ageMs: 45_000 });
@@ -140,13 +167,15 @@ describe("description은 화면에만(B172)", () => {
     try {
       setLogger(new Logger({ dir: logDir }));
       await subagent(ID);
-      await h.write(`${SUB}/agent-abad0000000000000.meta.json`, "{broken"); // 경고 경로도 지나게
+      await h.write(`${SUB}/agent-abad0000000000000.meta.json`, "{broken"); // 경고 경로도 지나게(기록이 있어야 읽는다)
       const t = new SubagentTracker();
       t.onEvent(ev("SubagentStart"), NOW - 1000);
+      t.onEvent(ev("SubagentStart", "abad0000000000000"), NOW - 1000);
       const snap = await build(t);
       expect(snap.sessions[0].subagents?.[0].description).toBe(DESC); // 스냅샷에는 있다
       const bundle = await buildBundle({ doctor: async () => [], hooks: new HookStats(() => NOW).view(), snapshot: snap, logDir, now: () => NOW, appVersion: "t" });
       const logs = readdirSync(logDir).map((f) => readFileSync(join(logDir, f), "utf8")).join("\n");
+      expect(logs.split("\n").filter(Boolean).length).toBeGreaterThan(0); // 로그가 실제로 쓰였다(qa Minor)
       expect(logs).not.toContain(DESC);
       expect(JSON.stringify(bundle)).not.toContain(DESC);
     } finally {
