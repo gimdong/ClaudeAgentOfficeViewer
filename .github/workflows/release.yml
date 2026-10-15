@@ -51,6 +51,8 @@ jobs:
           pre=""
           case "$VERSION" in *-*) pre="--prerelease" ;; esac
           cat > notes.md <<NOTES
+          > 아래 **Source code (zip / tar.gz)**는 GitHub가 모든 릴리스에 자동으로 붙이는 소스 묶음입니다. 설치에는 쓰지 마세요.
+
           ## 설치 파일
           - **macOS·Linux:** \`claude-office-${VERSION}.tar.gz\` → \`tar -xzf claude-office-${VERSION}.tar.gz && cd claude-office-${VERSION} && sh install.sh\`
           - **Windows:** \`claude-office-${VERSION}.zip\` → 압축을 풀고 \`install.ps1\` 실행
