@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot } from "../src/shared/types";
+import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot, SubagentDesk } from "../src/shared/types";
 import { emptySum } from "../src/shared/tokens";
 import type { OfficeConfig } from "./config";
 import type { BudgetGate } from "./budget/gate";
@@ -12,6 +12,7 @@ import type { EventStore } from "./events/store";
 import { readLimits } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
+import { readSubagents, type SubagentTracker } from "./collectors/subagents";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
 import { errInfo, getLogger, warnCaught } from "./log";
@@ -41,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 서브에이전트 시작·끝 기록기(B171). 없으면 대화 기록 mtime만으로 판정한다 */
+  subagents?: SubagentTracker;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -143,6 +146,7 @@ export class SnapshotBuilder {
     // (Task 7 fix round 1에서 readLimits가 now를 받아 이미 지난 창을 걸러내도록 바뀌었다).
     const limits = await readLimits(claudeHome, now).catch((e) => (warnCaught("snapshot", "limits collect failed", e), null));
     this.opts.events?.prune(now);
+    this.opts.subagents?.prune(now);
 
     // 층 관리(Phase 4a): 끝난 세션을 정리하고, 숨긴 세션을 뺀 나머지로 층 번호·현재 세션을 매긴다(스펙 6, B118)
     const floors = this.opts.floors;
@@ -327,8 +331,18 @@ export class SnapshotBuilder {
       ...(stale ? { stale: true } : {}),
       context: contextInfo(last, this.opts.config.contextWindows),
       members,
+      ...(await this.subagentField(s, now)),
       ...this.channelField(s),
     };
+  }
+
+  /** 살아 있는 층만. 수집이 실패해도 층은 그대로 보인다 */
+  private async subagentField(s: SessionRecord, now: number): Promise<{ subagents?: SubagentDesk[] }> {
+    if (!s.alive) return {};
+    const list = await readSubagents(join(this.opts.claudeHome, "projects"), s.sessionId, this.usage, this.opts.subagents, now).catch(
+      (e) => (warnCaught("snapshot", "cannot read subagents", e), []),
+    );
+    return list.length ? { subagents: list } : {};
   }
 
   private channelField(s: SessionRecord): { channel?: NonNullable<SessionView["channel"]> } {

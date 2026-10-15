@@ -25,6 +25,7 @@ import { EventStore } from "./events/store";
 import { SnapshotHub } from "./hub";
 import { Logger, errInfo, getLogger, scrub, setLogger } from "./log";
 import { resolvePaths, type OfficePaths } from "./paths";
+import { SubagentTracker } from "./collectors/subagents";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import type { Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
@@ -290,7 +291,8 @@ async function main(): Promise<void> {
   };
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
+  const subagents = new SubagentTracker();
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -300,6 +302,7 @@ async function main(): Promise<void> {
   const stats = new HookStats();
   setInterval(() => stats.summarize(), 60_000).unref();
   const onHookEvent = (input: Record<string, unknown>) => {
+    subagents.onEvent(input);
     if (events.add(input, Date.now())) hub.poke();
     gate.onEvent(input);
   };

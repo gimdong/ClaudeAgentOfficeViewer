@@ -64,6 +64,20 @@ export type DecisionAnswer =
   | { action: "continue" }
   | { action: "stop" };
 
+/** 임시 책상 하나(서브에이전트 임시 책상 B). description은 사용자가 맡긴 일이라 화면에만 쓴다(로그·진단 금지, B172) */
+export interface SubagentDesk {
+  /** agent_id(= subagents/agent-<id>.jsonl의 id) */
+  id: string;
+  /** agentType(예: Explore). meta에 없으면 "" */
+  type: string;
+  description: string;
+  model?: string;
+  /** 그 대화 기록의 토큰 합(cacheRead 제외) */
+  tokens: number;
+  /** 시작했고 아직 끝나지 않았거나, 대화 기록이 30초 안에 바뀜(B171). false면 끝난 뒤 30초 동안만 보인다 */
+  working: boolean;
+}
+
 export interface TokenSum {
   input: number;
   output: number;
@@ -121,6 +135,8 @@ export interface SessionView {
   members: Member[];
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
   budget?: BudgetView;
+  /** 일하는 동안의 일반 서브에이전트(임시 책상). 살아 있는 층에서 하나 이상일 때만 */
+  subagents?: SubagentDesk[];
   /** 대시보드가 channel을 붙여 띄운 층만(Phase 4b) */
   channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered" };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
