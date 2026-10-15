@@ -7,6 +7,8 @@ import { policyAskReason, policyDenyReason } from "../../server/decisions/protoc
 import { GROUP_LABEL, LIST_TEXT, TEMPLATES, TEXT, VALUE_LABEL, countsLine, summaryOf } from "../../web/policy/text";
 import { FLOOR_TEXT } from "../../web/floors/useFloors";
 import { PAUSED_REASON } from "../../server/decisions/protocol";
+import { SUB_MAX, SUB_TEXT } from "../../web/office/SubDesks";
+import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -822,6 +824,21 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(prose).not.toMatch(/(영업 스위치|종료)[^<]{0,40}아직 사용할 수 없습니다/);
       expect(prose.split("아직 사용할 수 없습니다").length - 1).toBe(1); // 작업 지시 한 곳뿐
     });
+  });
+
+  it("서브에이전트 임시 책상: 글자·수·시간이 코드와 같고, '리드 책상에 함께 그려진다'는 남지 않았다(B174)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const at = prose.indexOf('<li id="sub-desks">');
+    const line = at < 0 ? "" : prose.slice(at, prose.indexOf("</li>", at));
+    for (const t of [`<code>${SUB_TEXT.tag}</code> 딱지`, `<code>{종류} · ${SUB_TEXT.done}</code>`, `${SUBAGENT_LINGER_MS / 1000}초 뒤 사라집니다`, `${SUB_MAX}개까지`, "<code>+2</code> 같은 칩", `<code>${SUB_TEXT.more(2)}</code>`, "<strong>맡긴 일</strong>", "누를 수 없습니다", "빈 의자"]) {
+      expect(line, t).toContain(t);
+    }
+    expect(read("web/office/SubDesks.tsx")).toContain("+{rest}"); // 칩에 보이는 글자는 +N
+    // 리드 패널 "서브에이전트" 절의 설명(B174 F1)
+    expect(prose).toContain(`패널에는 <code>${TEXT.subsHelp}</code>가 보입니다.`);
+    expect(TEXT.subsHelp).toContain("리드 책상 옆 임시 책상");
+    for (const old of ["리드 책상에 함께 그려집니다", "리드 책상에 함께 보입니다"]) expect(prose, old).not.toContain(old);
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
