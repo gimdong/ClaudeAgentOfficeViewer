@@ -264,7 +264,8 @@ async function main(): Promise<void> {
   policyStore.load();
   const policy = new PolicyGate(policyStore, { onChange: () => hub.poke() });
   // 층 관리(Phase 4a). 실제 신호(process.kill)는 이 한 줄에만 묶는다 — 서버·테스트는 주입된 signal만 쓴다(스펙 5.1)
-  const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke() });
+  // aliasOf: 합친 층(B192)의 대화 쪽 session_id로 온 hook도 그 층의 멈춤에 걸리게. builder는 아래에서 만들지만 호출은 서버가 뜬 뒤다
+  const floors = new FloorControl({ signal: (pid, sig) => process.kill(pid, sig), matchProcStart: defaultProcStartMatcher, selfPid: process.pid, onChange: () => hub.poke(), aliasOf: (id) => builder.floorIdOf(id) });
   // 작업 지시·새 층(Phase 4b, 실험 기능). tmux와 claude 실제 경로가 있어야 켤 수 있다(Windows 제외)
   const tmuxFound = platform() === "win32" ? undefined : findExecutable("tmux");
   const tmuxBin = tmuxFound && tmuxVersionOk((() => { try { return execFileSync(tmuxFound, ["-V"], { encoding: "utf8", timeout: 3000 }); } catch { return ""; } })()) ? tmuxFound : undefined;
@@ -312,7 +313,8 @@ async function main(): Promise<void> {
   };
   const budget = {
     set: (sessionId: string | undefined, tokens: number | null) => {
-      if (sessionId) budgetStore.setBudget(sessionId, tokens, gate.usage(sessionId));
+      // 화면은 층 id를 보낸다. 관문은 hook의 session_id(대화 키)로 판정하므로 그 키로 저장한다(B192)
+      if (sessionId) budgetStore.setBudget(builder.convOf(sessionId), tokens, gate.usage(builder.convOf(sessionId)));
       else budgetStore.setDefault(tokens);
       hub.poke(); // 막대·관문 판정(view)이 새 값을 곧바로 쓰게 다시 만든다
     },

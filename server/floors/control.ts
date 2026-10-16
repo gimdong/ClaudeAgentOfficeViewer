@@ -26,8 +26,11 @@ export class FloorControl {
   private readonly selfPid: number;
   private readonly now: () => number;
   private readonly onChange?: () => void;
+  /** hook의 session_id → 층 id(대시보드로 띄운 층은 대화 쪽 id로 올 수 있다, B192). 없으면 그대로 */
+  private readonly aliasOf: (id: string) => string;
 
-  constructor(o: { signal: (pid: number, sig: Sig) => void; matchProcStart: ProcStartMatcher; selfPid?: number; now?: () => number; onChange?: () => void }) {
+  constructor(o: { signal: (pid: number, sig: Sig) => void; matchProcStart: ProcStartMatcher; selfPid?: number; now?: () => number; onChange?: () => void; aliasOf?: (id: string) => string }) {
+    this.aliasOf = o.aliasOf ?? ((id) => id);
     this.signal = o.signal;
     this.matchProcStart = o.matchProcStart;
     this.selfPid = o.selfPid ?? process.pid;
@@ -39,9 +42,10 @@ export class FloorControl {
   preToolUse(input: Record<string, unknown>): object | null {
     try {
       if (input.hook_event_name !== "PreToolUse") return null;
-      const sessionId = input.session_id;
+      const raw = input.session_id;
       const tool = input.tool_name;
-      if (typeof sessionId !== "string" || typeof tool !== "string" || !tool) return null;
+      if (typeof raw !== "string" || typeof tool !== "string" || !tool) return null;
+      const sessionId = this.aliasOf(raw);
       if (!this.paused.has(sessionId) || EXEMPT_TOOLS.has(tool)) return null;
       this.pausedDenied.set(sessionId, (this.pausedDenied.get(sessionId) ?? 0) + 1);
       // warn + 고정 msg라 되풀이 deny는 로거가 10분 동안 한 줄로 묶는다(B125·B128). 도구 이름은 data에만 —

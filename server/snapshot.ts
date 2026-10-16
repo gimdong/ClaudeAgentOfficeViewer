@@ -110,6 +110,8 @@ function policyFields(
 export class SnapshotBuilder {
   private readonly usage: UsageCollector;
   private prevSessions: SessionRecord[] = [];
+  /** 대화 키(convId) → 층 id(B192). 마지막 빌드의 합친 층만 */
+  private aliases = new Map<string, string>();
   private prevTeams: TeamRecord[] = [];
 
   constructor(private readonly opts: BuilderOptions) {
@@ -141,6 +143,7 @@ export class SnapshotBuilder {
 
     await guard("usage", () => this.usage.refresh(), undefined);
     const sessions = (this.prevSessions = await guard("sessions", () => readSessions(claudeHome, now, this.opts.isAlive ?? pidAlive, this.opts.matchProcStart ?? defaultProcStartMatcher), this.prevSessions));
+    this.aliases = new Map(sessions.flatMap((s) => (s.convId ? [[s.convId, s.sessionId] as [string, string]] : [])));
     const teams = (this.prevTeams = await guard("teams", () => readTeams(claudeHome), this.prevTeams));
     // readLimits에 now를 넘겨, 스냅샷이 판단하는 "현재 시각"과 rate limit 창의 만료 판정 기준을 맞춘다
     // (Task 7 fix round 1에서 readLimits가 now를 받아 이미 지난 창을 걸러내도록 바뀌었다).
@@ -168,19 +171,21 @@ export class SnapshotBuilder {
       return byName ? withTranscriptsFor(byName, projectsDir, sessionId) : undefined;
     };
     // 빌드마다 부른다 — list()가 30초 지난 끝난 결정을 정리한다(Task 3 리뷰 M4)
-    const decisions = this.opts.decisions?.list();
+    // 결정은 hook의 session_id(대화 키)로 쌓인다 — 화면·보고서가 층을 찾게 층 id로 바꿔 싣는다(B192)
+    const decisions = this.opts.decisions?.list().map((d) => (this.aliases.has(d.sessionId) ? { ...d, sessionId: this.floorIdOf(d.sessionId) } : d));
     const teamItems: DecisionView[] = [];
     const views = await Promise.all(
       ordered.map(async (s) =>
-        this.sessionView(s, await teamFor(s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions, teamItems),
+        this.sessionView(s, await teamFor(s.convId ?? s.sessionId), now, s.sessionId === currentId, stale, floorOf.get(s.sessionId) ?? 0, decisions, teamItems),
       ),
     );
     const budget = this.opts.budget;
     if (budget) {
-      for (const v of views) budget.gate.setUsage(v.id, v.members.reduce((n, m) => n + m.tokens.total, 0));
-      budget.store.touch(views.filter((v) => v.alive).map((v) => v.id), (id) => budget.gate.usage(id));
+      // 예산은 hook의 session_id(대화 키)로 판정하므로 그 키로 넣고 읽는다(B192)
+      for (const v of views) budget.gate.setUsage(this.convOf(v.id), v.members.reduce((n, m) => n + m.tokens.total, 0));
+      budget.store.touch(views.filter((v) => v.alive).map((v) => this.convOf(v.id)), (id) => budget.gate.usage(id));
       for (const v of views) {
-        const b = budget.gate.view(v.id);
+        const b = budget.gate.view(this.convOf(v.id));
         if (b) v.budget = b;
       }
     }
@@ -205,6 +210,16 @@ export class SnapshotBuilder {
     return this.prevSessions.find((s) => s.sessionId === sessionId);
   }
 
+  /** hook의 session_id → 층 id(합친 층의 대화 키면 그 층, 아니면 그대로, B192). 일시정지 판정이 쓴다 */
+  floorIdOf(id: string): string {
+    return this.aliases.get(id) ?? id;
+  }
+
+  /** 층 id → 대화 키(합친 층이면 bg 쪽 sessionId, 아니면 그대로). 예산 설정이 쓴다 */
+  convOf(floorId: string): string {
+    return this.record(floorId)?.convId ?? floorId;
+  }
+
   /** 살아 있고 일시정지면 "paused"(구성원 상태와 무관, 스펙 4.4). 횟수는 일시정지 층에만, 종료 중은 참일 때만 */
   private floorFields(s: SessionRecord, members: Member[]): Pick<SessionView, "floorStatus" | "pausedDenied" | "terminating"> {
     const v = this.opts.floors?.view(s.sessionId);
@@ -226,10 +241,12 @@ export class SnapshotBuilder {
     decisions?: readonly DecisionView[],
     teamItems: DecisionView[] = [],
   ): Promise<SessionView> {
-    const leadFile = this.usage.findFile((p) => basename(p) === `${s.sessionId}.jsonl`);
+    // 대화 기록·hook 상태는 대화 키로(합친 층은 bg 쪽 sessionId, B192). 층 id(s.sessionId)는 신원에만
+    const conv = s.convId ?? s.sessionId;
+    const leadFile = this.usage.findFile((p) => basename(p) === `${conv}.jsonl`);
     const last = leadFile ? this.usage.lastUsage(leadFile) : undefined;
     const status: MemberState = !s.alive ? "offline" : s.status === "busy" ? "working" : "idle";
-    const agents = this.opts.events?.agents(s.sessionId);
+    const agents = this.opts.events?.agents(conv);
     // 팀원 "[결정 필요]"(스펙 6장): 리드 대화 기록의 끝부분에서 찾는다. 실패하면 요청 없음
     const teamRequests: TeamRequest[] =
       s.alive && leadFile && (team?.members.length ?? 0) > 0
@@ -314,7 +331,7 @@ export class SnapshotBuilder {
 
     const p = this.opts.policy;
     if (p) {
-      for (let i = 0; i < members.length; i++) members[i] = policyFields(members[i], p, s.sessionId, now, i === 0 ? agents : undefined);
+      for (let i = 0; i < members.length; i++) members[i] = policyFields(members[i], p, conv, now, i === 0 ? agents : undefined);
     }
 
     return {
@@ -340,7 +357,8 @@ export class SnapshotBuilder {
   private async subagentField(s: SessionRecord, leadFile: string | undefined, now: number): Promise<{ subagents?: SubagentDesk[] }> {
     if (!s.alive || !leadFile) return {};
     // 리드 대화 기록과 같은 프로젝트 폴더의 <sessionId>/subagents 하나만(B177 M1)
-    const list = await readSubagents(join(dirname(leadFile), s.sessionId, "subagents"), s.sessionId, this.usage, this.opts.subagents, now).catch(
+    const conv = s.convId ?? s.sessionId;
+    const list = await readSubagents(join(dirname(leadFile), conv, "subagents"), conv, this.usage, this.opts.subagents, now).catch(
       (e) => (warnCaught("snapshot", "cannot read subagents", e), []),
     );
     return list.length ? { subagents: list } : {};

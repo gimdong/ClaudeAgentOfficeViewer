@@ -17,6 +17,11 @@ export interface SessionRecord {
   alive: boolean;
   /** 파일의 procStart 그대로(Phase 4a B114). 종료 신호 전에 matcher가 pid 재사용을 가린다. 파일에 없으면 없음 */
   procStart?: string;
+  /**
+   * 대화를 실제로 돌리는 쪽의 sessionId(버그 3, B192). 대시보드가 띄운 층은 interactive 기록(tmux 쪽, 신원)과
+   * 백그라운드 job 기록(대화 기록 쪽)이 따로 있다. 짝을 지으면 대화 기록·hook 상태는 이 id로 찾는다. 없으면 sessionId와 같다
+   */
+  convId?: string;
 }
 
 const DAY = 86_400_000;
@@ -80,6 +85,32 @@ export const defaultProcStartMatcher: ProcStartMatcher = async (pid, procStart) 
   return Math.abs(actual - expected) <= PROC_START_TOLERANCE_MS;
 };
 
+/**
+ * 대시보드로 띄운 층의 두 기록을 하나로 합친다(버그 3, B192). 살아 있는 기록의 parkedJobId가 kind:"bg" 기록의 jobId와 같으면
+ * 같은 세션의 두 면이다(Claude Code 2.1.301 관찰 — parkedJobId·jobId의 뜻은 문서에 없다). 신원(층 id·pid·종료 대상)은 그 기록,
+ * 대화(convId·상태·갱신 시각)는 bg 기록. bg 기록은 목록에서 뺀다. 짝이 죽었거나 없으면 그대로 둔다
+ */
+function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, { kind?: string; jobId?: string; parkedJobId?: string }>): SessionRecord[] {
+  const bgByJob = new Map<string, SessionRecord>();
+  for (const r of list) {
+    const s = side.get(r);
+    if (s?.kind === "bg" && s.jobId) bgByJob.set(s.jobId, r);
+  }
+  const merged = new Set<SessionRecord>();
+  const out: SessionRecord[] = [];
+  for (const r of list) {
+    const park = side.get(r)?.parkedJobId;
+    const bg = r.alive && park ? bgByJob.get(park) : undefined;
+    if (!bg || bg === r) {
+      out.push(r);
+      continue;
+    }
+    merged.add(bg);
+    out.push({ ...r, convId: bg.sessionId, status: bg.status, updatedAt: Math.max(r.updatedAt, bg.updatedAt) });
+  }
+  return out.filter((r) => !merged.has(r));
+}
+
 export async function readSessions(
   claudeHome: string,
   now = Date.now(),
@@ -97,6 +128,8 @@ export async function readSessions(
   }
 
   const out: SessionRecord[] = [];
+  // 짝짓기용(관찰 필드, 문서에 없음): interactive 기록의 parkedJobId ↔ kind:"bg" 기록의 jobId
+  const side = new Map<SessionRecord, { kind?: string; jobId?: string; parkedJobId?: string }>();
   for (const n of names) {
     if (!/^\d+\.json$/.test(n)) continue;
     let raw: Record<string, unknown>;
@@ -132,7 +165,7 @@ export async function readSessions(
     }
     const updatedAt = num(raw.updatedAt) ?? num(raw.startedAt) ?? 0;
     if (!alive && now - updatedAt > DAY) continue;
-    out.push({
+    const rec: SessionRecord = {
       pid,
       sessionId,
       name: str(raw.name) ?? sessionId.slice(0, 8),
@@ -142,7 +175,9 @@ export async function readSessions(
       updatedAt,
       alive,
       ...(procStart ? { procStart } : {}),
-    });
+    };
+    out.push(rec);
+    side.set(rec, { kind: str(raw.kind), jobId: str(raw.jobId), parkedJobId: str(raw.parkedJobId) });
   }
-  return out;
+  return pairLaunched(out, side);
 }

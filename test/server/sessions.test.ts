@@ -59,6 +59,33 @@ describe("readSessions", () => {
     expect(list.map((s) => s.sessionId).sort()).toEqual(["not-spare", "real"]);
   });
 
+  describe("대시보드로 띄운 층의 두 기록 합치기(버그 3, B192 — parkedJobId·jobId는 문서에 없는 관찰 필드)", () => {
+    const INTER = "6b626eda-0000-4000-8000-000000000001";
+    const BG = "80673844-48d8-4000-8000-000000000002";
+    const seed = async (o: { interAlive?: boolean; bgKind?: string } = {}) => {
+      await h.write("sessions/21.json", { pid: 21, sessionId: INTER, name: "launched", cwd: "/w", status: "idle", kind: "interactive", tmux: "co-1", parkedJobId: "80673844", startedAt: NOW - 60_000, updatedAt: NOW - 50_000 });
+      await h.write("sessions/22.json", { pid: 22, sessionId: BG, name: "launched", cwd: "/w", status: "busy", kind: o.bgKind ?? "bg", jobId: "80673844", startedAt: NOW - 55_000, updatedAt: NOW - 1_000 });
+      return readSessions(h.home, NOW, (pid) => (pid === 21 ? o.interAlive ?? true : true));
+    };
+
+    it("살아 있는 interactive의 parkedJobId = bg의 jobId면 층 하나: 신원은 interactive, 대화(convId·상태·갱신 시각)는 bg", async () => {
+      const list = await seed();
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({ pid: 21, sessionId: INTER, convId: BG, status: "busy", updatedAt: NOW - 1_000, alive: true });
+    });
+
+    it("interactive가 죽으면 짝을 풀어 bg가 혼자 층으로 남는다", async () => {
+      const list = await seed({ interAlive: false });
+      expect(list.map((s) => [s.sessionId, s.convId]).sort()).toEqual([[BG, undefined], [INTER, undefined]].sort());
+    });
+
+    it("kind가 bg가 아니면 짝짓지 않는다. 짝 없는 bg(평범한 --bg 세션)는 그대로 보인다", async () => {
+      expect((await seed({ bgKind: "interactive" })).map((s) => s.sessionId).sort()).toEqual([BG, INTER].sort());
+      await h.write("sessions/23.json", { pid: 23, sessionId: "plain-bg", cwd: "/p", status: "idle", kind: "bg", jobId: "deadbeef", updatedAt: NOW - 1000 });
+      expect((await readSessions(h.home, NOW, () => true)).some((s) => s.sessionId === "plain-bg" && s.convId === undefined)).toBe(true);
+    });
+  });
+
   it("sessions 폴더가 없으면 빈 배열", async () => {
     expect(await readSessions(h.home, NOW, () => true)).toEqual([]);
   });
