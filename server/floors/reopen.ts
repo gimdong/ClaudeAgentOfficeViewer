@@ -8,7 +8,26 @@ export const REOPEN_WAIT_MS = 15_000;
 
 export type ReopenMode = "subagents" | "team" | undefined;
 export type ReopenLaunch = (record: SessionRecord, mode: ReopenMode) => Promise<{ ok: true; tmux: string } | { ok: false; error: "limit" | "tmux" }>;
-export type ReopenResult = { ok: true; tmux: string } | { ok: false; error: TerminateError | "busy" | "still-running" | "limit" | "tmux" };
+export type ReopenResult = { ok: true; tmux: string } | { ok: false; error: TerminateError | "busy" | "ancestor" | "still-running" | "limit" | "tmux" };
+
+/** ppid 사슬의 깊이 상한(B205 ④) */
+export const ANCESTOR_DEPTH = 32;
+
+/**
+ * start의 조상 pid들(부모부터 1까지, 최대 32개). 중간에 ppid를 읽지 못하면 undefined — 호출자는 "조상일 수 있음"으로 보고
+ * 신호를 보내지 않는다(B205 ④). ppidOf는 주입한다(실제 ps는 index.ts에서만)
+ */
+export function ancestorsOf(start: number, ppidOf: (pid: number) => number | undefined, depth = ANCESTOR_DEPTH): Set<number> | undefined {
+  const out = new Set<number>();
+  let p = ppidOf(start);
+  while (out.size < depth) {
+    if (p === undefined || !Number.isInteger(p) || p < 0) return undefined;
+    out.add(p);
+    if (p <= 1) break;
+    p = ppidOf(p);
+  }
+  return out;
+}
 
 /**
  * "작업 지시 켜기(옮겨 열기)": 대시보드가 띄우지 않은 층을 SIGTERM으로 끄고, 그 pid가 끝난 것을 본 뒤에만 같은 대화를
@@ -25,6 +44,8 @@ export class Reopener {
       /** 레코드 pid가 살아 있는지(kill(pid,0)) */
       alive(pid: number): boolean;
       launch: ReopenLaunch;
+      /** 대상 pid가 대시보드 서버의 조상인지. true·undefined(확인 불가)면 끄지 않는다 — 끄면 서버도 죽어 다시 열 수 없다(B205 ④) */
+      isAncestor?: (pid: number) => boolean | undefined;
       now?: () => number;
       sleep?: (ms: number) => Promise<void>;
     },
@@ -40,6 +61,7 @@ export class Reopener {
   async reopen(record: SessionRecord, mode: ReopenMode): Promise<ReopenResult> {
     const id = record.sessionId;
     if (this.running.has(id)) return { ok: false, error: "busy" };
+    if (this.o.isAncestor && this.o.isAncestor(record.pid) !== false) return { ok: false, error: "ancestor" };
     this.running.add(id);
     try {
       const t = await this.o.terminate(record);

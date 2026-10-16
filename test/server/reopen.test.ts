@@ -9,7 +9,9 @@ import type { SessionRecord } from "../../server/collectors/sessions";
 import { ChannelHub } from "../../server/floors/channels";
 import { FloorControl, type TerminateResult } from "../../server/floors/control";
 import { launchArgs } from "../../server/floors/launch";
-import { REOPEN_POLL_MS, REOPEN_WAIT_MS, Reopener, type ReopenLaunch } from "../../server/floors/reopen";
+import { ancestorsOf, REOPEN_POLL_MS, REOPEN_WAIT_MS, Reopener, type ReopenLaunch } from "../../server/floors/reopen";
+import { SnapshotBuilder } from "../../server/snapshot";
+import { makeHome } from "../helpers/fakeHome";
 import { Logger, setLogger } from "../../server/log";
 import { makeSession, makeSnapshot } from "../web/fixtures";
 
@@ -78,9 +80,35 @@ describe("Reopener(B201 — 끝날 때까지 기다림, SIGKILL 없음)", () => 
     expect(terminate).toHaveBeenCalledTimes(1);
   });
 
+  it("종료·다시 열기에서 예외가 나도 busy 잠금은 풀린다(B205 ①)", async () => {
+    terminate.mockRejectedValueOnce(new Error("boom"));
+    await expect(r.reopen(rec(), undefined)).rejects.toThrow("boom");
+    expect(r.isBusy("s1")).toBe(false);
+    launch.mockRejectedValueOnce(new Error("boom2"));
+    await expect(r.reopen(rec(), undefined)).rejects.toThrow("boom2");
+    expect(r.isBusy("s1")).toBe(false);
+  });
+
+  it("대상 pid가 대시보드 서버의 조상이거나 확인할 수 없으면 ancestor — 신호를 보내지 않는다(B205 ④)", async () => {
+    for (const ans of [true, undefined]) {
+      r = new Reopener({ terminate: (x) => terminate(x), alive: () => false, launch: (x, m) => launch(x, m), isAncestor: () => ans, now: () => clock, sleep: async (ms) => void (clock += ms) });
+      expect(await r.reopen(rec(), undefined)).toEqual({ ok: false, error: "ancestor" });
+    }
+    expect(terminate).not.toHaveBeenCalled();
+  });
+
   it("다시 열기가 실패하면 launch 오류 그대로", async () => {
     launch.mockResolvedValueOnce({ ok: false, error: "tmux" });
     expect(await r.reopen(rec(), undefined)).toEqual({ ok: false, error: "tmux" });
+  });
+});
+
+describe("ancestorsOf(ppid 사슬, B205 ④)", () => {
+  it("시작 pid의 조상을 1(launchd/init)까지, 깊이 32까지 모은다. ppid를 못 읽으면 undefined(거부 쪽)", () => {
+    const parent: Record<number, number> = { 500: 400, 400: 300, 300: 1 };
+    expect([...ancestorsOf(500, (p) => parent[p])!]).toEqual([400, 300, 1]);
+    expect(ancestorsOf(500, (p) => (p === 400 ? undefined : parent[p]))).toBeUndefined();
+    expect(ancestorsOf(10_000, (p) => p - 1)!.size).toBe(32);
   });
 });
 
@@ -94,7 +122,9 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
   let records: Map<string, SessionRecord>;
   let calls: Array<[SessionRecord, string | undefined]>;
   let reply: Awaited<ReturnType<Reopener["reopen"]>>;
+  let reopening: boolean;
   beforeEach(async () => {
+    reopening = false;
     tmp = mkdtempSync(join(tmpdir(), "co-reopen-"));
     setLogger(new Logger({ dir: "" }));
     hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true } });
@@ -112,7 +142,7 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
           preToolUse: (i) => floors.preToolUse(i), pause: (id) => floors.pause(id), resume: (id) => floors.resume(id), isPaused: (id) => floors.isPaused(id),
           terminate: (r, f) => floors.terminate(r, f), hide: (id) => floors.hide(id), unhideAll: () => floors.unhideAll(), hiddenCount: () => floors.hiddenCount(), record: (id) => records.get(id),
         },
-        channels: { hub, launch: async () => ({ ok: false, error: "tmux" }), reopen: async (r, m) => (calls.push([r, m]), reply) },
+        channels: { hub, launch: async () => ({ ok: false, error: "tmux" }), reopen: async (r, m) => (calls.push([r, m]), reply), reopening: () => reopening },
       },
     ).listen(0, "127.0.0.1");
     await new Promise((r) => server.once("listening", r));
@@ -165,6 +195,25 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
     expect(calls).toEqual([]);
   });
 
+  it("합친 층(convId ≠ sessionId)은 409 merged(B205 ③)", async () => {
+    records.set("s1", rec({ convId: "bg-conv" }));
+    expect(await res("/api/floors/s1/reopen")).toEqual([409, { error: "merged" }]);
+    expect(calls).toEqual([]);
+  });
+
+  it("다시 열지 못한 실패(still-running·launch 실패)에는 터미널에서 열 대화 id(convId)를 싣는다(B207 F2)", async () => {
+    for (const error of ["still-running", "tmux", "limit"] as const) {
+      reply = { ok: false, error };
+      expect((await res("/api/floors/s1/reopen"))[1]).toEqual({ error, id: "s1" });
+    }
+  });
+
+  it("옮겨 열기가 진행 중인 층의 pause·resume·terminate·hide는 409 busy(B205 ②)", async () => {
+    reopening = true;
+    for (const a of ["pause", "resume", "terminate", "hide"]) expect(await res(`/api/floors/s1/${a}`)).toEqual([409, { error: "busy" }]);
+    expect(floors.isPaused("s1")).toBe(false);
+  });
+
   it.each([
     ["busy", 409],
     ["still-running", 409],
@@ -174,6 +223,31 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
     ["tmux", 502],
   ] as const)("reopen 결과 %s → %i", async (error, status) => {
     reply = { ok: false, error } as never;
-    expect(await res("/api/floors/s1/reopen")).toEqual([status, { error }]);
+    const withId = error === "still-running" || error === "limit" || error === "tmux";
+    expect(await res("/api/floors/s1/reopen")).toEqual([status, { error, ...(withId ? { id: "s1" } : {}) }]);
+  });
+});
+
+describe("스냅샷의 옮겨 열기 표시(B205 ④ — 화면이 버튼 상태를 정한다)", () => {
+  it("실험 기능 켜짐 + 살아 있음 + 대시보드가 띄우지 않음: ok / 합친 층: merged / 조상: ancestor / 그 밖에는 필드 없음", async () => {
+    const h = await makeHome();
+    try {
+      const now = Date.now();
+      await h.write("sessions/31.json", { pid: 31, sessionId: "plain", cwd: "/a", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/32.json", { pid: 32, sessionId: "parent", cwd: "/b", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/33.json", { pid: 33, sessionId: "front", cwd: "/c", status: "idle", kind: "interactive", parkedJobId: "j1", updatedAt: now - 1000 });
+      await h.write("sessions/34.json", { pid: 34, sessionId: "j1-conv", cwd: "/c", status: "busy", kind: "bg", jobId: "j1", updatedAt: now - 1000 });
+      await h.write("sessions/35.json", { pid: 35, sessionId: "launched", cwd: "/d", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/36.json", { pid: 36, sessionId: "dead", cwd: "/e", status: "idle", updatedAt: now - 1000 });
+      let enabled = true;
+      const channels = { enabled: () => enabled, available: () => ({ ok: true }), sweep: () => {}, view: (id: string) => (id === "launched" ? { connected: true, tmux: "co-1", held: 0 } : undefined) };
+      const b = new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, isAlive: (pid) => pid !== 36, channels, reopen: { isAncestor: (pid) => pid === 32 } });
+      const by = async () => Object.fromEntries((await b.build(now)).sessions.map((s) => [s.id, s.reopen]));
+      expect(await by()).toEqual({ plain: "ok", parent: "ancestor", front: "merged", launched: undefined, dead: undefined });
+      enabled = false;
+      expect(Object.values(await by()).every((v) => v === undefined)).toBe(true);
+    } finally {
+      await h.cleanup();
+    }
   });
 });

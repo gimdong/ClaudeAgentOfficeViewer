@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 작업 지시 켜기(B205 ④): 대상 pid가 대시보드 서버의 조상인지(확인 불가 = undefined) */
+  reopen?: { isAncestor(pid: number): boolean | undefined };
   /** 서브에이전트 시작·끝 기록기(B171). 없으면 대화 기록 mtime만으로 판정한다 */
   subagents?: SubagentTracker;
 }
@@ -350,7 +352,17 @@ export class SnapshotBuilder {
       members,
       ...(await this.subagentField(s, leadFile, now)),
       ...this.channelField(s),
+      ...this.reopenField(s),
     };
+  }
+
+  /** 실험 기능 켜짐 + 살아 있음 + 대시보드가 띄우지 않은 층만(B203·B205) */
+  private reopenField(s: SessionRecord): { reopen?: NonNullable<SessionView["reopen"]> } {
+    const ch = this.opts.channels;
+    const ro = this.opts.reopen;
+    if (!ch || !ro || !ch.enabled() || !s.alive || ch.view(s.sessionId)) return {};
+    if (s.convId && s.convId !== s.sessionId) return { reopen: "merged" };
+    return { reopen: ro.isAncestor(s.pid) === false ? "ok" : "ancestor" };
   }
 
   /** 살아 있는 층만. 수집이 실패해도 층은 그대로 보인다 */

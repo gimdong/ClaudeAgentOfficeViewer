@@ -99,6 +99,8 @@ export function createApp(
       launch(input: LaunchInput): Promise<{ ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" }>;
       /** 작업 지시 켜기(옮겨 열기). 없으면 라우트가 없다 */
       reopen?(record: SessionRecord, mode: ReopenMode): Promise<ReopenResult>;
+      /** 그 층의 옮겨 열기가 진행 중인지 — 그동안 pause·resume·terminate·hide는 409 busy(B205 ②) */
+      reopening?(sessionId: string): boolean;
     };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
@@ -436,6 +438,12 @@ export function createApp(
         getLogger().error("floors", "poke failed", { error: errInfo(e) });
       }
     };
+    // 옮겨 열기가 진행 중인 층은 다른 층 조작을 막는다(15초 사이 건 멈춤이 sweep에 말없이 지워지지 않게, B205 ②)
+    const notReopening = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const id = idOf(req);
+      if (id && opts.channels?.reopening?.(id)) return void res.status(409).json({ error: "busy" });
+      next();
+    };
     const pauseRoute = (pause: boolean) => (req: express.Request, res: express.Response) => {
       const id = idOf(req);
       if (!id) return void res.status(400).json({});
@@ -446,9 +454,9 @@ export function createApp(
       if (floors.isPaused(id) !== before) poke();
       res.status(200).json({ paused: pause });
     };
-    app.post("/api/floors/:id/pause", guard, pauseRoute(true));
+    app.post("/api/floors/:id/pause", guard, notReopening, pauseRoute(true));
     // 재개 브리핑의 [보내고 재개](Phase 4b 7장): 본문 { sendHeld: true }면 재개한 뒤 보관 지시를 보낸다
-    app.post("/api/floors/:id/resume", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
+    app.post("/api/floors/:id/resume", guard, notReopening, express.json({ limit: "1kb", type: () => true }), (req, res) => {
       const id = idOf(req);
       if (!id) return void res.status(400).json({});
       if (!floors.record(id)?.alive) return void res.status(409).json({ error: "ended" });
@@ -461,7 +469,7 @@ export function createApp(
       const sent = sendHeld ? (opts.channels?.hub.flushHeld(id) ?? 0) : undefined;
       res.status(200).json({ paused: false, ...(sent !== undefined ? { sent } : {}) });
     });
-    app.post("/api/floors/:id/terminate", guard, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
+    app.post("/api/floors/:id/terminate", guard, notReopening, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
       const id = idOf(req);
       const b = req.body as unknown;
       const ok = !!b && typeof b === "object" && !Array.isArray(b) && Object.keys(b).every((k) => k === "force") && ((b as { force?: unknown }).force === undefined || typeof (b as { force?: unknown }).force === "boolean");
@@ -474,7 +482,7 @@ export function createApp(
       }
       res.status(r.error === "self" ? 400 : 409).json({ error: r.error });
     });
-    app.post("/api/floors/:id/hide", guard, (req, res) => {
+    app.post("/api/floors/:id/hide", guard, notReopening, (req, res) => {
       const id = idOf(req);
       if (!id) return void res.status(400).json({});
       const r = floors.record(id);
@@ -517,8 +525,12 @@ export function createApp(
           if (!r.alive) return void res.status(409).json({ error: "ended" });
           if (hub.has(id)) return void res.status(409).json({ error: "launched" });
           if (floors.isPaused(id)) return void res.status(409).json({ error: "paused" });
+          // 합친 층은 bg job이 같은 대화를 계속 쓰므로 앞면만 끄면 두 프로세스가 한 대화를 쓴다(B205 ③)
+          if (r.convId && r.convId !== r.sessionId) return void res.status(409).json({ error: "merged" });
           const out = await reopen(r, mode as ReopenMode);
-          if (!out.ok) return void res.status(out.error === "limit" ? 429 : out.error === "tmux" ? 502 : 409).json({ error: out.error });
+          // 다시 열지 못했으면 화면이 터미널에서 열 명령(claude --resume {id})을 보이게 대화 id를 싣는다(B207 F2)
+          const resumeId = out.ok ? undefined : out.error === "still-running" || out.error === "limit" || out.error === "tmux" ? r.convId ?? r.sessionId : undefined;
+          if (!out.ok) return void res.status(out.error === "limit" ? 429 : out.error === "tmux" ? 502 : 409).json({ error: out.error, ...(resumeId ? { id: resumeId } : {}) });
           res.status(200).json({ tmux: out.tmux });
         });
       }

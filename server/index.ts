@@ -13,7 +13,7 @@ import { PolicyGate } from "./policy/gate";
 import { FloorControl, type FloorStats } from "./floors/control";
 import { ChannelHub } from "./floors/channels";
 import { findExecutable, launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "./floors/launch";
-import { Reopener } from "./floors/reopen";
+import { ancestorsOf, Reopener } from "./floors/reopen";
 import { execFile, execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
@@ -295,6 +295,7 @@ async function main(): Promise<void> {
   // 작업 지시 켜기(옮겨 열기): 4a 종료 검사 → SIGTERM → pid가 끝난 뒤에만 같은 층 id로 등록하고 그 대화(convId)를 --resume로 연다
   const reopener = new Reopener({
     terminate: (r) => floors.terminate(r, false),
+    isAncestor,
     alive: pidAlive,
     launch: async (r, mode) => {
       // 폴더는 launch와 같은 검사(realpath·디렉터리). 원래 이름이 규칙에 안 맞으면 폴더 이름에서 만든 기본 이름
@@ -308,7 +309,22 @@ async function main(): Promise<void> {
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
   const subagents = new SubagentTracker();
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
+  // 대시보드 서버의 조상 pid(B205 ④). 실제 ps는 여기서만 부른다. 서버가 뜰 때 한 번 — 못 읽으면 모두 "확인 불가"(끄지 않음)
+  const serverAncestors =
+    platform() === "win32"
+      ? undefined
+      : ancestorsOf(process.pid, (pid) => {
+          try {
+            const n = Number(execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, env: { ...process.env, LC_ALL: "C" } }).trim());
+            return Number.isInteger(n) ? n : undefined;
+          } catch {
+            return undefined;
+          }
+        });
+  function isAncestor(pid: number): boolean | undefined {
+    return serverAncestors ? serverAncestors.has(pid) : undefined;
+  }
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, reopen: { isAncestor }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -363,7 +379,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode) } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id) } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
