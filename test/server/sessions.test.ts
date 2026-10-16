@@ -51,6 +51,14 @@ describe("readSessions", () => {
     expect(logLines().filter((l) => l.src === "sessions")).toHaveLength(2);
   });
 
+  it("빠른 시작용 예비 프로세스(spare: true) 기록은 층이 아니다(버그 2)", async () => {
+    await h.write("sessions/11.json", { pid: 11, sessionId: "real", name: "real", cwd: "/r", status: "idle", kind: "interactive", updatedAt: NOW - 1000 });
+    await h.write("sessions/12.json", { pid: 12, sessionId: "spare-1", cwd: "/r", status: "idle", kind: "bg", agent: "claude", spare: true, updatedAt: NOW - 1000 });
+    await h.write("sessions/13.json", { pid: 13, sessionId: "not-spare", cwd: "/r", status: "idle", spare: "true", updatedAt: NOW - 1000 }); // 불리언 true만
+    const list = await readSessions(h.home, NOW, () => true);
+    expect(list.map((s) => s.sessionId).sort()).toEqual(["not-spare", "real"]);
+  });
+
   it("sessions 폴더가 없으면 빈 배열", async () => {
     expect(await readSessions(h.home, NOW, () => true)).toEqual([]);
   });

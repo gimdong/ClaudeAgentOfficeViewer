@@ -106,6 +106,8 @@ export async function readSessions(
       warnCaught("sessions", "cannot read session file", e, n); // n은 파일 이름뿐(폴더 경로 없음)
       continue;
     }
+    // Claude Code(2.1.301 관찰)가 빠른 시작용으로 미리 띄워 두는 예비 프로세스. 대화 기록이 없고 사용자 창도 아니다(버그 2)
+    if (raw?.spare === true) continue;
     const pid = num(raw?.pid);
     const sessionId = str(raw?.sessionId);
     if (pid === undefined || !sessionId) {
