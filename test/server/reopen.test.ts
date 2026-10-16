@@ -204,7 +204,7 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
   it("다시 열지 못한 실패(still-running·launch 실패)에는 터미널에서 열 대화 id(convId)를 싣는다(B207 F2)", async () => {
     for (const error of ["still-running", "tmux", "limit"] as const) {
       reply = { ok: false, error };
-      expect((await res("/api/floors/s1/reopen"))[1]).toEqual({ error, id: "s1" });
+      expect((await res("/api/floors/s1/reopen"))[1]).toEqual({ error, resumeId: "s1" });
     }
   });
 
@@ -212,6 +212,8 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
     reopening = true;
     for (const a of ["pause", "resume", "terminate", "hide"]) expect(await res(`/api/floors/s1/${a}`)).toEqual([409, { error: "busy" }]);
     expect(floors.isPaused("s1")).toBe(false);
+    reopening = false; // 끝난 뒤에는 정상
+    expect(await res("/api/floors/s1/pause")).toEqual([200, { paused: true }]);
   });
 
   it.each([
@@ -224,7 +226,7 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
   ] as const)("reopen 결과 %s → %i", async (error, status) => {
     reply = { ok: false, error } as never;
     const withId = error === "still-running" || error === "limit" || error === "tmux";
-    expect(await res("/api/floors/s1/reopen")).toEqual([status, { error, ...(withId ? { id: "s1" } : {}) }]);
+    expect(await res("/api/floors/s1/reopen")).toEqual([status, { error, ...(withId ? { resumeId: "s1" } : {}) }]);
   });
 });
 
@@ -239,11 +241,19 @@ describe("스냅샷의 옮겨 열기 표시(B205 ④ — 화면이 버튼 상태
       await h.write("sessions/34.json", { pid: 34, sessionId: "j1-conv", cwd: "/c", status: "busy", kind: "bg", jobId: "j1", updatedAt: now - 1000 });
       await h.write("sessions/35.json", { pid: 35, sessionId: "launched", cwd: "/d", status: "idle", updatedAt: now - 1000 });
       await h.write("sessions/36.json", { pid: 36, sessionId: "dead", cwd: "/e", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/37.json", { pid: 37, sessionId: "paused", cwd: "/f", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/38.json", { pid: 38, sessionId: "moving", cwd: "/g", status: "idle", updatedAt: now - 1000 });
+      const fc = new FloorControl({ signal: () => {}, matchProcStart: async () => true });
+      fc.pause("paused");
+      const asked: number[] = [];
       let enabled = true;
       const channels = { enabled: () => enabled, available: () => ({ ok: true }), sweep: () => {}, view: (id: string) => (id === "launched" ? { connected: true, tmux: "co-1", held: 0 } : undefined) };
-      const b = new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, isAlive: (pid) => pid !== 36, channels, reopen: { isAncestor: (pid) => pid === 32 } });
+      const b = new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, isAlive: (pid) => pid !== 36, channels, floors: fc, reopen: { isAncestor: (pid) => (asked.push(pid), pid === 32), busy: (id) => id === "moving" } });
       const by = async () => Object.fromEntries((await b.build(now)).sessions.map((s) => [s.id, s.reopen]));
-      expect(await by()).toEqual({ plain: "ok", parent: "ancestor", front: "merged", launched: undefined, dead: undefined });
+      expect(await by()).toEqual({ plain: "ok", parent: "ancestor", front: "merged", launched: "launched", dead: undefined, paused: "paused", moving: "busy" });
+      const n = asked.length; // 조상 판정은 pid별로 한 번(프로세스 수명 동안 같음)
+      await by();
+      expect(asked.length).toBe(n);
       enabled = false;
       expect(Object.values(await by()).every((v) => v === undefined)).toBe(true);
     } finally {

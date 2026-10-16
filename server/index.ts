@@ -324,7 +324,7 @@ async function main(): Promise<void> {
   function isAncestor(pid: number): boolean | undefined {
     return serverAncestors ? serverAncestors.has(pid) : undefined;
   }
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, reopen: { isAncestor }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),

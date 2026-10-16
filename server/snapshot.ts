@@ -43,7 +43,7 @@ export interface BuilderOptions {
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
   /** 작업 지시 켜기(B205 ④): 대상 pid가 대시보드 서버의 조상인지(확인 불가 = undefined) */
-  reopen?: { isAncestor(pid: number): boolean | undefined };
+  reopen?: { isAncestor(pid: number): boolean | undefined; busy?(sessionId: string): boolean };
   /** 서브에이전트 시작·끝 기록기(B171). 없으면 대화 기록 mtime만으로 판정한다 */
   subagents?: SubagentTracker;
 }
@@ -145,6 +145,9 @@ export class SnapshotBuilder {
 
     await guard("usage", () => this.usage.refresh(), undefined);
     const sessions = (this.prevSessions = await guard("sessions", () => readSessions(claudeHome, now, this.opts.isAlive ?? pidAlive, this.opts.matchProcStart ?? defaultProcStartMatcher), this.prevSessions));
+    // 조상 캐시는 지금 살아 있는 pid만 남긴다(끝난 pid가 다른 프로세스에 다시 쓰일 수 있다)
+    const livePids = new Set(sessions.filter((x) => x.alive).map((x) => x.pid));
+    for (const pid of this.ancestorCache.keys()) if (!livePids.has(pid)) this.ancestorCache.delete(pid);
     this.aliases = new Map(sessions.flatMap((s) => (s.convId ? [[s.convId, s.sessionId] as [string, string]] : [])));
     const teams = (this.prevTeams = await guard("teams", () => readTeams(claudeHome), this.prevTeams));
     // readLimits에 now를 넘겨, 스냅샷이 판단하는 "현재 시각"과 rate limit 창의 만료 판정 기준을 맞춘다
@@ -356,14 +359,21 @@ export class SnapshotBuilder {
     };
   }
 
-  /** 실험 기능 켜짐 + 살아 있음 + 대시보드가 띄우지 않은 층만(B203·B205) */
+  /** 실험 기능 켜짐 + 살아 있는 층만(B203·B205·#468). 라우트의 거부 순서와 같다: 진행 중 → 띄운 층 → 합친 층 → 멈춤 → 조상 */
   private reopenField(s: SessionRecord): { reopen?: NonNullable<SessionView["reopen"]> } {
     const ch = this.opts.channels;
     const ro = this.opts.reopen;
-    if (!ch || !ro || !ch.enabled() || !s.alive || ch.view(s.sessionId)) return {};
+    if (!ch || !ro || !ch.enabled() || !s.alive) return {};
+    if (ro.busy?.(s.sessionId)) return { reopen: "busy" };
+    if (ch.view(s.sessionId)) return { reopen: "launched" };
     if (s.convId && s.convId !== s.sessionId) return { reopen: "merged" };
-    return { reopen: ro.isAncestor(s.pid) === false ? "ok" : "ancestor" };
+    if (this.opts.floors?.view(s.sessionId).paused) return { reopen: "paused" };
+    // 조상 여부는 pid의 수명 동안 같다 — 빌드마다 묻지 않는다
+    let a = this.ancestorCache.get(s.pid);
+    if (!this.ancestorCache.has(s.pid)) this.ancestorCache.set(s.pid, (a = ro.isAncestor(s.pid)));
+    return { reopen: a === false ? "ok" : "ancestor" };
   }
+  private readonly ancestorCache = new Map<number, boolean | undefined>();
 
   /** 살아 있는 층만. 수집이 실패해도 층은 그대로 보인다 */
   private async subagentField(s: SessionRecord, leadFile: string | undefined, now: number): Promise<{ subagents?: SubagentDesk[] }> {

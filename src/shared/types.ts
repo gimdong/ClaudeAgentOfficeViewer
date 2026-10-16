@@ -138,10 +138,11 @@ export interface SessionView {
   /** 일하는 동안의 일반 서브에이전트(임시 책상). 살아 있는 층에서 하나 이상일 때만 */
   subagents?: SubagentDesk[];
   /**
-   * 작업 지시 켜기(옮겨 열기) 대상인지(B205 ④). 실험 기능이 켜져 있고 살아 있고 대시보드가 띄우지 않은 층만.
-   * ok = 누를 수 있음, merged = 합친 층(bg job이 같은 대화를 씀), ancestor = 대시보드 서버의 조상(끄면 서버도 끝남·확인 불가 포함)
+   * 작업 지시 켜기(옮겨 열기) 버튼 상태(B205 ④, #468). 실험 기능이 켜져 있고 살아 있는 층에만.
+   * ok = 누를 수 있음, busy = 옮겨 여는 중, launched = 대시보드가 띄운 층(이미 지시 가능), merged = 합친 층(bg job이 같은 대화를 씀),
+   * paused = 멈춘 층(B202), ancestor = 대시보드 서버의 조상(끄면 서버도 끝남·확인 불가 포함)
    */
-  reopen?: "ok" | "merged" | "ancestor";
+  reopen?: "ok" | "busy" | "launched" | "merged" | "paused" | "ancestor";
   /** 대시보드가 channel을 붙여 띄운 층만(Phase 4b) */
   channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered" };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
