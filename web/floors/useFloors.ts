@@ -25,7 +25,7 @@ export const FLOOR_TEXT = {
   keyFolder: "폴더",
   keyMembers: "구성원",
   members: (n: number, m: number) => `팀원 ${n}명 · 작업 중 ${m}명`,
-  terminateBody: "이 세션의 Claude Code를 끕니다. 하던 작업과, 같은 창 안에서 돌던 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.",
+  terminateBody: "이 세션의 Claude Code를 끕니다. 하던 작업과 같은 창 안의 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.",
   currentWarn: "지금 이 대시보드를 켠 세션입니다. 끄면 이 터미널의 Claude Code도 끝납니다.",
   forceBody: "아직 켜져 있습니다. 강제로 끌까요? 저장되지 않은 작업이 사라질 수 있습니다.",
   cancel: "취소",

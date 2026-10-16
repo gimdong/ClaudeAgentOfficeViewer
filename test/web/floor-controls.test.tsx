@@ -328,7 +328,7 @@ describe("버튼(§1.4)", () => {
   });
 
   it("종료·숨기기 문구(B222 글자 그대로)", () => {
-    expect(FLOOR_TEXT.terminateBody).toBe("이 세션의 Claude Code를 끕니다. 하던 작업과, 같은 창 안에서 돌던 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.");
+    expect(FLOOR_TEXT.terminateBody).toBe("이 세션의 Claude Code를 끕니다. 하던 작업과 같은 창 안의 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.");
     expect(FLOOR_TEXT.hideLabel("alpha")).toBe("alpha 층 숨기기(목록에서만)");
     expect(FLOOR_TEXT.hideTitle).toBe("대시보드 목록에서만 숨깁니다. 대화 기록은 지우지 않습니다. 같은 세션을 다시 열면 다시 보입니다.");
   });
