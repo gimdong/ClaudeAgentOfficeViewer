@@ -867,6 +867,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const codes = [RE_TEXT.dlgTitle("fake-shop"), RE_TEXT.body, RE_TEXT.workingWarn, RE_TEXT.waiting, RE_TEXT.stillRunning, RE_TEXT.titlePaused, RE_TEXT.titleMerged, RE_TEXT.titleAncestor, RE_TEXT.launchFailed];
     for (const c of codes) expect(li, c).toContain(`<code>${c}</code>`);
     for (const s of [`<strong>${RE_TEXT.button}</strong>`, `<strong>${RE_TEXT.go}</strong>`, `${REOPEN_WAIT_MS / 1000}초 안에 끝나지 않으면 강제로 끄지 않고 다시 열지도 않습니다`, "원래 터미널 창의 Claude Code는 끝납니다", "<code>claude --resume …</code>", "<code>tmux attach</code>"]) expect(li, s).toContain(s);
+    // B212 M4: 성공 뒤 원래 터미널의 resume 안내를 따르지 말 것, 실패 때만 직접 열기 — 두 경우를 구별
+    expect(li).toContain("<strong>옮겨 열기가 성공했다면 원래 터미널에서 다시 열지 마세요</strong>(tmux 쪽에 이미 열려 있어, 같은 대화를 두 프로세스가 쓰게 됩니다)");
+    expect(li).toContain("<strong>다시 열지 못했을 때</strong>(tmux 쪽이 열리지 않았을 때만):");
     // 앞의 "작업 지시" 항목이 이 길을 가리킨다
     expect(prose).toContain('그런 층은 아래 <a href="#reopen">작업 지시 켜기</a>로 옮겨 열면 지시할 수 있습니다.');
   });
