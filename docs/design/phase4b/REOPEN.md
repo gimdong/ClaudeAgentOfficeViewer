@@ -74,6 +74,23 @@ Phase 4a §3 종료 확인 창과 같은 모양입니다: `<dialog class="dlg td
 | 일하는 방식 | 4b 새 층 창의 `.ch-mode` 라디오 그대로(`서브에이전트(기본)` 처음 선택 / `agent team(실험)`). 4b의 agent team 설명 묶음(좋은 점·알아 둘 점)도 4b와 같이 agent team을 고르면 펼칩니다. 라디오 아래 12px `--muted` 한 줄(문구표 "방식 안내") |
 | 버튼 | `[취소]`(`.pbtn`) `[옮겨 열기]`(`.pbtn--deny` 분홍 테두리 — 세션을 끄는 동작이라 4a `끄기`와 같은 모양) |
 
+### 2.0b 일하는 방식 라디오와 명령 상자의 모양 (T2 렌더 뒤 정함, #470)
+
+렌더에서 두 가지가 4b 창과 달랐습니다: 라디오 동그라미가 글자 위 줄로 떨어지고(`.ch-mode`의 배치가 4b 창 클래스 안에서만 맞춰짐), 명령 상자 `.cmd`에 모양이 없어 긴 `claude --resume {대화 id}`가 글 사이에서 아무 데나 꺾이고 [복사]가 글 끝에 붙었습니다. **두 규칙 모두 담는 창과 무관하게(조상 선택자 없이)** 정해 4b 새 층 창·붙는 단계·이 창이 같은 모양이 되게 합니다.
+
+| 선택자 | 값 |
+|---|---|
+| `fieldset.ch-mode` | `display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4px; border: 0; padding: 0; margin: 12px 0 0; min-width: 0` |
+| `.ch-mode legend` | `padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted)` (`.td-kv dt`와 같은 말머리 모양) |
+| `.ch-mode label` | `display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-family: var(--font-text); font-size: 13px; color: var(--ink)` — 동그라미와 글자가 한 줄 |
+| `.ch-mode input` | `margin: 0` |
+| `.cmd` | **격자, 행·열 명시(FB-6):** `display: grid; grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: auto; column-gap: 8px; align-items: center; margin: 8px 0 0; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk)` |
+| `.cmd code` | `grid-column: 1; grid-row: 1; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--ink); word-break: break-all; user-select: all` — 꺾일 때는 상자 안에서만 |
+| `.cmd .pbtn` | `grid-column: 2; grid-row: 1; height: 28px` — [복사]는 늘 오른쪽 |
+
+- 328px 창에서 `claude --resume` + 36자 대화 id는 상자 안에서 두 줄로 꺾이고 [복사]는 오른쪽에 남습니다.
+- 4b 붙는 단계의 `tmux attach -t …`도 같은 상자가 됩니다(그쪽도 지금 모양이 없음).
+
 ### 2.1 요청 중 (최대 15초 기다림, B201)
 
 | 요소 | 값 |
