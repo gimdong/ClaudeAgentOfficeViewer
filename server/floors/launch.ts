@@ -41,7 +41,7 @@ export function validateLaunch(b: unknown, home = homedir()): { ok: true; value:
  * tmux 인자(스펙 4.2). 셸을 거치지 않는다. 첫 지시는 channel 옵션 **앞**에 둔다 —
  * 그 옵션은 값을 여러 개 받아 뒤의 프롬프트를 삼킨다(스파이크 Q4 함정)
  */
-export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: string; sessionId: string; key: string; port: number; socket?: string } & LaunchInput): string[] {
+export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: string; sessionId: string; key: string; port: number; socket?: string; /** 옮겨 열기: 이 대화를 이어서 연다(--session-id 대신) */ resume?: string } & LaunchInput): string[] {
   return [
     ...(o.socket ? ["-L", o.socket] : []),
     "new-session", "-d", "-s", o.tmuxName, "-c", o.cwd,
@@ -49,7 +49,7 @@ export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: s
     // agent team은 Claude Code의 실험 기능이라 이 환경변수가 있어야 켜진다. 사용자 설정 파일은 건드리지 않는다
     ...(o.mode === "team" ? ["-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"] : []),
     "--",
-    o.claude, "--session-id", o.sessionId, "--name", o.name,
+    o.claude, ...(o.resume ? ["--resume", o.resume] : ["--session-id", o.sessionId]), "--name", o.name,
     ...(o.model ? ["--model", o.model] : []),
     ...(o.prompt ? [o.prompt] : []),
     "--dangerously-load-development-channels", o.channelSpec,

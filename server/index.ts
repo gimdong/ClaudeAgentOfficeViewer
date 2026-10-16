@@ -12,11 +12,12 @@ import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
 import { FloorControl, type FloorStats } from "./floors/control";
 import { ChannelHub } from "./floors/channels";
-import { findExecutable, launchArgs, tmuxVersionOk, type LaunchInput } from "./floors/launch";
+import { findExecutable, launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "./floors/launch";
+import { Reopener } from "./floors/reopen";
 import { execFile, execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
-import { defaultProcStartMatcher } from "./collectors/sessions";
+import { defaultProcStartMatcher, pidAlive } from "./collectors/sessions";
 import { PolicyStore } from "./policy/store";
 import { buildBundle, readClaudeVersion, writeBundle, type PolicyStats } from "./diag/bundle";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
@@ -276,13 +277,13 @@ async function main(): Promise<void> {
     onChange: () => hub.poke(),
   });
   channels.load();
-  const launchFloor = async (input: LaunchInput) => {
+  // 새 층과 옮겨 열기가 같은 경로를 쓴다: 층 열쇠 등록 → tmux(셸 없음) → 실패하면 등록을 되돌린다
+  const startFloor = async (sessionId: string, input: LaunchInput, resume?: string) => {
     if (!tmuxBin || !claudeBin) return { ok: false as const, error: "tmux" as const };
-    const sessionId = randomUUID();
     const tmuxName = `co-${randomBytes(4).toString("hex")}`;
     const key = channels.register(sessionId, tmuxName);
     if (!key) return { ok: false as const, error: "limit" as const };
-    const args = launchArgs({ ...input, tmuxName, claude: claudeBin, channelSpec: process.env.CLAUDE_OFFICE_CHANNEL_SPEC ?? "plugin:claude-office@claude-office", sessionId, key, port: opts.port, socket: process.env.CLAUDE_OFFICE_TMUX_SOCKET });
+    const args = launchArgs({ ...input, tmuxName, claude: claudeBin, channelSpec: process.env.CLAUDE_OFFICE_CHANNEL_SPEC ?? "plugin:claude-office@claude-office", sessionId, key, port: opts.port, socket: process.env.CLAUDE_OFFICE_TMUX_SOCKET, ...(resume ? { resume } : {}) });
     const ok = await new Promise<boolean>((r) => execFile(tmuxBin, args, { timeout: 10_000 }, (e) => (e && getLogger().warn("floors", "launch failed", { error: errInfo(e) }), r(!e))));
     if (!ok) {
       channels.unregister(sessionId);
@@ -290,6 +291,20 @@ async function main(): Promise<void> {
     }
     return { ok: true as const, sessionId, tmux: tmuxName };
   };
+  const launchFloor = (input: LaunchInput) => startFloor(randomUUID(), input);
+  // 작업 지시 켜기(옮겨 열기): 4a 종료 검사 → SIGTERM → pid가 끝난 뒤에만 같은 층 id로 등록하고 그 대화(convId)를 --resume로 연다
+  const reopener = new Reopener({
+    terminate: (r) => floors.terminate(r, false),
+    alive: pidAlive,
+    launch: async (r, mode) => {
+      // 폴더는 launch와 같은 검사(realpath·디렉터리). 원래 이름이 규칙에 안 맞으면 폴더 이름에서 만든 기본 이름
+      const v = validateLaunch({ cwd: r.cwd, name: r.name, ...(mode ? { mode } : {}) });
+      const w = v.ok ? v : validateLaunch({ cwd: r.cwd, ...(mode ? { mode } : {}) });
+      if (!w.ok) return { ok: false as const, error: "tmux" as const };
+      const out = await startFloor(r.sessionId, w.value, r.convId ?? r.sessionId);
+      return out.ok ? { ok: true as const, tmux: out.tmux } : out;
+    },
+  });
   const decisions = new DecisionQueue({ onChange: () => hub.poke(), onResolve: (v) => gate.resolved(v) });
   process.on("exit", () => decisions.stop()); // SIGINT·SIGTERM도 process.exit를 거쳐 여기로 온다
   const subagents = new SubagentTracker();
@@ -348,7 +363,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode) } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

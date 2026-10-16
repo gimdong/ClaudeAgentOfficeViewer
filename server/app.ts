@@ -16,6 +16,7 @@ import type { PolicyRules } from "../src/shared/types";
 import type { SessionRecord } from "./collectors/sessions";
 import type { TerminateResult } from "./floors/control";
 import { MAX_TEXT, type ChannelHub } from "./floors/channels";
+import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -93,7 +94,12 @@ export function createApp(
     /** 정책 API(스펙 7.4). 바뀌면 hub.poke()로 스냅샷을 다시 만든다 */
     policyApi?: { all(): PolicyFile; set(target: string, rules: PolicyRules): SetResult; remove(target: string): { ok: true; saved: boolean } };
     /** 작업 지시·새 층(Phase 4b). launch는 tmux를 띄우고 세션 id를 돌려준다 */
-    channels?: { hub: ChannelHub; launch(input: LaunchInput): Promise<{ ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" }> };
+    channels?: {
+      hub: ChannelHub;
+      launch(input: LaunchInput): Promise<{ ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" }>;
+      /** 작업 지시 켜기(옮겨 열기). 없으면 라우트가 없다 */
+      reopen?(record: SessionRecord, mode: ReopenMode): Promise<ReopenResult>;
+    };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
       preToolUse(input: Record<string, unknown>): object | null;
@@ -499,6 +505,23 @@ export function createApp(
         if (!r.ok) return void res.status(r.error === "limit" ? 429 : 502).json({ error: r.error });
         res.status(200).json({ sessionId: r.sessionId, tmux: r.tmux });
       });
+      const reopen = opts.channels.reopen;
+      if (reopen) {
+        // 작업 지시 켜기(옮겨 열기, brief 설계 3): 살아 있고 대시보드가 띄우지 않았고(B203) 멈추지 않은(B202) 층만
+        app.post("/api/floors/:id/reopen", guard, on, express.json({ limit: "1kb", type: () => true }), async (req, res) => {
+          const id = idOf(req);
+          const mode = (req.body as { mode?: unknown } | undefined)?.mode;
+          if (!id || (mode !== undefined && mode !== "subagents" && mode !== "team")) return void res.status(400).json({});
+          const r = floors.record(id);
+          if (!r) return void res.status(404).json({});
+          if (!r.alive) return void res.status(409).json({ error: "ended" });
+          if (hub.has(id)) return void res.status(409).json({ error: "launched" });
+          if (floors.isPaused(id)) return void res.status(409).json({ error: "paused" });
+          const out = await reopen(r, mode as ReopenMode);
+          if (!out.ok) return void res.status(out.error === "limit" ? 429 : out.error === "tmux" ? 502 : 409).json({ error: out.error });
+          res.status(200).json({ tmux: out.tmux });
+        });
+      }
       app.post("/api/floors/:id/instruct", guard, on, express.json({ limit: "16kb", type: () => true }), (req, res) => {
         const id = idOf(req);
         const text = textOf(req.body);

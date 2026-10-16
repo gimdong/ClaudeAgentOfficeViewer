@@ -88,6 +88,10 @@ export class ChannelHub {
       else if (f.seen || (!f.conn && now - f.at > UNSEEN_MS)) this.unregister(id);
     }
   }
+  /** 대시보드가 띄운 층인지(B203 — 옮겨 열기 대상이 아니다) */
+  has(sessionId: string): boolean {
+    return this.floors.has(sessionId);
+  }
   /** 연결이 있는지(재개하며 보낼 수 있는지) */
   connected(sessionId: string): boolean {
     return !!this.floors.get(sessionId)?.conn;
