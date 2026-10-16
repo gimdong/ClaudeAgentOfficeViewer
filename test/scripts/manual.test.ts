@@ -9,6 +9,7 @@ import { FLOOR_TEXT } from "../../web/floors/useFloors";
 import { PAUSED_REASON } from "../../server/decisions/protocol";
 import { SUB_MAX, SUB_TEXT } from "../../web/office/SubDesks";
 import { RE_TEXT } from "../../web/floors/ReopenDialog";
+import { MAX_LAUNCHED } from "../../src/shared/types";
 import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
 
@@ -870,6 +871,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // B212 M4: 성공 뒤 원래 터미널의 resume 안내를 따르지 말 것, 실패 때만 직접 열기 — 두 경우를 구별
     expect(li).toContain("<strong>옮겨 열기가 성공했다면 원래 터미널에서 다시 열지 마세요</strong>(tmux 쪽에 이미 열려 있어, 같은 대화를 두 프로세스가 쓰게 됩니다)");
     expect(li).toContain("<strong>다시 열지 못했을 때</strong>(tmux 쪽이 열리지 않았을 때만):");
+    // B213: 신호 전에 막히면 세션은 그대로(글자는 RE_TEXT)
+    expect(li).toContain(`<li id="reopen-before"><strong>끄기 전에 막히면</strong>(띄운 층이 너무 많거나 폴더가 없을 때) 세션은 끄지 않고 그대로 둡니다. 창에 <code>${RE_TEXT.beforeLimit}</code> 또는 <code>${RE_TEXT.beforeCwd}</code>가 보입니다.</li>`);
+    expect(RE_TEXT.beforeLimit).toContain(`(${MAX_LAUNCHED}개)`);
     // 앞의 "작업 지시" 항목이 이 길을 가리킨다
     expect(prose).toContain('그런 층은 아래 <a href="#reopen">작업 지시 켜기</a>로 옮겨 열면 지시할 수 있습니다.');
   });
