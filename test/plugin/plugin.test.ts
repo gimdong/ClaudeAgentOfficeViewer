@@ -35,12 +35,12 @@ describe("plugin.json", () => {
     expect(p.license).toBe("MIT");
   });
 
-  it("버전은 2.0.0-beta.10로 네 곳이 같다", async () => {
+  it("버전은 2.0.0-beta.11로 네 곳이 같다", async () => {
     const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
     const lock = await readJson<{ version: string; packages: Record<string, { version?: string }> }>(join(ROOT, "package-lock.json"));
     const plugin = await readJson<{ version: string }>(join(PLUGIN, ".claude-plugin/plugin.json"));
     const m = await readJson<{ plugins: Array<{ name: string; version: string }> }>(join(ROOT, ".claude-plugin/marketplace.json"));
-    expect(pkg.version).toBe("2.0.0-beta.10");
+    expect(pkg.version).toBe("2.0.0-beta.11");
     expect([lock.version, lock.packages[""].version, plugin.version, m.plugins.find((x) => x.name === "claude-office")?.version]).toEqual(Array(4).fill(pkg.version));
   });
 
