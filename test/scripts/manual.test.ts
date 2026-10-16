@@ -847,6 +847,16 @@ describe("사용설명서(docs/manual/index.html)", () => {
     for (const old of ["리드 책상에 함께 그려집니다", "리드 책상에 함께 보입니다"]) expect(prose, old).not.toContain(old);
   });
 
+  it("대시보드로 띄운 층은 /exit로 끝내기를 권한다(사용자 결정 2026-10-16, 확인 전 표지)", () => {
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    const sec = prose.slice(prose.indexOf('<h3 id="channels">'), prose.indexOf("<h3", prose.indexOf('<h3 id="channels">') + 1));
+    const at = sec.indexOf('<li id="launched-exit">');
+    expect(at).toBeGreaterThan(-1);
+    const li = sec.slice(at, sec.indexOf("</li>", at));
+    for (const t of ["<code>/exit</code>로 끝내기를 권합니다", "백그라운드 작업으로 이어질 수 있어", "<strong>종료</strong>로는 다 끝나지 않을 수 있습니다", "(확인 전입니다)"]) expect(li, t).toContain(t);
+    expect(at).toBeGreaterThan(sec.indexOf("<strong>다시 이어 보기</strong>")); // tmux attach 안내 다음
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);

@@ -608,6 +608,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li><strong>작업 지시</strong>: 층 머리의 <strong>작업 지시</strong>를 눌러 글을 보내면 그 세션에 사용자가 입력한 것처럼 들어갑니다. 작업 중이면 하던 일을 마친 뒤 읽습니다. 직접 터미널에서 띄운 층에는 보낼 수 없습니다(<code>대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)</code>).</li>
   <li><strong>휴업 중 지시</strong>: 멈춘 층에 보낸 지시는 바로 보내지 않고 보관합니다(층 머리 <code>보관 N</code>). 스위치를 <code>영업 중</code>으로 돌리면 <strong>재개 전 확인</strong> 창이 먼저 열려, 보관한 지시를 고치거나 지운 뒤 <strong>보내고 재개</strong>로 보낼 수 있습니다. <strong>취소</strong>를 누르면 멈춘 채로 둡니다. 보관한 지시는 대시보드가 켜져 있는 동안만 남습니다.</li>
   <li><strong>다시 이어 보기</strong>: 그 세션을 터미널에서 다시 보려면 <code>tmux attach -t co-…</code>(창에 나온 이름)로 붙습니다. 대시보드 기능 없이 이어 쓰려면 <code>claude --resume</code>을 씁니다.</li>
+  <li id="launched-exit"><strong>끝내기</strong>: 대시보드로 띄운 층은 위처럼 <code>tmux attach</code>로 붙어 그 창에서 <code>/exit</code>로 끝내기를 권합니다. 띄운 층은 대화가 따로 백그라운드 작업으로 이어질 수 있어, 층 머리의 <strong>종료</strong>로는 다 끝나지 않을 수 있습니다(확인 전입니다).</li>
   <li><strong>참고</strong>: 이 플러그인은 모든 Claude Code 세션에 작은 channel 서버(<code>office-channel</code>)를 함께 띄웁니다. 대시보드가 띄운 층에서만 대시보드에 연결하고, 다른 세션에서는 아무것도 하지 않습니다. <code>/mcp</code> 목록에 보이는 것은 정상입니다.</li>
 </ul>
 
