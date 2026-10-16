@@ -878,6 +878,24 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(prose).toContain('그런 층은 아래 <a href="#reopen">작업 지시 켜기</a>로 옮겨 열면 지시할 수 있습니다.');
   });
 
+  it("종료 = 프로그램이 끝남, 숨기기 = 목록에서만(2026-10-17, B221–B223): 차이 표·새 글자·옛 '삭제' 없음", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const s5 = prose.slice(prose.indexOf('<h3 id="floors">'), prose.indexOf("<h3", prose.indexOf('<h3 id="floors">') + 1));
+    expect(s5).toContain('<h3 id="floors">층 관리(멈춤·종료·숨기기)</h3>');
+    const table = s5.slice(s5.indexOf('<table class="floor-compare">'), s5.indexOf("</table>"));
+    for (const row of ["<tr><th></th><th>멈춤</th><th>종료</th><th>숨기기</th></tr>", "<tr><td>Claude Code</td><td>살아 있음(도구만 막힘)</td><td>끝남</td><td>이미 끝난 층에만</td></tr>", "<tr><td>대화 기록</td><td>그대로</td><td>그대로</td><td>그대로</td></tr>"]) expect(table, row).toContain(row);
+    expect(s5).toContain(`<code>${FLOOR_TEXT.terminateBody}</code>`);
+    expect(FLOOR_TEXT.terminateBody).toContain("같은 창 안의 팀원·서브에이전트도 함께 끝납니다");
+    expect(s5).toContain(`<code>${FLOOR_TEXT.hideTitle}</code>`);
+    expect(s5).toContain("<h4>숨기기(목록에서만)</h4>");
+    // 별도 창 팀원은 확인 전(B221)
+    expect(s5).toContain("팀원을 별도 터미널 창으로 띄우는 방식은 확인 전입니다");
+    // 화면 단추 글자 = 숨기기(아이콘 없음), 설명서 어디에도 '삭제'가 남지 않음(폐업 신고와 헷갈리지 않게)
+    expect(read("web/building/FloorControls.tsx")).not.toMatch(/>\s*삭제\s*</);
+    expect(prose.includes("삭제")).toBe(false);
+  });
+
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
     expect(html).not.toMatch(/sk-ant-/);
     expect(html).not.toMatch(/\b[0-9a-f]{40}\b/i);
