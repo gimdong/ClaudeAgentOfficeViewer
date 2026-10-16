@@ -2,6 +2,7 @@ import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
+import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { Icon } from "../pixel/Icon";
 import { Backdrop } from "./Backdrop";
@@ -67,6 +68,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     prevStage.current = term.stage;
   }, [term.stage]);
   // 화면 상태: 기다리는 값(응답)을 스냅샷보다 먼저 따른다(디자인 §1.2). 칩·셔터·LED도 같은 값
+  const reopening = useReopening(session.id) || session.reopen === "busy";
   const paused = session.floorStatus !== "ended" && sw.paused;
   useShownPaused(session.id, paused);
   const floorStatus = session.floorStatus === "ended" ? "ended" : paused ? "paused" : session.floorStatus !== "paused" ? session.floorStatus : session.members.some((m) => m.state === "working" || m.state === "decision") ? "working" : "idle";
@@ -84,7 +86,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const working = session.members.filter((m) => m.state === "working").length;
   const ended = floorStatus === "ended";
   // 칩은 하나(§1.5): 종료 중 → 멈춤 → 그 밖. TS가 ended 변수만으로는 좁히지 못해 조건을 다시 직접 검사한다
-  const terminating = !ended && term.terminating;
+  // 옮겨 여는 동안도 "종료 중"(REOPEN §4)
+  const terminating = !ended && (term.terminating || reopening);
   const statusText = floorStatus === "ended" ? `종료됨 ${hhmm(session.endedAt)}`.trim() : terminating ? FLOOR_TEXT.terminating : STATUS_LABEL[floorStatus];
   const chipClass = terminating ? "terminating" : floorStatus;
   const noteId = `${id}-pause-note`;
@@ -157,6 +160,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             onHide={() => void hider.hide()}
             hideBusy={hider.busy}
             noteId={noteId}
+            reopening={reopening}
+            onReopen={() => openReopen(session)}
             instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: CH_TEXT.notConnected, onClick: () => {} }}
           />
           {(sw.error ?? hider.error) && (

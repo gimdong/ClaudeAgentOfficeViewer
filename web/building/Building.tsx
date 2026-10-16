@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef } from "react";
 import type { Snapshot, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { BudgetSettingsContext } from "../budget/BudgetDialog";
+import { ReopenHost } from "../floors/ReopenDialog";
 import { FLOOR_TEXT, useHiddenFloors } from "../floors/useFloors";
 import { Floor } from "./Floor";
 import { VacantFloor } from "./VacantFloor";
@@ -80,6 +81,8 @@ export function Building({ sessions, bubble, hiddenFloors = 0, experimental }: {
         </div>
       )}
       <div className="ground" aria-hidden="true" />
+      {/* 옮겨 열기 창은 층 밖에 둔다 — SIGTERM 뒤 층이 잠깐 사라져도 창과 요청이 이어진다(REOPEN §2.1, B209) */}
+      <ReopenHost announce={announce} />
     </main>
   );
 }
