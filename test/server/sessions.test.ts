@@ -74,6 +74,21 @@ describe("readSessions", () => {
       expect(list[0]).toMatchObject({ pid: 21, sessionId: INTER, convId: BG, status: "busy", updatedAt: NOW - 1_000, alive: true });
     });
 
+    it("bg 프로세스가 죽었으면 상태는 interactive 쪽 값(B194 M1)", async () => {
+      await h.write("sessions/21.json", { pid: 21, sessionId: INTER, name: "launched", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "80673844", updatedAt: NOW - 50_000 });
+      await h.write("sessions/22.json", { pid: 22, sessionId: BG, name: "launched", cwd: "/w", status: "busy", kind: "bg", jobId: "80673844", updatedAt: NOW - 1_000 });
+      const list = await readSessions(h.home, NOW, (pid) => pid === 21);
+      expect(list).toEqual([expect.objectContaining({ sessionId: INTER, convId: BG, status: "idle" })]);
+    });
+
+    it("같은 jobId를 가리키는 살아 있는 기록이 둘이면 첫 짝만 합친다(B194 M2)", async () => {
+      await seed();
+      await h.write("sessions/20.json", { pid: 20, sessionId: "dup", name: "dup", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "80673844", updatedAt: NOW - 1_000 });
+      const list = await readSessions(h.home, NOW, () => true);
+      expect(list.filter((s) => s.convId === BG)).toHaveLength(1);
+      expect(list.map((s) => s.sessionId).sort()).toEqual(["dup", INTER].sort());
+    });
+
     it("interactive가 죽으면 짝을 풀어 bg가 혼자 층으로 남는다", async () => {
       const list = await seed({ interAlive: false });
       expect(list.map((s) => [s.sessionId, s.convId]).sort()).toEqual([[BG, undefined], [INTER, undefined]].sort());

@@ -86,9 +86,10 @@ export const defaultProcStartMatcher: ProcStartMatcher = async (pid, procStart) 
 };
 
 /**
- * 대시보드로 띄운 층의 두 기록을 하나로 합친다(버그 3, B192). 살아 있는 기록의 parkedJobId가 kind:"bg" 기록의 jobId와 같으면
- * 같은 세션의 두 면이다(Claude Code 2.1.301 관찰 — parkedJobId·jobId의 뜻은 문서에 없다). 신원(층 id·pid·종료 대상)은 그 기록,
- * 대화(convId·상태·갱신 시각)는 bg 기록. bg 기록은 목록에서 뺀다. 짝이 죽었거나 없으면 그대로 둔다
+ * parkedJobId로 bg job과 짝지어진 층(관찰)의 두 기록을 하나로 합친다(버그 3, B192·B194). 살아 있는 기록의 parkedJobId가
+ * kind:"bg" 기록의 jobId와 같으면 같은 세션의 두 면이다(Claude Code 2.1.301 관찰 — parkedJobId·jobId의 뜻은 문서에 없다.
+ * 대시보드로 띄운 층에서 봤지만 그 층에만 생긴다는 근거는 없다). 신원(층 id·pid·종료 대상)은 그 기록, 대화(convId·갱신 시각,
+ * bg가 살아 있으면 상태도)는 bg 기록. bg 기록은 목록에서 뺀다. 짝이 죽었거나 없으면 그대로 둔다. 같은 jobId에 짝이 둘이면 첫 짝만
  */
 function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, { kind?: string; jobId?: string; parkedJobId?: string }>): SessionRecord[] {
   const bgByJob = new Map<string, SessionRecord>();
@@ -101,12 +102,12 @@ function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, { kind?: s
   for (const r of list) {
     const park = side.get(r)?.parkedJobId;
     const bg = r.alive && park ? bgByJob.get(park) : undefined;
-    if (!bg || bg === r) {
+    if (!bg || bg === r || merged.has(bg)) {
       out.push(r);
       continue;
     }
     merged.add(bg);
-    out.push({ ...r, convId: bg.sessionId, status: bg.status, updatedAt: Math.max(r.updatedAt, bg.updatedAt) });
+    out.push({ ...r, convId: bg.sessionId, status: bg.alive ? bg.status : r.status, updatedAt: Math.max(r.updatedAt, bg.updatedAt) });
   }
   return out.filter((r) => !merged.has(r));
 }

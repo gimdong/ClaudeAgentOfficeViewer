@@ -77,6 +77,8 @@ export function createApp(
     staticDir?: string;
     heartbeatMs?: number;
     onHookEvent?: (input: Record<string, unknown>) => void;
+    /** hook의 session_id를 대화 키로 바꾼다(B194 — 합친 층의 층 id로 온 hook). 모르는 id는 그대로. 없으면 바꾸지 않는다 */
+    normalizeSession?: (sessionId: string) => string;
     stats?: HookStats;
     diagnostics?: DiagnosticsDeps;
     /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
@@ -148,7 +150,10 @@ export function createApp(
         res.status(400).end();
         return;
       }
-      const input = body as Record<string, unknown>;
+      // 맨 앞 한 곳에서 session_id를 대화 키로 바꾼 복사본을 모든 관문(일시정지·정책·예산·큐·이벤트·서브에이전트)에 넘긴다(B194)
+      const raw = body as Record<string, unknown>;
+      const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
+      const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
       opts.stats?.accept(input.hook_event_name as string);
       const isPre = input.hook_event_name === "PreToolUse";
       // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다

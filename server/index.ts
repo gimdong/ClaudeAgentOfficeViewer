@@ -348,7 +348,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
