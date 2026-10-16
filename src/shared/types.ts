@@ -78,6 +78,9 @@ export interface SubagentDesk {
   working: boolean;
 }
 
+/** 대시보드가 띄운 층의 상한(Phase 4b 스펙 4장). 서버(channels.ts)와 화면 문구가 같은 값을 쓴다 */
+export const MAX_LAUNCHED = 8;
+
 export interface TokenSum {
   input: number;
   output: number;

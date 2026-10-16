@@ -190,8 +190,8 @@ describe("요청과 결과(§2.1·§2.2·§3)", () => {
   it.each([
     ["launch 실패(tmux)", { status: 502, body: { error: "tmux", resumeId: "conv-1" } }, RE_TEXT.launchFailed, "claude --resume conv-1", true],
     ["launch 실패(limit)", { status: 429, body: { error: "limit", resumeId: "conv-1" } }, RE_TEXT.launchFailed, "claude --resume conv-1", true],
-    ["신호 전 상한(limit, resumeId 없음)", { status: 409, body: { error: "limit" } }, CH_TEXT.errors.limit, null, true],
-    ["신호 전 폴더 없음(cwd)", { status: 400, body: { error: "cwd" } }, CH_TEXT.errors.cwd, null, true],
+    ["신호 전 상한(limit, resumeId 없음)", { status: 409, body: { error: "limit" } }, "대시보드가 띄운 층이 너무 많아(8개) 옮겨 열지 않았습니다. 세션은 끄지 않았습니다. 쓰지 않는 층을 끈 뒤 다시 해 주세요.", null, true],
+    ["신호 전 폴더 없음(cwd)", { status: 400, body: { error: "cwd" } }, "이 층의 폴더를 찾을 수 없어 옮겨 열지 않았습니다. 세션은 끄지 않았습니다.", null, true],
     ["ancestor", { status: 409, body: { error: "ancestor" } }, RE_TEXT.titleAncestor, null, true],
     ["busy", { status: 409, body: { error: "busy" } }, RE_TEXT.busy, null, true],
     ["ended", { status: 409, body: { error: "ended" } }, FLOOR_TEXT.terminateEnded, null, true],

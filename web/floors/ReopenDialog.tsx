@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from "react";
-import type { SessionView } from "../../src/shared/types";
+import { MAX_LAUNCHED, type SessionView } from "../../src/shared/types";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 import { CH_TEXT } from "./ChannelDialogs";
 import { FLOOR_TEXT } from "./useFloors";
@@ -26,6 +26,9 @@ export const RE_TEXT = {
   busy: "이 층은 지금 옮겨 여는 중입니다. 끝난 뒤 다시 해 주세요.",
   launchFailed: "세션은 껐지만 다시 열지 못했습니다. 대화 기록은 그대로 있어 터미널에서 아래 명령으로 이어 열 수 있습니다.",
   resumeCmd: (id: string) => `claude --resume ${id}`,
+  // 신호 전 실패(세션은 끄지 않음, B212 I1·B213)
+  beforeCwd: "이 층의 폴더를 찾을 수 없어 옮겨 열지 않았습니다. 세션은 끄지 않았습니다.",
+  beforeLimit: `대시보드가 띄운 층이 너무 많아(${MAX_LAUNCHED}개) 옮겨 열지 않았습니다. 세션은 끄지 않았습니다. 쓰지 않는 층을 끈 뒤 다시 해 주세요.`,
   attachBody: "터미널에서 아래 명령으로 붙어 개발용 channel 경고를 확인해 주세요. 폴더 신뢰 확인이 함께 뜨면 그것도 확인해 주세요. 확인하기 전에는 Claude가 이어서 시작하지 않습니다.",
   done: (name: string) => `${name} 층을 옮겨 열었습니다. 터미널에서 붙어 확인 창을 확인해 주세요`,
 } as const;
@@ -41,9 +44,9 @@ function failText(f: Fail): { text: string; stop: boolean; cmd?: string } {
     case "limit":
     case "tmux":
       // resumeId가 없으면 신호 전에 멈춘 것(세션은 그대로, B212 I1) — 4b 새 층 실패와 같은 문구
-      return cmd ? { text: RE_TEXT.launchFailed, stop: true, cmd } : { text: CH_TEXT.errors[f.error], stop: true };
+      return cmd ? { text: RE_TEXT.launchFailed, stop: true, cmd } : { text: f.error === "limit" ? RE_TEXT.beforeLimit : CH_TEXT.failed, stop: true };
     case "cwd":
-      return { text: CH_TEXT.errors.cwd, stop: true };
+      return { text: RE_TEXT.beforeCwd, stop: true };
     case "ancestor":
       return { text: RE_TEXT.titleAncestor, stop: true };
     case "busy":

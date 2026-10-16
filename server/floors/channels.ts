@@ -2,10 +2,11 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ServerResponse } from "node:http";
+import { MAX_LAUNCHED } from "../../src/shared/types";
 import { errInfo, getLogger } from "../log";
 
-/** Phase 4b 스펙 4·6·7장 상한 */
-export const MAX_LAUNCHED = 8;
+/** Phase 4b 스펙 4·6·7장 상한(층 수는 화면과 함께 쓰는 shared 값) */
+export { MAX_LAUNCHED };
 export const MAX_HELD = 20;
 export const MAX_TEXT = 8_000;
 
