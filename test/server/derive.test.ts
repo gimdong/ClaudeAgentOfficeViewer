@@ -293,6 +293,14 @@ describe("lastSentence", () => {
     expect(lastSentence(a("첫 문장입니다. 둘째 문장입니다."))).toBe("둘째 문장입니다.");
     expect(lastSentence(a("줄 하나\n\n줄 둘"))).toBe("줄 둘");
   });
+  it("마크다운 기호를 벗긴다: 머리 기호(#·-·>), **·*·백틱, [글](주소) → 글. 벗기고 빈 값이면 없음(버그 1, B193)", () => {
+    expect(lastSentence(a("## 정리"))).toBe("정리");
+    expect(lastSentence(a("앞 줄\n- **굵게** 쓴 *항목*"))).toBe("굵게 쓴 항목");
+    expect(lastSentence(a("> `npm test`를 [설명서](https://example.com/docs)대로 돌립니다."))).toBe("npm test를 설명서대로 돌립니다.");
+    expect(lastSentence(a("본문입니다.\n\n---\n\n**"))).toBe("본문입니다.");
+    expect(lastSentence(a("# "))).toBeUndefined();
+  });
+
   it("assistant가 아니거나 텍스트가 없으면 undefined, 200자로 자른다", () => {
     expect(lastSentence({ type: "user", message: { content: [{ type: "text", text: "x" }] } })).toBeUndefined();
     expect(lastSentence({ type: "assistant", message: { content: [{ type: "tool_use" }] } })).toBeUndefined();

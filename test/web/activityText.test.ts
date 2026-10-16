@@ -93,6 +93,12 @@ describe("activityLine (디자인 7.2 표)", () => {
     expect(activityLine(m)).toEqual({ icon: "team", text: "저는 지금 읽지 않은 메시지가 3통 있습니다", decision: false });
   });
 
+  it("작업 중인데 도구·할 일·메시지가 없으면 기다림 문장이 아니다: 문장이 있으면 그 문장, 없으면 생각하며 답을 씀(버그 1, B193)", () => {
+    const said = member({ state: "working", activity: { kind: "said", target: "테스트를 먼저 돌려 보겠습니다.", startedAt: new Date(T).toISOString() } });
+    expect(activityLine(said)).toEqual({ icon: "team", text: "저는 지금 「테스트를 먼저 돌려 보겠습니다.」라고 쓰며 일하고 있습니다", decision: false });
+    expect(activityLine(member({ state: "working" }))).toEqual({ icon: "edit", text: "저는 지금 생각하며 답을 쓰고 있습니다", decision: false });
+  });
+
   it("대기와 퇴근", () => {
     expect(activityLine(member({ state: "idle" }))).toEqual({ icon: "wait", text: "저는 지금 다음 지시를 기다리고 있습니다", decision: false });
     const off = member({ state: "offline", activity: { kind: "tool", tool: "Bash", target: "x", startedAt: "t" } });

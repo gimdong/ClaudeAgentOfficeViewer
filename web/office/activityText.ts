@@ -64,6 +64,9 @@ const WAITING_FOR: Record<DecisionKind, string> = {
   team: "팀 리드의 결정을",
 };
 
+/** 작업 중 + 방금 쓴 문장(사용자 결정 2026-10-16, B193) */
+const WORKING_SAID = (s: string) => `저는 지금 ${q(s)}라고 쓰며 일하고 있습니다`;
+
 const other = (tool: string) => line("bash", `저는 지금 ${q(tool || "알 수 없는")} 도구를 쓰고 있습니다`);
 
 function toolLine(tool = "", target?: string): Line {
@@ -109,6 +112,8 @@ export function activityLine(m: Member, opts: { paused?: boolean } = {}): Line {
   if (a?.kind === "tool") return toolLine(a.tool, a.target);
   if (a?.kind === "todo" && a.target) return line("read", `저는 지금 할 일 목록의 ${q(a.target)} 항목을 진행하고 있습니다`);
   if (m.unread > 0) return line("team", `저는 지금 읽지 않은 메시지가 ${m.unread}통 있습니다`);
+  // 작업 중이면 기다림 문장으로 떨어지지 않는다(버그 1, B193). 문장은 사용자 결정(2026-10-16)
+  if (m.state === "working") return a?.kind === "said" && a.target ? line("team", WORKING_SAID(a.target)) : line("edit", "저는 지금 생각하며 답을 쓰고 있습니다");
   if (a?.kind === "said" && a.target) return line("team", `저는 방금 ${q(a.target)}라고 말했습니다`);
   return line("wait", "저는 지금 다음 지시를 기다리고 있습니다");
 }

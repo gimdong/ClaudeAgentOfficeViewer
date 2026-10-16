@@ -157,6 +157,19 @@ export function deriveAgent(events: readonly StoredEvent[], now: number): Derive
  * 자른다(Ruling P14) — summarize.ts와 같은 redact()·그래핌 자르기를 재사용해 EventStore → 스냅샷 →
  * SSE → 말풍선으로 원문이 새지 않게 한다.
  */
+/** 말풍선용으로 마크다운 기호만 벗긴다(버그 1, B193): 머리 기호(#·-·*·+·>·번호 없음), **·*·_·백틱, [글](주소) → 글 */
+function stripMarkdown(line: string): string {
+  return line
+    .replace(/^(?:>\s*)+/, "")
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[-*+]\s+/, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`+/g, "")
+    .replace(/\*\*|__/g, "")
+    .replace(/(^|[^\p{L}\p{N}])[*_](?=\S)|(?<=\S)[*_](?=[^\p{L}\p{N}]|$)/gu, "$1")
+    .trim();
+}
+
 export function lastSentence(entry: unknown): string | undefined {
   const e = entry as { type?: string; message?: { content?: unknown } } | undefined;
   if (e?.type !== "assistant" || !Array.isArray(e.message?.content)) return undefined;
@@ -177,7 +190,9 @@ export function lastSentence(entry: unknown): string | undefined {
     }
     if (inFence) continue;
     if (t.length > 1 && t.startsWith("|") && t.endsWith("|")) continue; // 표 행
-    visible.push(line);
+    const plain = stripMarkdown(t);
+    if (!/[\p{L}\p{N}]/u.test(plain)) continue; // 구분선(---)·기호만 남은 줄은 문장이 아니다
+    visible.push(plain);
   }
   const shown = visible.join("\n").trim();
   if (!shown) return undefined;
