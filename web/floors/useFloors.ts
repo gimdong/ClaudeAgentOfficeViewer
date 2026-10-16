@@ -25,7 +25,7 @@ export const FLOOR_TEXT = {
   keyFolder: "폴더",
   keyMembers: "구성원",
   members: (n: number, m: number) => `팀원 ${n}명 · 작업 중 ${m}명`,
-  terminateBody: "이 세션을 끕니다. 대화 기록은 남지만, 하던 작업은 끊깁니다.",
+  terminateBody: "이 세션의 Claude Code를 끕니다. 하던 작업과, 같은 창 안에서 돌던 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.",
   currentWarn: "지금 이 대시보드를 켠 세션입니다. 끄면 이 터미널의 Claude Code도 끝납니다.",
   forceBody: "아직 켜져 있습니다. 강제로 끌까요? 저장되지 않은 작업이 사라질 수 있습니다.",
   cancel: "취소",
@@ -40,8 +40,8 @@ export const FLOOR_TEXT = {
   sentKill: (name: string) => `${name} 층을 강제로 끄는 신호를 보냈습니다`,
   gone: (name: string) => `${name} 층이 꺼졌습니다`,
   // 숨김(§6.5)
-  hideLabel: (name: string) => `${name} 층 삭제(목록에서만 숨김)`,
-  hideTitle: "대시보드 목록에서만 숨깁니다. 대화 기록은 지우지 않습니다.",
+  hideLabel: (name: string) => `${name} 층 숨기기(목록에서만)`,
+  hideTitle: "대시보드 목록에서만 숨깁니다. 대화 기록은 지우지 않습니다. 같은 세션을 다시 열면 다시 보입니다.",
   hiddenBar: (n: number) => `숨긴 층 ${n}개 · 모두 보이기`,
   reloading: "숨긴 층을 다시 불러오는 중…",
   hideAlive: "아직 켜져 있는 층은 숨길 수 없습니다.",
@@ -294,7 +294,7 @@ export function useFloorTerminate(session: SessionView, announce?: (text: string
 
 const hideError = (e: FloorError) => (e === "alive" ? FLOOR_TEXT.hideAlive : e === "not-found" ? FLOOR_TEXT.hideNotFound : FLOOR_TEXT.hideFailed);
 
-/** 끝난 층의 "삭제"(디자인 §4.1). 확인 창 없이 hide. 성공하면 onHidden으로 빌딩에 알린다(빌딩이 바로 빼고 6초 들고 있음) */
+/** 끝난 층의 "숨기기"(디자인 §4.1). 확인 창 없이 hide. 성공하면 onHidden으로 빌딩에 알린다(빌딩이 바로 빼고 6초 들고 있음) */
 export function useFloorHide(session: SessionView, onHidden?: (id: string, hidden: number) => void, announce?: (text: string) => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

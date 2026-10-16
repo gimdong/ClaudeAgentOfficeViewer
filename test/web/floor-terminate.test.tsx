@@ -300,8 +300,8 @@ describe("둘째 창(§3.3)과 타이머(Review Focus 1)", () => {
     expect(calls()).toHaveLength(0);
     fireEvent.click(within(d).getByRole("button", { name: "취소" }));
     expect(dialog()).toBeNull();
-    // 층이 끝나 종료 버튼이 삭제로 바뀌었으면 그 층의 삭제 버튼으로
-    expect(document.activeElement?.textContent).toBe("삭제");
+    // 층이 끝나 종료 버튼이 숨기기로 바뀌었으면 그 층의 숨기기 버튼으로
+    expect(document.activeElement?.textContent).toBe("숨기기");
   });
 
   it("종료 중 칩은 스냅샷이 terminating을 싣지 않으면 6초 뒤 사라진다(B127)", async () => {

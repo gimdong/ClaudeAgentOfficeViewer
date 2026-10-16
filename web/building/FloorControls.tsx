@@ -12,10 +12,11 @@ export function FloorControls({ session, paused, busy, onToggle, onTerminate, on
   if (session.floorStatus === "ended") {
     return (
       <div className="controls">
-        {/* 확인 창 없이 숨긴다(되돌릴 수 있고 데이터를 지우지 않음, 스펙 6). 이름에 보이는 글자 "삭제"를 넣는다(§4.1) */}
+        {/* 확인 창 없이 숨긴다(되돌릴 수 있고 데이터를 지우지 않음, 스펙 6). 이름에 보이는 글자 "숨기기"를 넣는다(§4.1).
+            지우는 일이 아니므로 위험 색·아이콘 없이 글자만(B222) */}
         <button
           type="button"
-          className="pbtn pbtn--danger"
+          className="pbtn"
           data-floor-action="delete"
           aria-label={FLOOR_TEXT.hideLabel(session.name)}
           title={FLOOR_TEXT.hideTitle}
@@ -23,8 +24,7 @@ export function FloorControls({ session, paused, busy, onToggle, onTerminate, on
           {...(reopening ? moving : {})}
           onClick={() => !hideBusy && !reopening && onHide?.()}
         >
-          <Icon name="trash" />
-          삭제
+          숨기기
         </button>
       </div>
     );

@@ -46,7 +46,7 @@ const flush = async () => {
   });
 };
 const floorNamed = (name: string) => screen.queryAllByTestId("floor").find((f) => f.querySelector(".floor-name")?.textContent?.includes(name));
-const delBtn = (name: string) => within(floorNamed(name)!).getByRole("button", { name: `${name} 층 삭제(목록에서만 숨김)` });
+const delBtn = (name: string) => within(floorNamed(name)!).getByRole("button", { name: `${name} 층 숨기기(목록에서만)` });
 const status = () => screen.getByRole("status").textContent?.replace(NBSP, "");
 const bar = () => document.querySelector(".hidden-bar");
 
@@ -54,7 +54,7 @@ describe("삭제(숨김, §4.1·§4.2)", () => {
   it("끝난 층의 삭제를 누르면 확인 창 없이 hide를 보내고 바로 사라진다, 살아 있는 층에는 삭제 버튼이 없다", async () => {
     show(snap([live("a", "alpha", 2), ended("b", "beta", 1)]));
     render(<App />);
-    expect(within(floorNamed("alpha")!).queryByRole("button", { name: /삭제/ })).toBeNull();
+    expect(within(floorNamed("alpha")!).queryByRole("button", { name: /숨기기/ })).toBeNull();
     expect(delBtn("beta").getAttribute("title")).toBe(FLOOR_TEXT.hideTitle);
     fireEvent.click(delBtn("beta"));
     await flush();

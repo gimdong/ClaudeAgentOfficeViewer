@@ -61,7 +61,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
   const hider = useFloorHide(session, onHidden, budgetCtx.announce);
   const sectionRef = useRef<HTMLElement>(null);
-  // 창이 닫히면 그 층의 "종료" 버튼으로(끝나 "삭제"로 바뀌었으면 그것으로, §3.1)
+  // 창이 닫히면 그 층의 "종료" 버튼으로(끝나 "숨기기"로 바뀌었으면 그것으로, §3.1)
   const prevStage = useRef(term.stage);
   useEffect(() => {
     if (prevStage.current !== 0 && term.stage === 0) sectionRef.current?.querySelector<HTMLElement>('[data-floor-action="terminate"], [data-floor-action="delete"]')?.focus();

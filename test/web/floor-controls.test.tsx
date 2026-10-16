@@ -318,10 +318,18 @@ describe("버튼(§1.4)", () => {
     expect([b.getAttribute("aria-disabled"), b.getAttribute("title")]).toEqual(["true", "대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)"]);
   });
 
-  it("끝난 층에는 삭제 버튼만", () => {
+  it("끝난 층에는 숨기기 버튼만 — 글자만(아이콘 없음), 위험 색 없음(B222)", () => {
     show(snap(floorOf({ alive: false, floorStatus: "ended", members: [lead({ state: "offline" })] })));
     render(<App />);
     expect(within(floor()).queryByRole("switch")).toBeNull();
-    expect(within(floor().querySelector<HTMLElement>(".controls")!).getAllByRole("button").map((b) => b.textContent)).toEqual(["삭제"]);
+    const buttons = within(floor().querySelector<HTMLElement>(".controls")!).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["숨기기"]);
+    expect([buttons[0].className, buttons[0].querySelector("svg")]).toEqual(["pbtn", null]);
+  });
+
+  it("종료·숨기기 문구(B222 글자 그대로)", () => {
+    expect(FLOOR_TEXT.terminateBody).toBe("이 세션의 Claude Code를 끕니다. 하던 작업과, 같은 창 안에서 돌던 팀원·서브에이전트도 함께 끝납니다. 대화 기록은 남아 있어, 그 폴더의 터미널에서 claude --resume으로 다시 열면 이 층도 다시 나타납니다.");
+    expect(FLOOR_TEXT.hideLabel("alpha")).toBe("alpha 층 숨기기(목록에서만)");
+    expect(FLOOR_TEXT.hideTitle).toBe("대시보드 목록에서만 숨깁니다. 대화 기록은 지우지 않습니다. 같은 세션을 다시 열면 다시 보입니다.");
   });
 });

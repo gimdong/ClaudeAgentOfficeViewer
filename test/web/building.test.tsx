@@ -97,7 +97,7 @@ describe("Floor 머리", () => {
       expect(el.getAttribute("aria-disabled")).toBe("true");
       expect(el.getAttribute("title")).toBe("대시보드가 띄운 층에만 지시할 수 있습니다(Claude Code 제약)");
     }
-    expect(within(floor).queryByRole("button", { name: "삭제" })).toBeNull();
+    expect(within(floor).queryByRole("button", { name: "숨기기" })).toBeNull();
   });
 });
 
@@ -105,13 +105,13 @@ describe("종료된 층 (v1 OfficeTile off 테스트 대체)", () => {
   const ended = () =>
     makeSession({ id: "e", alive: false, floorStatus: "ended", endedAt: new Date(2026, 9, 1, 14, 32).toISOString(), members: [makeMember({ name: "team-lead", state: "offline" }), makeMember({ name: "dev", state: "offline" })] });
 
-  it("'종료됨 HH:MM' 칩, 삭제 버튼만, 바 없음, 처음에는 접혀 있고 요약을 보여준다", () => {
+  it("'종료됨 HH:MM' 칩, 숨기기 버튼만, 바 없음, 처음에는 접혀 있고 요약을 보여준다", () => {
     render(<Floor session={ended()} />);
     const floor = screen.getByTestId("floor");
     expect(floor.className).toContain("floor--ended");
     expect(floor.className).toContain("collapsed");
     expect(floor.querySelector(".chip--ended")!.textContent).toBe("종료됨 14:32");
-    expect(within(floor).getByRole("button", { name: /층 삭제\(목록에서만 숨김\)$/ }).getAttribute("aria-disabled")).toBeNull(); // Task 7(B121): 모양만 → 활성
+    expect(within(floor).getByRole("button", { name: /층 숨기기\(목록에서만\)$/ }).getAttribute("aria-disabled")).toBeNull(); // Task 7(B121): 모양만 → 활성
     expect(within(floor).queryByRole("switch")).toBeNull();
     expect(floor.querySelector(".bars")).toBeNull();
     expect(floor.querySelector(".summary")!.textContent).toBe("팀원 2 · 작업 중 0");
