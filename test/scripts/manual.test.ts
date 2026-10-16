@@ -8,6 +8,8 @@ import { GROUP_LABEL, LIST_TEXT, TEMPLATES, TEXT, VALUE_LABEL, countsLine, summa
 import { FLOOR_TEXT } from "../../web/floors/useFloors";
 import { PAUSED_REASON } from "../../server/decisions/protocol";
 import { SUB_MAX, SUB_TEXT } from "../../web/office/SubDesks";
+import { RE_TEXT } from "../../web/floors/ReopenDialog";
+import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
@@ -855,6 +857,18 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const li = sec.slice(at, sec.indexOf("</li>", at));
     for (const t of ["<code>/exit</code>로 끝내기를 권합니다", "백그라운드 작업으로 이어질 수 있어", "<strong>종료</strong>로는 다 끝나지 않을 수 있습니다", "(확인 전입니다)"]) expect(li, t).toContain(t);
     expect(at).toBeGreaterThan(sec.indexOf("<strong>다시 이어 보기</strong>")); // tmux attach 안내 다음
+  });
+
+  it("작업 지시 켜기(옮겨 열기): 글자·기다림·막히는 층·실패 길이 코드와 같다(B201–B207)", () => {
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "");
+    const at = prose.indexOf('<li id="reopen">');
+    expect(at).toBeGreaterThan(prose.indexOf('<h3 id="channels">'));
+    const li = prose.slice(at, prose.indexOf("\n  </li>", at));
+    const codes = [RE_TEXT.dlgTitle("fake-shop"), RE_TEXT.body, RE_TEXT.workingWarn, RE_TEXT.waiting, RE_TEXT.stillRunning, RE_TEXT.titlePaused, RE_TEXT.titleMerged, RE_TEXT.titleAncestor, RE_TEXT.launchFailed];
+    for (const c of codes) expect(li, c).toContain(`<code>${c}</code>`);
+    for (const s of [`<strong>${RE_TEXT.button}</strong>`, `<strong>${RE_TEXT.go}</strong>`, `${REOPEN_WAIT_MS / 1000}초 안에 끝나지 않으면 강제로 끄지 않고 다시 열지도 않습니다`, "원래 터미널 창의 Claude Code는 끝납니다", "<code>claude --resume …</code>", "<code>tmux attach</code>"]) expect(li, s).toContain(s);
+    // 앞의 "작업 지시" 항목이 이 길을 가리킨다
+    expect(prose).toContain('그런 층은 아래 <a href="#reopen">작업 지시 켜기</a>로 옮겨 열면 지시할 수 있습니다.');
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
