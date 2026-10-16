@@ -297,6 +297,13 @@ async function main(): Promise<void> {
     terminate: (r) => floors.terminate(r, false),
     isAncestor,
     alive: pidAlive,
+    // 되돌릴 수 없는 SIGTERM 전에: 원래 폴더가 그대로 있는지, launched 자리가 있는지(예약)(B212 I1)
+    precheck: (r) => {
+      if (!validateLaunch({ cwd: r.cwd }).ok) return { ok: false, error: "cwd" };
+      const release = channels.reserve();
+      return release ? { ok: true, release } : { ok: false, error: "limit" };
+    },
+    forget: (id) => floors.forget(id),
     launch: async (r, mode) => {
       // 폴더는 launch와 같은 검사(realpath·디렉터리). 원래 이름이 규칙에 안 맞으면 폴더 이름에서 만든 기본 이름
       const v = validateLaunch({ cwd: r.cwd, name: r.name, ...(mode ? { mode } : {}) });

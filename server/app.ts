@@ -530,6 +530,8 @@ export function createApp(
           const out = await reopen(r, mode as ReopenMode);
           // 다시 열지 못했으면 화면이 터미널에서 열 명령(claude --resume {id})을 보이게 대화 id를 싣는다(B207 F2)
           const resumeId = out.ok ? undefined : out.error === "still-running" || out.error === "limit" || out.error === "tmux" ? r.convId ?? r.sessionId : undefined;
+          // 신호 전에 멈춘 실패는 세션이 그대로라 이어 열 명령이 필요 없다(B212 I1)
+          if (!out.ok && out.before) return void res.status(out.error === "cwd" ? 400 : 409).json({ error: out.error });
           if (!out.ok) return void res.status(out.error === "limit" ? 429 : out.error === "tmux" ? 502 : 409).json({ error: out.error, ...(resumeId ? { resumeId } : {}) });
           res.status(200).json({ tmux: out.tmux });
         });

@@ -63,7 +63,7 @@ export class ChannelHub {
 
   /** 새 층 등록. 열쇠는 64자 hex */
   register(sessionId: string, tmux: string): string | null {
-    if (this.floors.size >= MAX_LAUNCHED) return null;
+    if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
     const key = randomBytes(32).toString("hex");
     this.floors.set(sessionId, { key, tmux, at: (this.o.now ?? Date.now)(), seen: false, held: [] });
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
@@ -87,6 +87,21 @@ export class ChannelHub {
       if (alive.has(id)) f.seen = true;
       else if (f.seen || (!f.conn && now - f.at > UNSEEN_MS)) this.unregister(id);
     }
+  }
+  private reserved = 0;
+  /**
+   * 옮겨 열기의 자리 예약(B212 I1): 되돌릴 수 없는 SIGTERM 전에 자리를 잡아, 기다리는 사이 새 층이 마지막 자리를 가져가지 않게 한다.
+   * 자리가 없으면 null. 돌려받은 함수로 반납한다(두 번 불러도 한 번)
+   */
+  reserve(): (() => void) | null {
+    if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
+    this.reserved++;
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      this.reserved--;
+    };
   }
   /** 대시보드가 띄운 층인지(B203 — 옮겨 열기 대상이 아니다) */
   has(sessionId: string): boolean {

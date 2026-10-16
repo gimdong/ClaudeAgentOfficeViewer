@@ -190,6 +190,8 @@ describe("요청과 결과(§2.1·§2.2·§3)", () => {
   it.each([
     ["launch 실패(tmux)", { status: 502, body: { error: "tmux", resumeId: "conv-1" } }, RE_TEXT.launchFailed, "claude --resume conv-1", true],
     ["launch 실패(limit)", { status: 429, body: { error: "limit", resumeId: "conv-1" } }, RE_TEXT.launchFailed, "claude --resume conv-1", true],
+    ["신호 전 상한(limit, resumeId 없음)", { status: 409, body: { error: "limit" } }, CH_TEXT.errors.limit, null, true],
+    ["신호 전 폴더 없음(cwd)", { status: 400, body: { error: "cwd" } }, CH_TEXT.errors.cwd, null, true],
     ["ancestor", { status: 409, body: { error: "ancestor" } }, RE_TEXT.titleAncestor, null, true],
     ["busy", { status: 409, body: { error: "busy" } }, RE_TEXT.busy, null, true],
     ["ended", { status: 409, body: { error: "ended" } }, FLOOR_TEXT.terminateEnded, null, true],
@@ -209,6 +211,26 @@ describe("요청과 결과(§2.1·§2.2·§3)", () => {
     expect(screen.queryByTestId("reopen-cmd")?.textContent ?? null).toBe(cmd);
     expect(within(d).getByRole("button", { name: RE_TEXT.go }).getAttribute("aria-disabled")).toBe(stop ? "true" : null);
     expect(within(d).getByRole("button", { name: stop ? RE_TEXT.close : FLOOR_TEXT.cancel })).toBeTruthy();
+  });
+
+  it("결과가 올 때 다른 창이 열려 있으면 그 창이 닫힐 때까지 미룬다. 결과는 버리지 않는다(B212 M2)", async () => {
+    reply = "hold";
+    show(snap(fl()));
+    render(<App />);
+    fireEvent.click(btn()!);
+    fireEvent.click(within(dialog()!).getByRole("button", { name: RE_TEXT.go }));
+    await flush();
+    fireEvent.click(within(dialog()!).getByRole("button", { name: RE_TEXT.close }));
+    await flush();
+    const other = document.createElement("dialog");
+    other.setAttribute("open", "");
+    document.body.appendChild(other);
+    await act(async () => release!({ status: 200, body: { tmux: "co-abcd1234" } }));
+    await flush();
+    expect(screen.queryByTestId("reopen-cmd")).toBeNull();
+    other.remove();
+    await act(async () => void (await new Promise((r) => setTimeout(r, 450))));
+    expect(screen.getByTestId("reopen-cmd").textContent).toBe("tmux attach -t co-abcd1234");
   });
 
   it("다른 탭에서 옮겨 여는 중(스냅샷 busy): 스위치·종료도 막힌다", () => {

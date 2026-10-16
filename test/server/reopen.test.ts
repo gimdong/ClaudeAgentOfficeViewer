@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub } from "../../server/floors/channels";
+import { ChannelHub, MAX_LAUNCHED } from "../../server/floors/channels";
 import { FloorControl, type TerminateResult } from "../../server/floors/control";
 import { launchArgs } from "../../server/floors/launch";
 import { ancestorsOf, REOPEN_POLL_MS, REOPEN_WAIT_MS, Reopener, type ReopenLaunch } from "../../server/floors/reopen";
@@ -37,7 +37,30 @@ describe("Reopener(B201 — 끝날 때까지 기다림, SIGKILL 없음)", () => 
     alive = () => false;
     terminate = vi.fn(async () => ({ ok: true as const, signal: "SIGTERM" as const, sent: true }));
     launch = vi.fn<ReopenLaunch>(async () => ({ ok: true as const, tmux: "co-new" }));
-    r = new Reopener({ terminate: (x) => terminate(x), alive: (pid) => alive(pid), launch: (x, m) => launch(x, m), now: () => clock, sleep: async (ms) => void (clock += ms) });
+    released = 0;
+    forgot = [];
+    pre = { ok: true };
+    r = new Reopener({ terminate: (x) => terminate(x), alive: (pid) => alive(pid), launch: (x, m) => launch(x, m), precheck: () => (pre.ok ? { ok: true, release: () => void released++ } : { ok: false, error: pre.error! }), forget: (id) => void forgot.push(id), now: () => clock, sleep: async (ms) => void (clock += ms) });
+  });
+  let released: number;
+  let forgot: string[];
+  let pre: { ok: boolean; error?: "limit" | "cwd" };
+
+  it.each(["limit", "cwd"] as const)("신호 전에 미리 알 수 있는 실패(%s)는 신호 없이 돌려준다(B212 I1)", async (error) => {
+    pre = { ok: false, error };
+    expect(await r.reopen(rec(), undefined)).toEqual({ ok: false, error, before: true });
+    expect(terminate).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it("자리 예약은 성공·종료 실패·still-running 모두에서 한 번 반납하고, pid 종료를 본 뒤에만 그 id를 잊는다(B212 I1·M1)", async () => {
+    expect((await r.reopen(rec(), undefined)).ok).toBe(true);
+    expect([released, forgot]).toEqual([1, ["s1"]]);
+    terminate.mockResolvedValueOnce({ ok: false, error: "unverified" });
+    await r.reopen(rec(), undefined);
+    alive = () => true;
+    await r.reopen(rec(), undefined);
+    expect([released, forgot]).toEqual([3, ["s1"]]);
   });
 
   it("SIGTERM 뒤 pid가 끝날 때까지 250ms 간격으로 보고, 끝나면 같은 기록으로 다시 연다", async () => {
@@ -97,9 +120,34 @@ describe("Reopener(B201 — 끝날 때까지 기다림, SIGKILL 없음)", () => 
     expect(terminate).not.toHaveBeenCalled();
   });
 
+  it("ChannelHub 자리 예약: 예약은 상한에 들어가고, 반납하면 다시 빈다(B212 I1 경쟁)", () => {
+    const hub = new ChannelHub({ file: join(mkdtempSync(join(tmpdir(), "co-res-")), "x.json"), available: { ok: true } });
+    for (let i = 0; i < MAX_LAUNCHED - 1; i++) expect(hub.register(`f${i}`, "t")).not.toBeNull();
+    const release = hub.reserve()!;
+    expect(release).toBeTypeOf("function");
+    expect(hub.reserve()).toBeNull();
+    expect(hub.register("late", "t")).toBeNull(); // 그 사이 새 층 launch는 자리가 없다
+    release();
+    release(); // 두 번 반납해도 한 번
+    expect(hub.register("reopened", "t")).not.toBeNull();
+    expect(hub.reserve()).toBeNull();
+  });
+
   it("다시 열기가 실패하면 launch 오류 그대로", async () => {
     launch.mockResolvedValueOnce({ ok: false, error: "tmux" });
     expect(await r.reopen(rec(), undefined)).toEqual({ ok: false, error: "tmux" });
+  });
+});
+
+describe("FloorControl.forget(B212 M1)", () => {
+  it("그 id의 종료 중·멈춤·막힌 수를 지운다", async () => {
+    const fc = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 4242 });
+    fc.pause("s1");
+    fc.preToolUse({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Bash" });
+    await fc.terminate(rec(), false);
+    expect(fc.view("s1")).toMatchObject({ paused: true, pausedDenied: 1, terminating: true });
+    fc.forget("s1");
+    expect(fc.view("s1")).toEqual({ paused: false, pausedDenied: 0, terminating: false });
   });
 });
 
@@ -193,6 +241,13 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
     floors.pause("s1");
     expect(await res("/api/floors/s1/reopen")).toEqual([409, { error: "paused" }]);
     expect(calls).toEqual([]);
+  });
+
+  it("신호 전 실패: 상한 409 limit(resumeId 없음), 없는 폴더 400 cwd(B212 I1)", async () => {
+    reply = { ok: false, error: "limit", before: true };
+    expect(await res("/api/floors/s1/reopen")).toEqual([409, { error: "limit" }]);
+    reply = { ok: false, error: "cwd", before: true };
+    expect(await res("/api/floors/s1/reopen")).toEqual([400, { error: "cwd" }]);
   });
 
   it("합친 층(convId ≠ sessionId)은 409 merged(B205 ③)", async () => {

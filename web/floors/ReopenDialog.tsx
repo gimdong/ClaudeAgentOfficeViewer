@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from "react";
 import type { SessionView } from "../../src/shared/types";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 import { CH_TEXT } from "./ChannelDialogs";
@@ -40,7 +40,10 @@ function failText(f: Fail): { text: string; stop: boolean; cmd?: string } {
       return { text: RE_TEXT.stillRunning, stop: false, cmd };
     case "limit":
     case "tmux":
-      return { text: RE_TEXT.launchFailed, stop: true, cmd };
+      // resumeId가 없으면 신호 전에 멈춘 것(세션은 그대로, B212 I1) — 4b 새 층 실패와 같은 문구
+      return cmd ? { text: RE_TEXT.launchFailed, stop: true, cmd } : { text: CH_TEXT.errors[f.error], stop: true };
+    case "cwd":
+      return { text: CH_TEXT.errors.cwd, stop: true };
     case "ancestor":
       return { text: RE_TEXT.titleAncestor, stop: true };
     case "busy":
@@ -123,10 +126,21 @@ async function confirmReopen(id: string): Promise<void> {
   const now = entries.get(id) ?? e;
   if ("unauthorized" in r) return put(id, undefined);
   // 창을 닫았어도 끝나면 다시 연다(성공: 붙는 단계, 실패: 실패 줄 + 명령 상자)
-  if (r.ok) {
-    put(id, { ...now, sending: false, open: true, tmux: r.tmux, fail: undefined });
-    announceFn?.(RE_TEXT.done(now.session.name));
-  } else put(id, { ...now, sending: false, open: true, fail: { error: r.error, ...(r.resumeId ? { resumeId: r.resumeId } : {}) } });
+  const result = r.ok ? { tmux: r.tmux, fail: undefined } : { fail: { error: r.error, ...(r.resumeId ? { resumeId: r.resumeId } : {}) } };
+  if (r.ok) announceFn?.(RE_TEXT.done(now.session.name));
+  // 이 창을 닫았고 다른 창이 열려 있으면 그 창이 닫힐 때까지 미룬다(4a 둘째 창 규칙과 같다, B212 M2). 결과는 버리지 않는다
+  if (!now.open && document.querySelector("dialog[open]")) {
+    put(id, { ...now, ...result, sending: false, open: false });
+    const t = setInterval(() => {
+      const e2 = entries.get(id);
+      if (!e2 || e2.open) return clearInterval(t);
+      if (document.querySelector("dialog[open]")) return;
+      clearInterval(t);
+      put(id, { ...e2, open: true });
+    }, 200);
+    return;
+  }
+  put(id, { ...now, ...result, sending: false, open: true });
 }
 function closeReopen(id: string): void {
   const e = entries.get(id);
@@ -240,7 +254,13 @@ function ReopenDialog({ id, e }: { id: string; e: Entry }) {
 
 /** 열린 옮겨 열기 창들(보통 하나). Building이 한 번 그린다 — 층이 잠깐 사라져도 창과 요청이 이어진다 */
 export function ReopenHost({ announce }: { announce?: (t: string) => void }) {
-  announceFn = announce;
+  // 렌더 중에 모듈 값을 바꾸지 않는다(B212 M3)
+  useEffect(() => {
+    announceFn = announce;
+    return () => {
+      if (announceFn === announce) announceFn = undefined;
+    };
+  }, [announce]);
   const all = useSyncExternalStore(subscribe, current);
   return (
     <>

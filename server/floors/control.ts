@@ -109,6 +109,14 @@ export class FloorControl {
     return { ok: true, signal: sig, sent: true };
   }
 
+  /** 옮겨 열기에서 pid 종료를 본 뒤(B212 M1): 같은 id로 다시 열리는 세션에 옛 종료 중·멈춤이 남지 않게 지운다 */
+  forget(sessionId: string): void {
+    const had = this.terminating.delete(sessionId) || this.paused.delete(sessionId);
+    this.paused.delete(sessionId);
+    this.pausedDenied.delete(sessionId);
+    if (had) this.changed();
+  }
+
   hide(sessionId: string): void {
     if (this.hidden.has(sessionId)) return;
     this.hidden.add(sessionId);

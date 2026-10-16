@@ -8,7 +8,8 @@ export const REOPEN_WAIT_MS = 15_000;
 
 export type ReopenMode = "subagents" | "team" | undefined;
 export type ReopenLaunch = (record: SessionRecord, mode: ReopenMode) => Promise<{ ok: true; tmux: string } | { ok: false; error: "limit" | "tmux" }>;
-export type ReopenResult = { ok: true; tmux: string } | { ok: false; error: TerminateError | "busy" | "ancestor" | "still-running" | "limit" | "tmux" };
+/** before: 신호를 보내기 전에 멈춘 실패(세션은 그대로 살아 있다) */
+export type ReopenResult = { ok: true; tmux: string } | { ok: false; error: TerminateError | "busy" | "ancestor" | "still-running" | "limit" | "tmux" | "cwd"; before?: true };
 
 /** ppid 사슬의 깊이 상한(B205 ④) */
 export const ANCESTOR_DEPTH = 32;
@@ -46,6 +47,10 @@ export class Reopener {
       launch: ReopenLaunch;
       /** 대상 pid가 대시보드 서버의 조상인지. true·undefined(확인 불가)면 끄지 않는다 — 끄면 서버도 죽어 다시 열 수 없다(B205 ④) */
       isAncestor?: (pid: number) => boolean | undefined;
+      /** 신호 전에 미리 알 수 있는 실패(B212 I1): 원래 폴더 검사·launched 자리 예약. 성공이면 예약을 반납할 함수 */
+      precheck?: (record: SessionRecord, mode: ReopenMode) => { ok: true; release(): void } | { ok: false; error: "limit" | "cwd" };
+      /** pid 종료를 본 뒤 그 id의 종료 중·멈춤을 지운다(B212 M1) */
+      forget?: (sessionId: string) => void;
       now?: () => number;
       sleep?: (ms: number) => Promise<void>;
     },
@@ -62,6 +67,12 @@ export class Reopener {
     const id = record.sessionId;
     if (this.running.has(id)) return { ok: false, error: "busy" };
     if (this.o.isAncestor && this.o.isAncestor(record.pid) !== false) return { ok: false, error: "ancestor" };
+    const pre = this.o.precheck?.(record, mode) ?? { ok: true as const, release: () => {} };
+    if (!pre.ok) return { ok: false, error: pre.error, before: true };
+    let held = true;
+    const release = () => {
+      if (held) (held = false), pre.release();
+    };
     this.running.add(id);
     try {
       const t = await this.o.terminate(record);
@@ -74,8 +85,11 @@ export class Reopener {
         }
         await this.sleep(REOPEN_POLL_MS);
       }
+      this.o.forget?.(id);
+      release(); // 다시 열기가 그 자리에 등록한다
       return await this.o.launch(record, mode);
     } finally {
+      release();
       this.running.delete(id);
     }
   }
