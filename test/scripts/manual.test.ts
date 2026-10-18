@@ -907,7 +907,11 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(sec).toContain(`<h3 id="same-user">"${UID_REJECT_BODY}"가 떠요(Linux)</h3>`);
     expect(sec).toContain(`<pre class="out">${UID_REJECT_BODY}</pre>`);
     const tpl = /item\("hooks", "warn", "실시간 이벤트", `(다른 계정의 접속 \$\{uidRejected\}[^`]*)`\)/.exec(read("server/diag/doctor.ts"))![1];
-    expect(sec).toContain(`<pre class="out">⚠️ 실시간 이벤트: ${tpl.replace("${uidRejected}", "3")}</pre>`);
+    // B251 M1: uid 문장은 기존 판정 뒤에 ". "로 붙는다(doctor.ts의 조립 그대로)
+    const doctorSrc = read("server/diag/doctor.ts");
+    expect(doctorSrc).toContain("detail: `${base.detail}. ${uid.detail}`");
+    const okTpl = /item\("hooks", "ok", "실시간 이벤트", `([^`]*)`\)/.exec(doctorSrc)![1].replace("${v.last10min}", "4");
+    expect(sec).toContain(`<pre class="out">⚠️ 실시간 이벤트: ${okTpl}. ${tpl.replace("${uidRejected}", "3")}</pre>`);
     for (const s of ["<strong>다른 계정</strong>", "<strong>다른 컨테이너</strong>", "같은 계정이어도", "이 검사를 끄는 설정은 없습니다", "macOS와 Windows에서는 이 검사를 하지 않습니다"]) expect(sec, s).toContain(s);
     expect(read("server/peer.ts")).toMatch(/linux/);
   });
