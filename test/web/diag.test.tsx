@@ -16,7 +16,7 @@ const summary = (o: Partial<DiagnosticsSummary> = {}): DiagnosticsSummary => ({
     { id: "managed", status: "fail", title: "회사 관리자 설정", detail: "있음: 관리자 hook만 허용", fix: "사용설명서 부록 A를 회사 관리자에게 전달해 설정을 부탁해 주세요." },
     { id: "statusline", status: "ok", title: "요금제 한도(선택)", detail: "없음", fix: "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다" },
   ],
-  hooks: { total: 9, byEvent: {}, lastAt: new Date(NOW - 2 * 60_000).toISOString(), rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 5 },
+  hooks: { total: 9, byEvent: {}, lastAt: new Date(NOW - 2 * 60_000).toISOString(), rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0 }, last10min: 5 },
   errorsLastHour: 0,
   logDir: "~/.claude-office/logs",
   diagDir: "~/.claude-office/diagnostics",
@@ -63,7 +63,7 @@ describe("hookLine", () => {
     expect(hookLine(h, NOW)).toBe("최근 10분 5건, 마지막 수신 2분 전, 거부 0건");
     expect(hookLine({ ...h, lastAt: new Date(NOW - 30_000).toISOString() }, NOW)).toContain("마지막 수신 방금");
     expect(hookLine({ ...h, lastAt: new Date(NOW - 3 * 3_600_000 - 10).toISOString() }, NOW)).toContain("마지막 수신 3시간 전");
-    expect(hookLine({ ...h, last10min: 0, lastAt: null, rejected: { "403": 1, "415": 0, "413": 0, "400": 2 } }, NOW)).toBe("최근 10분 0건, 마지막 수신 없음, 거부 3건");
+    expect(hookLine({ ...h, last10min: 0, lastAt: null, rejected: { "403": 1, "415": 0, "413": 0, "400": 2, "403-uid": 0 } }, NOW)).toBe("최근 10분 0건, 마지막 수신 없음, 거부 3건");
   });
 });
 

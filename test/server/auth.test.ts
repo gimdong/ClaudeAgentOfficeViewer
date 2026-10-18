@@ -61,7 +61,7 @@ beforeAll(async () => {
       auth: { token: TOKEN, version: "9.9.9-test" },
       diagnostics: {
         diagDir: tmp,
-        summary: async () => ({ doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" }),
+        summary: async () => ({ doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" }),
         makeBundle: async () => "claude-office-diag-20261002-000000.json",
       },
     },

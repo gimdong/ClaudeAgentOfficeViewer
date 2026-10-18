@@ -249,6 +249,9 @@ const checks: Check[] = [
     if (!v && (await d.probePort(d.port)) === "v1")
       return item("hooks", "warn", "실시간 이벤트", "확인하지 못했습니다(이전 버전 서버)", "이전 버전 서버를 끄고 claude-office로 다시 켠 뒤 확인해 주세요.");
     if (!v) return item("hooks", "warn", "실시간 이벤트", "서버가 꺼져 있어 확인하지 못했습니다", "대시보드를 켠 뒤 다시 확인해 주세요.");
+    // 다른 계정의 접속(Phase 5 §2)은 여러 사람이 쓰는 컴퓨터에서는 정상이라 따로, 먼저 알린다
+    const uidRejected = v.rejected["403-uid"] ?? 0;
+    if (uidRejected > 0) return item("hooks", "warn", "실시간 이벤트", `다른 계정의 접속 ${uidRejected}건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.`);
     const rejected = Object.values(v.rejected).reduce((a, b) => a + b, 0);
     if (rejected > 0) return item("hooks", "warn", "실시간 이벤트", `거부된 요청 ${rejected}건`, "진단 파일을 만들어 담당자에게 보내 주세요.");
     if (v.total === 0) return item("hooks", "warn", "실시간 이벤트", "받은 이벤트 0건", "Claude Code 세션에서 아무 작업이나 해 보세요. 그래도 0건이면 플러그인과 회사 관리자 설정 항목을 확인해 주세요.");

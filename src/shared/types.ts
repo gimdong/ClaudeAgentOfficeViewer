@@ -209,7 +209,7 @@ export interface Snapshot {
 export type DoctorStatus = "ok" | "warn" | "fail";
 /** doctor 항목. detail에는 값이 아니라 있음/없음과 숫자만 넣는다 */
 export interface DoctorItem { id: string; status: DoctorStatus; title: string; detail: string; fix: string }
-export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<"403" | "415" | "413" | "400", number>; last10min: number }
+export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<"403" | "415" | "413" | "400" | "403-uid", number>; last10min: number }
 /** GET /api/diagnostics. 경로는 "~"로 치환되어 온다 */
 export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView; errorsLastHour: number; logDir: string; diagDir: string }
 

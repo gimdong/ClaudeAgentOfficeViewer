@@ -16,6 +16,7 @@ import type { PolicyRules } from "../src/shared/types";
 import type { SessionRecord } from "./collectors/sessions";
 import type { TerminateResult } from "./floors/control";
 import { MAX_TEXT, type ChannelHub } from "./floors/channels";
+import { sameUserGuard } from "./peer";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
 
@@ -114,6 +115,8 @@ export function createApp(
       hiddenCount(): number;
       record(id: string): SessionRecord | undefined;
     };
+    /** 같은 계정 검사의 주입(테스트용). 없으면 실제 OS·uid·/proc */
+    sameUser?: { platform?: string; uid?: number; read?: (p: string) => string };
   } = {},
 ): Express {
   const app = express();
@@ -127,6 +130,8 @@ export function createApp(
     }
     next();
   });
+  // 같은 계정만 받기(Phase 5 §2): Host 검사 바로 뒤, 모든 경로(hook·channel·/api·화면). 셈은 403-uid만(Host의 403과 겹치지 않음)
+  app.use(sameUserGuard({ ...opts.sameUser, onReject: () => opts.stats?.reject("403-uid") }));
 
   // hook 이벤트 수신(스펙 5장). hook 요청은 인증하지 않는다(Phase 2 스펙 7.2 — 결정을 요청할 뿐이다). Host 검사(위), Origin 거부,
   // Content-Type 강제로 외부 웹페이지의 위조 요청을 막는다: 다른 출처의 브라우저가 JSON을 보내려면

@@ -15,7 +15,8 @@ export const KNOWN_EVENTS: ReadonlySet<string> = new Set([
 /** hook 수신 통계(스펙 5장 4번). 메모리에만 두고, 요약은 summarize()가 바뀌었을 때만 로그에 남긴다. */
 export class HookStats {
   private byEvent: Record<string, number> = {};
-  private rejected: Record<Rejected, number> = { "403": 0, "415": 0, "413": 0, "400": 0 };
+  // 403-uid: 같은 계정 검사(Phase 5 §2)가 막은 접속. 모든 경로에서 센다
+  private rejected: Record<Rejected, number> = { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0 };
   private times: number[] = []; // 최근 10분 수신 시각
   private total = 0;
   private lastAt: number | null = null;
