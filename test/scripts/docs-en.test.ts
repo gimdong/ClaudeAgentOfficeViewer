@@ -13,8 +13,9 @@ describe("영어 문서 (Phase 5 §4·§5)", () => {
 
   it("영어 README에 스펙 §4의 절이 모두 있다", () => {
     const md = read("README.md");
-    for (const h of ["## Install", "## Start", "## Security model", "## Experimental features", "## License"]) expect(md, h).toContain(h);
+    for (const h of ["## Install", "## Start", "## Security model", "## Experimental features", "## For administrators", "## License"]) expect(md, h).toContain(h);
     expect(md).toContain("claude-office open");
+    expect(md).toContain("docs/admin.md");
     // 보안 모델은 스펙 §2와 같게: Linux만 같은 계정 검사, macOS·Windows는 검사하지 않음
     expect(md).toMatch(/On Linux, the server accepts a connection only if it comes from a process of the same user account/);
     expect(md).toMatch(/On macOS and Windows this check is \*\*not\*\* done/);
@@ -43,6 +44,26 @@ describe("영어 문서 (Phase 5 §4·§5)", () => {
     const ko = yml.indexOf("설치에는 쓰지 마세요.");
     expect(en).toBeGreaterThan(-1);
     expect(ko).toBeGreaterThan(en);
+  });
+
+  it("관리자 안내(docs/admin.md)는 영어 절 → 한국어 절이고, json 블록이 모두 JSON으로 읽힌다(스펙 §5)", () => {
+    const md = read("docs/admin.md");
+    expect(md.indexOf("## English")).toBeGreaterThan(-1);
+    expect(md.indexOf("## 한국어")).toBeGreaterThan(md.indexOf("## English"));
+    const blocks = [...md.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]);
+    expect(blocks.length).toBe(2);
+    for (const b of blocks) {
+      const j = JSON.parse(b) as Record<string, unknown>;
+      expect(j.enabledPlugins).toEqual({ "claude-office@claude-office": true });
+      expect(j.allowedHttpHookUrls).toEqual(["http://127.0.0.1:4317/*"]);
+      expect(j.channelsEnabled).toBe(true);
+      expect("allowedChannelPlugins" in j).toBe(false); // B243
+    }
+  });
+
+  it("README 두 개가 관리자 안내를 가리킨다", () => {
+    expect(read("README.md")).toContain("](docs/admin.md)");
+    expect(read("README.ko.md")).toContain("](docs/admin.md)");
   });
 
   it("문서 예시에 실제 홈 경로·이메일이 없다(B242)", () => {

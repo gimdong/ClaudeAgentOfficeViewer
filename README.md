@@ -53,6 +53,10 @@ This starts the dashboard at `http://127.0.0.1:4317` and opens it in your browse
 
 Sending instructions to a running floor and starting a new floor from the dashboard use Claude Code **channels**, a research preview feature. They are off until you turn them on in the dashboard ("실험 기능"). They need tmux 3.0 or later (macOS / Linux), Claude Code shows a development-channel warning each time a floor starts, and on Team / Enterprise accounts they do not work until an administrator allows channels. Behavior may change with Claude Code updates.
 
+## For administrators
+
+Managed settings to allow the plugin and its local hook URL, and what the PLAN bar shows for each plan: [docs/admin.md](docs/admin.md).
+
 ## Building from source
 
 ```bash
