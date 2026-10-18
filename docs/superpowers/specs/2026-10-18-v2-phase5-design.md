@@ -46,12 +46,11 @@
 {
   "enabledPlugins": { "claude-office@claude-office": true },
   "allowedHttpHookUrls": ["http://127.0.0.1:4317/*"],
-  "channelsEnabled": true,
-  "allowedChannelPlugins": ["claude-office@claude-office"]
+  "channelsEnabled": true
 }
 ```
   - `allowManagedHooksOnly` 환경에서는 `enabledPlugins`로 강제 활성화해야 hook이 살아난다.
-  - channels 두 항목은 실험 기능(작업 지시·새 층)을 쓸 때만.
+  - `channelsEnabled`는 실험 기능(작업 지시·새 층)을 쓸 때만. 이 앱은 channel을 `--dangerously-load-development-channels`로 붙이므로 `allowedChannelPlugins`는 필요 없다(넣으면 다른 channel만 막는다).
 - 요금제별 PLAN 바 표:
 
 | 계정 | 5시간·주간 바 | 지출 한도 바 | 예산 |
