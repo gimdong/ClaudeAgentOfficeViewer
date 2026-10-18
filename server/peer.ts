@@ -56,6 +56,7 @@ export function peerUidFromProc(tcp: string, tcp6: string, clientAddr: string, c
   for (const line of `${tcp}\n${tcp6}`.split("\n")) {
     const c = line.trim().split(/\s+/);
     if (c.length < 8 || !c[0].endsWith(":")) continue;
+    if (c[3] !== "01") continue; // 살아 있는 연결(ESTABLISHED)만 — 같은 튜플의 TIME_WAIT 등은 소유 uid가 0으로 남는다(B251 M2)
     const l = split(c[1]);
     const r = split(c[2]);
     if (l.port !== clientPort || r.port !== serverPort || !ca.has(l.addr) || !sa.has(r.addr)) continue;

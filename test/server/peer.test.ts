@@ -36,6 +36,12 @@ describe("peerUidFromProc(순수 함수)", () => {
     // 서버 쪽(rem) 주소가 다른 줄도 아니다
     expect(peerUidFromProc(HEAD + row(50000, 4317, 1000, LO4, "0200007F"), "", L, 50000, L, 4317)).toBeNull();
   });
+  it("클라이언트 줄은 ESTABLISHED(st 01)만 본다: 같은 튜플의 TIME_WAIT(06) 줄이 있어도 통과, ESTABLISHED가 없으면 거절(B251 M2)", () => {
+    const tw = row(50000, 4317, 0).replace(" 01 ", " 06 ");
+    expect(peerUidFromProc(HEAD + tw + row(50000, 4317, 1000), "", L, 50000, L, 4317)).toBe(1000);
+    expect(peerUidFromProc(HEAD + tw, "", L, 50000, L, 4317)).toBeNull();
+  });
+
   it("IPv4 매핑 주소(::ffff:127.0.0.1)는 tcp6의 매핑 형태로 찾는다(B244 a)", () => {
     expect(peerUidFromProc(HEAD, HEAD + row6(50000, 4317, 1002, MAP6, MAP6), "::ffff:127.0.0.1", 50000, "::ffff:127.0.0.1", 4317)).toBe(1002);
   });
