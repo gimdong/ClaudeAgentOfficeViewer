@@ -148,6 +148,26 @@ describe("npm run package:beta", () => {
     for (const rel of required) expect(existsSync(join(RELEASE_DIR, rel)), rel).toBe(true);
   });
 
+  it("설명서 두 개(사용설명서.html·manual-en.html)가 들어 있고, 서로의 링크가 압축 안의 이름을 가리킨다(B245·B247)", () => {
+    requireBuildOk();
+    const ko = readFileSync(join(RELEASE_DIR, "사용설명서.html"), "utf8");
+    const en = readFileSync(join(RELEASE_DIR, "manual-en.html"), "utf8");
+    expect(ko).toContain('href="manual-en.html"');
+    expect(ko).not.toContain('href="en.html"');
+    expect(en).toContain('href="사용설명서.html"');
+    expect(en).not.toContain('href="index.html"');
+    // 링크 대상이 압축 안에 실제로 있다
+    for (const t of ["manual-en.html", "사용설명서.html"]) expect(existsSync(join(RELEASE_DIR, t)), t).toBe(true);
+    // 저장소 파일은 그대로다
+    expect(readFileSync(join(ROOT, "docs/manual/index.html"), "utf8")).toContain('href="en.html"');
+  });
+
+  it("패키지 속 플러그인의 모든 hook이 VERSION과 같은 버전 헤더를 보낸다(Phase 5 §3)", () => {
+    requireBuildOk();
+    const f = JSON.parse(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")) as { hooks: Record<string, Array<{ hooks: Array<{ headers?: Record<string, string> }> }>> };
+    for (const groups of Object.values(f.hooks)) for (const g of groups) for (const h of g.hooks) expect(h.headers?.["X-Claude-Office-Plugin"]).toBe(VERSION);
+  });
+
   it("패키지 속 플러그인의 PermissionRequest hook timeout은 600, 나머지는 5(Phase 2)", () => {
     requireBuildOk();
     const f = JSON.parse(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")) as { hooks: Record<string, Array<{ hooks: Array<{ timeout: number }> }>> };

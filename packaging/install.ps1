@@ -130,6 +130,9 @@ Copy-Item -Force (Join-Path $Here "VERSION") (Join-Path $Prefix "VERSION")
 if (Test-Path -LiteralPath (Join-Path $Here "사용설명서.html")) {
   Copy-Item -Force (Join-Path $Here "사용설명서.html") (Join-Path $Prefix "사용설명서.html")
 }
+if (Test-Path -LiteralPath (Join-Path $Here "manual-en.html")) {
+  Copy-Item -Force (Join-Path $Here "manual-en.html") (Join-Path $Prefix "manual-en.html")
+}
 Copy-Item -Force (Join-Path $Here "claude-office.ps1") (Join-Path $Prefix "bin\claude-office.ps1")
 Copy-Item -Force (Join-Path $Here "claude-office.cmd") (Join-Path $Prefix "bin\claude-office.cmd")
 Write-InstallLog "copy" "ok" "앱 파일 복사 완료 `"$Prefix\app`""

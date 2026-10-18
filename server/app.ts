@@ -79,6 +79,8 @@ export function createApp(
     staticDir?: string;
     heartbeatMs?: number;
     onHookEvent?: (input: Record<string, unknown>) => void;
+    /** hook이 보낸 플러그인 버전(X-Claude-Office-Plugin, Phase 5 §3). 헤더가 없으면 "unknown" */
+    onPluginVersion?: (version: string) => void;
     /** hook의 session_id를 대화 키로 바꾼다(B194 — 합친 층의 층 id로 온 hook). 모르는 id는 그대로. 없으면 바꾸지 않는다 */
     normalizeSession?: (sessionId: string) => string;
     stats?: HookStats;
@@ -168,6 +170,12 @@ export function createApp(
       const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
       const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
       opts.stats?.accept(input.hook_event_name as string);
+      try {
+        // 버전 문자열은 짧게만(헤더는 인증하지 않는다 — 스냅샷이 커지지 않게)
+        opts.onPluginVersion?.((req.get("X-Claude-Office-Plugin") ?? "unknown").slice(0, 40));
+      } catch (e) {
+        getLogger().error("hooks", "plugin version failed", { error: errInfo(e) });
+      }
       const isPre = input.hook_event_name === "PreToolUse";
       // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다
       // (막힌 호출이 "작업 중"으로 남지 않게, Phase 3 B79). 판정이 던지면 일시정지가 없는 것처럼 이어 간다

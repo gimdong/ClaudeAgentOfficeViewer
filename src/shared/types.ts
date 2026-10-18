@@ -186,6 +186,8 @@ export interface Snapshot {
   generatedAt: string;
   /** 이 스냅샷을 만든 서버의 버전(FB-7). beta.4 이전 서버는 싣지 않으므로 화면은 "없음"도 불일치로 본다 */
   serverVersion?: string;
+  /** 마지막 hook이 보낸 플러그인 버전과 서버 버전이 같은지(Phase 5 §3). hook을 한 번도 받지 않았으면 없음 */
+  plugin?: { version: string; match: boolean };
   error?: string;
   usage: UsageSummary;
   budget: { fiveHour?: number; weekly?: number };

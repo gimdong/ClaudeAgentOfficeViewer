@@ -127,6 +127,7 @@ cp -R "$HERE/app" "$PREFIX/app"
 cp -R "$HERE/plugin" "$PREFIX/plugin"
 cp "$HERE/VERSION" "$PREFIX/VERSION"
 [ -f "$HERE/사용설명서.html" ] && cp "$HERE/사용설명서.html" "$PREFIX/사용설명서.html"
+[ -f "$HERE/manual-en.html" ] && cp "$HERE/manual-en.html" "$PREFIX/manual-en.html"
 cp "$HERE/claude-office.sh" "$PREFIX/bin/claude-office"; chmod 755 "$PREFIX/bin/claude-office"
 log copy ok "앱 파일 복사 완료 \"$PREFIX/app\""
 

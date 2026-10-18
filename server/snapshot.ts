@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 마지막 hook이 보낸 플러그인 버전(Phase 5 §3). null이면 아직 받지 않음 */
+  plugin?: () => string | null;
   /** 작업 지시 켜기(B205 ④): 대상 pid가 대시보드 서버의 조상인지(확인 불가 = undefined) */
   reopen?: { isAncestor(pid: number): boolean | undefined; busy?(sessionId: string): boolean };
   /** 서브에이전트 시작·끝 기록기(B171). 없으면 대화 기록 mtime만으로 판정한다 */
@@ -120,8 +122,9 @@ export class SnapshotBuilder {
     this.usage = new UsageCollector(join(opts.claudeHome, "projects"));
   }
 
-  private versionField(): Pick<Snapshot, "serverVersion"> {
-    return this.opts.version ? { serverVersion: this.opts.version } : {};
+  private versionField(): Pick<Snapshot, "serverVersion" | "plugin"> {
+    const p = this.opts.plugin?.();
+    return { ...(this.opts.version ? { serverVersion: this.opts.version } : {}), ...(p ? { plugin: { version: p, match: p === this.opts.version } } : {}) };
   }
 
   async build(now = Date.now()): Promise<Snapshot> {

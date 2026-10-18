@@ -331,7 +331,9 @@ async function main(): Promise<void> {
   function isAncestor(pid: number): boolean | undefined {
     return serverAncestors ? serverAncestors.has(pid) : undefined;
   }
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
+  // 마지막 hook의 플러그인 버전(Phase 5 §3). 빌더가 첫 빌드에서 읽으므로 빌더보다 먼저 선언한다
+  let pluginVersion: string | null = null;
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -340,6 +342,12 @@ async function main(): Promise<void> {
 
   const stats = new HookStats();
   setInterval(() => stats.summarize(), 60_000).unref();
+  // 바뀌었을 때만 스냅샷을 다시 만든다
+  const onPluginVersion = (v: string) => {
+    if (v === pluginVersion) return;
+    pluginVersion = v;
+    hub.poke();
+  };
   const onHookEvent = (input: Record<string, unknown>) => {
     try {
       subagents.onEvent(input);
@@ -386,7 +394,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id) } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id) } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

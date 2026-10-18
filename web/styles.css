@@ -590,6 +590,8 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .held-text { flex: 1 1 200px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
 .chip--channel { border-color: var(--cyan, #3fd0ff); color: var(--cyan, #3fd0ff); }
 .exp-chip.on { color: var(--green, #39ffb6); }
+/* 서버·플러그인 버전 불일치(Phase 5 §3): 알림이라 누를 수 없다. 모양은 designer 확인 */
+.plugin-chip { cursor: default; padding: 4px 10px; }
 /* 일하는 방식 라디오·명령 상자: 담는 창과 무관하게(조상 선택자 없이) 같은 모양(REOPEN §2.0b, B211) */
 fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4px; border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
 .ch-mode legend { padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted); }

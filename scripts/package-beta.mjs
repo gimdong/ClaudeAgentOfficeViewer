@@ -53,7 +53,12 @@ function main() {
   const pluginJson = readJson(r("plugins/claude-office/.claude-plugin/plugin.json"));
   const marketplace = readJson(r(".claude-plugin/marketplace.json"));
   const marketplaceEntry = marketplace.plugins?.find((p) => p.name === "claude-office");
-  const versions = { "package.json": v, "plugin.json": pluginJson.version, "marketplace.json": marketplaceEntry?.version };
+  // hooks.json의 모든 hook이 보내는 플러그인 버전 헤더(Phase 5 §3)도 같아야 한다. 없거나 서로 다르면 그 값을 보인다
+  const hooksPath = r("plugins/claude-office/hooks/hooks.json");
+  const headerVersions = existsSync(hooksPath)
+    ? [...new Set(Object.values(readJson(hooksPath).hooks ?? {}).flatMap((groups) => groups.flatMap((g) => g.hooks.map((h) => h.headers?.["X-Claude-Office-Plugin"]))))]
+    : [];
+  const versions = { "package.json": v, "plugin.json": pluginJson.version, "marketplace.json": marketplaceEntry?.version, "hooks.json": headerVersions.length === 1 ? headerVersions[0] : headerVersions.join(",") || undefined };
   const mismatched = Object.entries(versions).filter(([, val]) => val !== v);
   if (mismatched.length > 0) {
     console.error(`[package-beta] 버전 불일치: ${JSON.stringify(versions)}`);
@@ -134,7 +139,7 @@ function main() {
   cpSync(r("plugins/claude-office"), join(releaseDir, "plugin/plugins/claude-office"), { recursive: true });
 
   // 7. 있으면 복사(Task 7·8·12가 나중에 채운다), 없으면 경고만
-  function copyIfExists(srcRel, destRel, mode) {
+  function copyIfExists(srcRel, destRel, mode, transform) {
     const src = r(srcRel);
     if (!existsSync(src)) {
       console.warn(`[package-beta] 없음, 건너뜀: ${srcRel}`);
@@ -142,7 +147,8 @@ function main() {
     }
     const dest = join(releaseDir, destRel);
     mkdirSync(dirname(dest), { recursive: true });
-    cpSync(src, dest);
+    if (transform) writeFileSync(dest, transform(readFileSync(src, "utf8")));
+    else cpSync(src, dest);
     if (mode !== undefined) chmodSync(dest, mode);
   }
   copyIfExists("packaging/install.sh", "install.sh", 0o755);
@@ -150,7 +156,9 @@ function main() {
   copyIfExists("packaging/claude-office.sh", "claude-office.sh", 0o755);
   copyIfExists("packaging/claude-office.cmd", "claude-office.cmd");
   copyIfExists("packaging/claude-office.ps1", "claude-office.ps1");
-  copyIfExists("docs/manual/index.html", "사용설명서.html");
+  // 설명서 두 개. 압축 안 이름이 저장소와 달라 서로를 가리키는 링크를 압축 이름으로 바꿔 쓴다(B245·B247). 저장소 파일은 그대로
+  copyIfExists("docs/manual/index.html", "사용설명서.html", undefined, (t) => t.replaceAll('href="en.html"', 'href="manual-en.html"'));
+  copyIfExists("docs/manual/en.html", "manual-en.html", undefined, (t) => t.replaceAll('href="index.html"', 'href="사용설명서.html"'));
   copyIfExists("LICENSE", "LICENSE");
   copyIfExists("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md");
   writeFileSync(join(releaseDir, "VERSION"), v + "\n");

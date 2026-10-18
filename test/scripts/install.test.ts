@@ -804,6 +804,21 @@ describe("packaging/install.sh, claude-office.sh", () => {
   });
 
   // #78/B17(SPEC 3장): uninstall이 끝나면 지운 것·남긴 것을 알린다.
+  it("설치하면 설명서 두 개(사용설명서.html·manual-en.html)가 PREFIX에 들어가고, 제거하면 둘 다 지워진다(B247)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      for (const f of ["사용설명서.html", "manual-en.html"]) expect(existsSync(join(prefix, f)), f).toBe(true);
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall", "--yes"], { env: env(rig), encoding: "utf8" });
+      expect(r.status, r.stderr).toBe(0);
+      for (const f of ["사용설명서.html", "manual-en.html"]) expect(existsSync(join(prefix, f)), f).toBe(false);
+    } finally {
+      rig.cleanup();
+    }
+  });
+
   it('uninstall --yes는 끝에 "제거를 마쳤습니다."와 지움/남김 목록을 출력한다', () => {
     requireBuildOk();
     const rig = makeRig();

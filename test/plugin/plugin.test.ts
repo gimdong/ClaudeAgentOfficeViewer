@@ -13,7 +13,7 @@ const EVENTS = [
 ];
 const TOOL_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"];
 
-type Hook = { type: string; url: string; timeout: number };
+type Hook = { type: string; url: string; timeout: number; headers?: Record<string, string> };
 type HookFile = { hooks: Record<string, Array<{ matcher?: string; hooks: Hook[] }>> };
 const readJson = async <T>(p: string): Promise<T> => JSON.parse(await readFile(p, "utf8")) as T;
 const allHooks = (f: HookFile) => Object.values(f.hooks).flatMap((groups) => groups.flatMap((g) => g.hooks));
@@ -66,6 +66,12 @@ describe("hooks.json", () => {
       expect(h.type).toBe("http");
       expect(h.url).toBe("http://127.0.0.1:4317/hooks/event");
     }
+  });
+
+  it("모든 hook이 플러그인 버전 헤더(X-Claude-Office-Plugin = package.json 버전)를 보낸다(Phase 5 §3)", async () => {
+    const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
+    const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
+    for (const h of allHooks(f)) expect(h.headers).toEqual({ "X-Claude-Office-Plugin": pkg.version });
   });
 
   it("PermissionRequest만 timeout 600, 나머지 12개는 5", async () => {
