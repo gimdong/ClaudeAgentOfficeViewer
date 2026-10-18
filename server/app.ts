@@ -634,5 +634,10 @@ export function createApp(
       res.status(503).type("html").send('<!doctype html><meta charset="utf-8"><title>Claude Agent Office</title><p>화면 파일이 없습니다 — 다시 설치해 주세요</p>');
     });
   }
+  // 마지막 오류 처리기(B262): express 기본 오류 페이지는 스택(설치 경로·사용자 이름)을 내보낸다. 본문 초과는 413, 그 밖은 400, 본문 없음
+  app.use((err: { status?: number }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(err);
+    res.status(err?.status === 413 ? 413 : 400).end();
+  });
   return app;
 }
