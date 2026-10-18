@@ -18,6 +18,11 @@ describe("플러그인 버전 칩(Phase 5 §3)", () => {
     render(<PluginChip snapshot={makeSnapshot({ serverVersion: "2.0.0-beta.12", plugin: { version: "2.0.0-beta.11", match: false } })} />);
     expect(screen.getByTestId("plugin-chip").textContent).toBe("플러그인 2.0.0-beta.11 ≠ 서버 2.0.0-beta.12 — 같은 압축 파일로 다시 설치하세요");
     expect(PLUGIN_TEXT.mismatch("a", "b")).toBe("플러그인 a ≠ 서버 b — 같은 압축 파일로 다시 설치하세요");
+    // 모양(B252): q-chip이 아니라 정책 칩 읽기 실패와 같은 모양, 글자 앞에 진단 warn 삼각형(aria-hidden)
+    const chip = screen.getByTestId("plugin-chip");
+    expect(chip.className).toBe("plugin-chip");
+    const svg = chip.firstElementChild!;
+    expect([svg.tagName.toLowerCase(), svg.getAttribute("aria-hidden"), svg.getAttribute("width")]).toEqual(["svg", "true", "14"]);
   });
 
   it("헤더가 없던 옛 플러그인(unknown)은 '플러그인 버전 모름'", () => {

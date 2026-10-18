@@ -590,8 +590,10 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .held-text { flex: 1 1 200px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
 .chip--channel { border-color: var(--cyan, #3fd0ff); color: var(--cyan, #3fd0ff); }
 .exp-chip.on { color: var(--green, #39ffb6); }
-/* 서버·플러그인 버전 불일치(Phase 5 §3): 알림이라 누를 수 없다. 모양은 designer 확인 */
-.plugin-chip { cursor: default; padding: 4px 10px; }
+/* 서버·플러그인 버전 불일치(Phase 5 §3, B252): 정책 칩 읽기 실패와 같은 모양(바탕 --panel·테두리 --red·그림자 없음), 진단 칩 높이·글자.
+   두 줄로 꺾이면 높이가 늘고 위아래 4px. 누를 수 없어 호버 변화 없음. 말줄임·nowrap 없음 */
+.plugin-chip { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; min-height: 26px; height: auto; padding: 4px 10px 4px 6px; line-height: 14px; background: var(--panel); color: var(--ink); border: 2px solid var(--red); box-shadow: none; font-size: 12px; cursor: default; word-break: keep-all; overflow-wrap: anywhere; }
+.plugin-chip svg { flex: none; width: 14px; height: 14px; color: var(--red); }
 /* 일하는 방식 라디오·명령 상자: 담는 창과 무관하게(조상 선택자 없이) 같은 모양(REOPEN §2.0b, B211) */
 fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4px; border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
 .ch-mode legend { padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
