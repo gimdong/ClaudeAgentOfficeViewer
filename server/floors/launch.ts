@@ -44,7 +44,8 @@ export function validateLaunch(b: unknown, home = homedir()): { ok: true; value:
 export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: string; sessionId: string; key: string; port: number; socket?: string; /** 옮겨 열기: 이 대화를 이어서 연다(--session-id 대신) */ resume?: string } & LaunchInput): string[] {
   return [
     ...(o.socket ? ["-L", o.socket] : []),
-    "new-session", "-d", "-s", o.tmuxName, "-c", o.cwd,
+    // tmux는 -c 값을 형식 문자열로 펼친다(#(cmd)는 명령 실행). ##는 글자 # 하나(B258)
+    "new-session", "-d", "-s", o.tmuxName, "-c", o.cwd.replaceAll("#", "##"),
     "-e", `CLAUDE_OFFICE_FLOOR_KEY=${o.key}`, "-e", `CLAUDE_OFFICE_PORT=${o.port}`,
     // agent team은 Claude Code의 실험 기능이라 이 환경변수가 있어야 켜진다. 사용자 설정 파일은 건드리지 않는다
     ...(o.mode === "team" ? ["-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"] : []),
