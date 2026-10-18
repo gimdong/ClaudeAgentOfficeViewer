@@ -14,17 +14,35 @@ import { makeSnapshot } from "../web/fixtures";
 // Phase 5 §2 같은 계정만 받기. /proc 내용은 모두 가짜 문자열(주입) — 실제 /proc·이름·경로를 쓰지 않는다(B242)
 const HEAD = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
 const hex = (p: number) => p.toString(16).toUpperCase().padStart(4, "0");
-const row = (lp: number, rp: number, uid: number | string) => `   0: 0100007F:${hex(lp)} 0100007F:${hex(rp)} 01 00000000:00000000 00:00000000 00000000  ${uid}        0 1\n`;
-const row6 = (lp: number, rp: number, uid: number) => `   0: 00000000000000000000000001000000:${hex(lp)} 00000000000000000000000001000000:${hex(rp)} 01 00000000:00000000 00:00000000 00000000  ${uid}        0 1\n`;
+const LO4 = "0100007F"; // 127.0.0.1(4바이트 리틀엔디언)
+const LO6 = "00000000000000000000000001000000"; // ::1(32비트 단어별 리틀엔디언)
+const MAP6 = "0000000000000000FFFF00000100007F"; // ::ffff:127.0.0.1
+const row = (lp: number, rp: number, uid: number | string, la = LO4, ra = LO4) => `   0: ${la}:${hex(lp)} ${ra}:${hex(rp)} 01 00000000:00000000 00:00000000 00000000  ${uid}        0 1\n`;
+const row6 = (lp: number, rp: number, uid: number, la = LO6, ra = LO6) => row(lp, rp, uid, la, ra);
+const L = "127.0.0.1";
 
 describe("peerUidFromProc(순수 함수)", () => {
   it("클라이언트 쪽 줄(local = 클라이언트 포트, rem = 서버 포트)의 uid. 서버 쪽 줄은 보지 않는다", () => {
-    expect(peerUidFromProc(HEAD + row(4317, 50000, 0) + row(50000, 4317, 1000), "", 50000, 4317)).toBe(1000);
+    expect(peerUidFromProc(HEAD + row(4317, 50000, 0) + row(50000, 4317, 1000), "", L, 50000, L, 4317)).toBe(1000);
   });
-  it("줄이 없으면 null", () => expect(peerUidFromProc(HEAD + row(4317, 50000, 0), "", 50000, 4317)).toBeNull());
-  it("tcp6([::1] 접속)도 찾는다", () => expect(peerUidFromProc(HEAD, HEAD + row6(50000, 4317, 1001), 50000, 4317)).toBe(1001));
-  it("uid가 숫자가 아니면 null(B241 ②)", () => expect(peerUidFromProc(HEAD + row(50000, 4317, "x1"), "", 50000, 4317)).toBeNull());
-  it("머리글·빈 줄·깨진 줄은 건너뛴다", () => expect(peerUidFromProc(`${HEAD}\ngarbage\n   1: zz\n${row(50000, 4317, 7)}`, "", 50000, 4317)).toBe(7));
+  it("줄이 없으면 null", () => expect(peerUidFromProc(HEAD + row(4317, 50000, 0), "", L, 50000, L, 4317)).toBeNull());
+  it("tcp6([::1] 접속)도 찾는다", () => expect(peerUidFromProc(HEAD, HEAD + row6(50000, 4317, 1001), "::1", 50000, "::1", 4317)).toBe(1001));
+  it("uid가 숫자가 아니면 null(B241 ②)", () => expect(peerUidFromProc(HEAD + row(50000, 4317, "x1"), "", L, 50000, L, 4317)).toBeNull());
+  it("머리글·빈 줄·깨진 줄은 건너뛴다", () => expect(peerUidFromProc(`${HEAD}\ngarbage\n   1: zz\n${row(50000, 4317, 7)}`, "", L, 50000, L, 4317)).toBe(7));
+  it("주소까지 맞춘다: 다른 로컬 주소의 같은 포트 줄이 앞에 있어도 그 uid로 판정하지 않는다(B244 a)", () => {
+    const other = row(50000, 4317, 1000, "0200007F", LO4); // 127.0.0.2 쪽의 같은 포트
+    expect(peerUidFromProc(HEAD + other + row(50000, 4317, 1001), "", L, 50000, L, 4317)).toBe(1001);
+    expect(peerUidFromProc(HEAD + other, "", L, 50000, L, 4317)).toBeNull();
+    // 서버 쪽(rem) 주소가 다른 줄도 아니다
+    expect(peerUidFromProc(HEAD + row(50000, 4317, 1000, LO4, "0200007F"), "", L, 50000, L, 4317)).toBeNull();
+  });
+  it("IPv4 매핑 주소(::ffff:127.0.0.1)는 tcp6의 매핑 형태로 찾는다(B244 a)", () => {
+    expect(peerUidFromProc(HEAD, HEAD + row6(50000, 4317, 1002, MAP6, MAP6), "::ffff:127.0.0.1", 50000, "::ffff:127.0.0.1", 4317)).toBe(1002);
+  });
+  it("주소·포트가 맞는 줄이 둘 이상이고 uid가 다르면 null(거절, B244 b). 같으면 그 uid", () => {
+    expect(peerUidFromProc(HEAD + row(50000, 4317, 1000) + row(50000, 4317, 1001), "", L, 50000, L, 4317)).toBeNull();
+    expect(peerUidFromProc(HEAD + row(50000, 4317, 1000) + row(50000, 4317, 1000), "", L, 50000, L, 4317)).toBe(1000);
+  });
 });
 
 describe("sameUserGuard(미들웨어, B241)", () => {
@@ -93,9 +111,9 @@ describe("sameUserGuard(미들웨어, B241)", () => {
     expect((await get()).status).toBe(200);
   });
 
-  it("줄 없음·uid가 숫자 아님·서버 포트가 4317로 고정이라 가정한 줄은 거절(B241 ②③)", async () => {
+  it("줄 없음·uid가 숫자 아님·서버 포트가 4317로 고정이라 가정한 줄·다른 주소의 같은 포트 줄은 거절(B241 ②③, B244)", async () => {
     await start({ platform: "linux", uid: 1000 });
-    for (const t of [HEAD, myRow("abc"), HEAD + row(lastClientPort, 4317, 1000)]) {
+    for (const t of [HEAD, myRow("abc"), HEAD + row(lastClientPort, 4317, 1000), HEAD + row(lastClientPort, port, 1000, "0200007F", LO4)]) {
       read = (p) => (p.endsWith("tcp") ? t : HEAD);
       expect((await get()).status).toBe(403);
     }
@@ -103,7 +121,8 @@ describe("sameUserGuard(미들웨어, B241)", () => {
 
   it("tcp6 줄로도 통과([::1] 접속, B241 ④)", async () => {
     await start({ platform: "linux", uid: 1000 });
-    read = (p) => (p.endsWith("tcp6") ? HEAD + row6(lastClientPort, port, 1000) : HEAD);
+    // 이 서버는 127.0.0.1에 떠 있으므로 tcp6 쪽에는 IPv4 매핑 표기로 나타난다
+    read = (p) => (p.endsWith("tcp6") ? HEAD + row6(lastClientPort, port, 1000, MAP6, MAP6) : HEAD);
     expect((await get()).status).toBe(200);
   });
 
