@@ -13,6 +13,7 @@
     "build:server": "vite build -c vite.server.config.ts",
     "package:beta": "node scripts/package-beta.mjs",
     "qa:analyze": "tsx scripts/qa-analyze.ts",
+    "figures": "node scripts/figures/phase3.mjs && node scripts/figures/phase4a.mjs",
     "start": "tsx server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
