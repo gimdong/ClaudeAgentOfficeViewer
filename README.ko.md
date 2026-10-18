@@ -66,6 +66,14 @@ claude --plugin-dir /tmp/claude-office-dev-plugin
 PLAN 바는 statusline이 넘겨 주는 `rate_limits`의 5시간·주간·지출 한도(`spend_limit`) 가운데 가장 많이 쓴 창을 보여줍니다. Pro/Max 구독이나 지출 한도가 있는 gateway 뒤에서만 값이 오고, 그 밖에는 `-- 데이터 없음`입니다.
 PLAN 바 값은 `npm run setup:statusline`으로 statusline tap을 설치해야 들어옵니다(설치는 사용자가 직접 결정합니다).
 
+## 보안
+
+- **같은 계정 검사는 Linux에서만 합니다.** Linux에서는 같은 사용자 계정의 프로그램이 보낸 연결만 받고(`/proc/net/tcp`로 확인), 다른 연결에는 `같은 사용자 계정의 프로그램만 접속할 수 있습니다`로 거절합니다. 다른 네트워크를 쓰는 컨테이너는 같은 계정이어도 거절됩니다. macOS·Windows에서는 이 검사를 하지 않습니다.
+- **대시보드는 `~/.claude`를 읽기만 합니다.** 설치는 동의한 경우에만 Claude Code의 `claude plugin` 명령으로 플러그인 설정을 기록하고, 셸 설정 파일에 PATH 한 줄을 더합니다.
+- **층 제어는 고른 Claude Code 프로세스에 신호를 보냅니다.** 보내기 전에 세션 기록의 pid와 시작 시각을 확인하고, Windows에서는 보내지 않습니다.
+
+문제가 생겼을 때는 [설명서 6장](docs/manual/index.html#s6)을 보세요.
+
 ## 글꼴
 
 화면의 도트 한글 글꼴은 [Galmuri](https://github.com/quiple/galmuri)(SIL Open Font License 1.1)입니다. 저작권 표시는 `THIRD_PARTY_NOTICES.md`에 있습니다.
