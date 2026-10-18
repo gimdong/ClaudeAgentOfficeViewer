@@ -191,9 +191,9 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 </ol>
 
 <h3>Linux: "같은 사용자 계정의 프로그램만 접속할 수 있습니다"</h3>
-<p>"Only programs of the same user account can connect." On Linux the dashboard accepts connections only from processes of the user account that started it. Another account on a shared machine, or a container with its own network (even under the same account), gets this reply (HTTP 403). This is intended, and there is no setting to turn it off. Run the dashboard as the same account, and in the same network, as Claude Code. doctor counts these refusals:</p>
-<pre class="out">⚠️ 실시간 이벤트: 다른 계정의 접속 {n}건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.</pre>
-<p>"Blocked {n} connections from other accounts. Normal on a computer shared by several people."</p>
+<p>"Only programs of the same user account can connect." On Linux the dashboard accepts connections only from processes of the user account that started it. Another account on a shared machine, or a container with its own network (even under the same account), gets this reply (HTTP 403). This is intended, and there is no setting to turn it off. Run the dashboard as the same account, and in the same network, as Claude Code. doctor counts these refusals at the end of its <strong>실시간 이벤트</strong> (live events) line:</p>
+<pre class="out">⚠️ 실시간 이벤트: 최근 10분 4건. 다른 계정의 접속 3건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.</pre>
+<p>"Blocked 3 connections from other accounts. Normal on a computer shared by several people." The part before it depends on the current event check.</p>
 
 <h3>The installer finished with "no" without asking</h3>
 <pre class="out">입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.</pre>
