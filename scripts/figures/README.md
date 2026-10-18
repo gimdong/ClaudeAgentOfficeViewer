@@ -12,15 +12,21 @@
 ## 실행
 
 ```bash
-npm run figures                               # 두 폴더에 다시 씀
-node scripts/figures/phase4a.mjs /tmp/figcmp  # 다른 폴더에 써서 비교만
+npm run figures   # 두 출력 폴더에 다시 씀
+```
+
+커밋된 그림과 같은지 비교만 하려면(저장소 폴더는 건드리지 않음):
+
+```bash
+d=$(mktemp -d) && node scripts/figures/phase3.mjs "$d/phase3" && node scripts/figures/phase4a.mjs "$d/phase4a" \
+  && diff -r "$d/phase3" docs/design/phase3/manual-figures && diff -r "$d/phase4a" docs/design/phase4a/manual-figures && echo "같음"
 ```
 
 그림 문구는 화면 코드의 문구 상수(`web/floors/useFloors.ts`의 `FLOOR_TEXT`, `web/policy/text.ts` 등)와 디자인 명세 문구표의 글자 그대로여야 합니다. 화면 문구가 바뀌면 생성기의 글자도 바꾼 뒤 다시 만듭니다.
 
 ## 설명서에 다시 넣기
 
-설명서는 그림을 원본 SVG와 **글자까지 같게** 품고 있고, `test/scripts/manual.test.ts`("그림이 designer 원본 SVG와 같다")가 둘을 대조합니다. 그림을 다시 만들었으면 바뀐 SVG를 설명서의 같은 자리에 다시 넣어야 테스트가 통과합니다(설명서는 qa 담당).
+설명서는 그림을 원본 SVG와 **글자까지 같게** 품고 있고, `test/scripts/manual.test.ts`("그림이 designer 원본 SVG와 같다")가 둘을 대조합니다. 그림을 다시 만들었으면 `docs/manual/index.html`에서 `<figure class="fig" data-fig="그림 이름">` 바로 안의 `<svg …>…</svg>` 한 덩어리를 새 SVG 파일 내용 전체로 바꿉니다(앞뒤 공백 없이, 다른 데는 손대지 않음). 그다음 `npx vitest run test/scripts/manual.test.ts`로 대조가 통과하는지 봅니다(설명서는 qa 담당).
 
 생성기를 고치지 않았는데 `npm run figures` 뒤 `git diff docs/design`에 차이가 생기면 생성기와 커밋된 그림이 어긋난 것입니다. 그림을 커밋하기 전에 원인을 확인해 주세요.
 
