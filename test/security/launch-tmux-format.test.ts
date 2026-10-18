@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { launchArgs } from "../../server/floors/launch";
 
-const base = { tmuxName: "co-1", claude: "/c/claude", channelSpec: "s", sessionId: "u1", key: "k".repeat(64), port: 4317, name: "n" };
+const base = { tmuxName: "co-1", claude: "/c/claude", channelSpec: "s", sessionId: "u1", keyFile: "/k", port: 4317, name: "n" };
 const cwdArg = (cwd: string) => {
   const a = launchArgs({ ...base, cwd });
   return a[a.indexOf("-c") + 1];
