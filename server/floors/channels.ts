@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ServerResponse } from "node:http";
@@ -9,6 +9,9 @@ import { errInfo, getLogger } from "../log";
 export { MAX_LAUNCHED };
 export const MAX_HELD = 20;
 export const MAX_TEXT = 8_000;
+/** 핸드셰이크(B257)의 미결 snonce: 층마다 이만큼(넘치면 오래된 것부터 버림), 이 시간 뒤 무효. 층이 MAX_LAUNCHED개까지라 전체도 32개를 넘지 않는다 */
+export const MAX_PENDING = 4;
+export const PENDING_MS = 30_000;
 
 export interface ChannelView {
   connected: boolean;
@@ -19,7 +22,13 @@ export interface ChannelView {
 export interface HeldItem { id: string; text: string; at: string }
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "not-connected" | "held-full" };
 
-interface Floor { key: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+interface Pending { nonce: string; snonce: string; at: number }
+/** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
+const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
+/** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
+const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
 
@@ -66,7 +75,7 @@ export class ChannelHub {
   register(sessionId: string, tmux: string): string | null {
     if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
     const key = randomBytes(32).toString("hex");
-    this.floors.set(sessionId, { key, tmux, at: (this.o.now ?? Date.now)(), seen: false, held: [] });
+    this.floors.set(sessionId, { key, kid: mac(key, "kid"), tmux, at: (this.o.now ?? Date.now)(), seen: false, pending: [], held: [] });
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
     this.changed();
     return key;
@@ -116,27 +125,52 @@ export class ChannelHub {
     return this.floors.size;
   }
 
-  /** /channel/stream 연결. 맞는 열쇠가 없으면 null */
-  attach(key: string | undefined, res: ServerResponse): string | null {
-    const id = this.byKey(key);
-    if (!id) return null;
-    const f = this.floors.get(id)!;
+  /**
+   * 핸드셰이크 1단계(B257): channel 서버가 kid(열쇠의 HMAC)와 새 nonce를 보내면 snonce와 서버 proof를 돌려준다.
+   * 모르는 kid면 아무것도 저장하지 않고 null. 형식(64자 hex) 검사는 라우트가 한다
+   */
+  hello(kid: string, nonce: string): { snonce: string; proof: string } | null {
+    const f = this.byKid(kid)?.[1];
+    if (!f) return null;
+    const now = (this.o.now ?? Date.now)();
+    f.pending = f.pending.filter((p) => now - p.at <= PENDING_MS);
+    if (f.pending.length >= MAX_PENDING) f.pending.shift();
+    const snonce = randomBytes(32).toString("hex");
+    f.pending.push({ nonce, snonce, at: now });
+    return { snonce, proof: mac(f.key, `server|${nonce}|${snonce}`) };
+  }
+
+  /** 핸드셰이크 2단계 — /channel/stream 연결. snonce는 맞든 틀리든 한 번 쓰고 지운다. 증명이 틀리면 null */
+  attach(a: { kid: string; snonce: string; proof: string }, res: ServerResponse): { id: string; ack: string } | null {
+    const hit = this.byKid(a.kid);
+    if (!hit) return null;
+    const [id, f] = hit;
+    const i = f.pending.findIndex((p) => same(p.snonce, a.snonce));
+    if (i < 0) return null;
+    const [p] = f.pending.splice(i, 1);
+    if ((this.o.now ?? Date.now)() - p.at > PENDING_MS || !same(mac(f.key, `client|${p.nonce}|${p.snonce}`), a.proof)) {
+      getLogger().warn("floors", "channel-proof-failed", { session: this.n(id) });
+      return null;
+    }
     f.conn?.end();
     f.conn = res;
+    f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
+    f.ackToken = randomBytes(32).toString("hex");
     res.on("close", () => {
       if (f.conn === res) {
-        f.conn = undefined;
+        f.conn = f.sk = f.ackToken = undefined;
         getLogger().info("floors", "channel-drop", { session: this.n(id) });
         this.changed();
       }
     });
     getLogger().info("floors", "channel-connect", { session: this.n(id) });
     this.changed();
-    return id;
+    return { id, ack: f.ackToken };
   }
-  ack(key: string | undefined, iid: unknown): boolean {
-    const id = this.byKey(key);
-    const f = id ? this.floors.get(id) : undefined;
+  /** 연결의 ack 토큰으로만 받는다(끊긴 연결의 토큰은 무효) */
+  ack(token: string, iid: unknown): boolean {
+    let f: Floor | undefined;
+    for (const x of this.floors.values()) if (x.ackToken && same(x.ackToken, token)) f = x;
     if (!f || typeof iid !== "string") return false;
     if (f.last?.id === iid) {
       f.last = { id: iid, state: "delivered" };
@@ -209,13 +243,12 @@ export class ChannelHub {
   }
 
   private push(f: Floor, iid: string, text: string): void {
-    f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text })}\n\n`);
+    // 이벤트마다 연결 키로 MAC(B264): 핸드셰이크를 중계하는 쪽이 글을 바꾸면 channel 서버가 버린다
+    f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(f.sk!, `${iid}|${text}`) })}\n\n`);
     f.last = { id: iid, state: "sent" };
   }
-  private byKey(key: string | undefined): string | null {
-    if (typeof key !== "string" || !/^[0-9a-f]{64}$/.test(key)) return null;
-    const k = Buffer.from(key);
-    for (const [id, f] of this.floors) if (timingSafeEqual(Buffer.from(f.key), k)) return id;
+  private byKid(kid: string): [string, Floor] | null {
+    for (const e of this.floors) if (same(e[1].kid, kid)) return e;
     return null;
   }
   private n(id: string): number {

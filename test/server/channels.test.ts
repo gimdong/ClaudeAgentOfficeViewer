@@ -1,12 +1,13 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, MAX_HELD, MAX_LAUNCHED } from "../../server/floors/channels";
+import { ChannelHub, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -21,13 +22,15 @@ let floors: FloorControl;
 let launched: LaunchInput[];
 let launchReply: { ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" };
 let available: { ok: boolean; reason?: string };
+let skew: number;
 const rec = (p: Partial<SessionRecord> = {}): SessionRecord => ({ pid: 2001, sessionId: "s1", name: "alpha", cwd: "/x", status: "busy", startedAt: 1, updatedAt: 2, alive: true, procStart: "x", ...p });
 
 beforeEach(async () => {
   tmp = mkdtempSync(join(tmpdir(), "co-ch-"));
   setLogger(new Logger({ dir: "" }));
   available = { ok: true };
-  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } } });
+  skew = 0;
+  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } }, now: () => Date.now() + skew });
   floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 4242 });
   launched = [];
   launchReply = { ok: true, sessionId: "new-1", tmux: "co-abcd1234" };
@@ -68,21 +71,39 @@ function send(path: string, o: { method?: string; headers?: Record<string, strin
 }
 const PAGE = () => ({ Cookie: `co=${TOKEN}`, Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" });
 const post = (path: string, body: unknown, method = "POST") => send(path, { method, headers: PAGE(), body: JSON.stringify(body) });
-/** channel 서버처럼 스트림을 열고 받은 글을 모은다 */
+const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
+const hello = (body: unknown, headers: Record<string, string> = {}) =>
+  send("/channel/hello", { headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+/** channel 서버처럼 핸드셰이크(B257: hello → 서버 proof 확인 → 클라이언트 proof)로 스트림을 열고 받은 글을 모은다 */
 function openStream(key: string, headers: Record<string, string> = {}) {
   const got: string[] = [];
   let status = 0;
-  const ready = new Promise<void>((resolve) => {
-    const req = request({ host: "127.0.0.1", port, path: "/channel/stream", method: "GET", headers: { Host: `127.0.0.1:${port}`, Authorization: `Floor ${key}`, ...headers } }, (res) => {
-      status = res.statusCode ?? 0;
-      res.on("data", (d) => got.push(String(d)));
-      res.on("end", () => resolve());
-      if (status === 200) setTimeout(resolve, 30);
+  let ack = "";
+  let sk = "";
+  let close = () => {};
+  const ready = (async () => {
+    const nonce = randomBytes(32).toString("hex");
+    const h = await hello({ kid: mac(key, "kid"), nonce }, headers);
+    if (h.status !== 200) return void (status = h.status);
+    const { snonce, proof } = JSON.parse(h.body);
+    expect(proof).toBe(mac(key, `server|${nonce}|${snonce}`));
+    sk = mac(key, `session|${nonce}|${snonce}`);
+    await new Promise<void>((resolve) => {
+      const req = request({ host: "127.0.0.1", port, path: "/channel/stream", method: "GET", headers: { Host: `127.0.0.1:${port}`, Authorization: `Proof ${mac(key, "kid")} ${snonce} ${mac(key, `client|${nonce}|${snonce}`)}`, ...headers } }, (res) => {
+        status = res.statusCode ?? 0;
+        ack = String(res.headers["x-office-ack"] ?? "");
+        res.on("data", (d) => got.push(String(d)));
+        res.on("end", () => resolve());
+        if (status === 200) setTimeout(resolve, 30);
+      });
+      req.end();
+      close = () => req.destroy();
     });
-    req.end();
-  });
-  return { got, ready, status: () => status };
+  })();
+  return { got, ready, status: () => status, ack: () => ack, sk: () => sk, close: () => close() };
 }
+/** SSE 글에서 instruction data를 꺼낸다 */
+const instructions = (got: string[]) => [...got.join("").matchAll(/event: instruction\ndata: (.+)\n/g)].map((m) => JSON.parse(m[1]) as { id: string; text: string; mac: string });
 const until = async (f: () => boolean) => {
   const t = Date.now();
   while (!f()) {
@@ -138,7 +159,7 @@ describe("새 층·지시·보관(스펙 4·6·7장)", () => {
     expect((await post("/api/floors/launch", { cwd: tmp })).status).toBe(429);
   });
 
-  it("스트림은 층 열쇠로만, 브라우저(Origin)는 403, 틀린 열쇠 401", async () => {
+  it("스트림은 층 열쇠의 증명으로만, 브라우저(Origin)는 hello부터 403, 틀린 열쇠 401", async () => {
     const key = hub.register("s1", "co-1")!;
     const bad = openStream("0".repeat(64));
     await bad.ready;
@@ -158,9 +179,9 @@ describe("새 층·지시·보관(스펙 4·6·7장)", () => {
     const r = JSON.parse((await post("/api/floors/s1/instruct", { text: "고쳐 줘 \"a\"" })).body);
     expect(r.state).toBe("sent");
     await until(() => s.got.join("").includes("event: instruction"));
-    expect(s.got.join("")).toContain(JSON.stringify({ id: r.id, text: "고쳐 줘 \"a\"" }));
+    expect(instructions(s.got)).toEqual([{ id: r.id, text: "고쳐 줘 \"a\"", mac: mac(s.sk(), `${r.id}|고쳐 줘 "a"`) }]);
     expect(hub.view("s1")?.last).toBe("sent");
-    expect((await send("/channel/ack", { headers: { Authorization: `Floor ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) })).status).toBe(200);
+    expect((await send("/channel/ack", { headers: { Authorization: `Ack ${s.ack()}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) })).status).toBe(200);
     expect(hub.view("s1")?.last).toBe("delivered");
   });
 
@@ -254,5 +275,97 @@ describe("일하는 방식(서브에이전트/agent team)", () => {
     expect(validateLaunch({ cwd: tmp, mode: "team" })).toMatchObject({ ok: true, value: { mode: "team" } });
     expect(validateLaunch({ cwd: tmp, mode: "subagents" })).toMatchObject({ ok: true });
     expect(validateLaunch({ cwd: tmp, mode: "swarm" })).toEqual({ ok: false, error: "mode" });
+  });
+});
+
+describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다", () => {
+  const hex = () => randomBytes(32).toString("hex");
+  const stream = (authorization: string) => send("/channel/stream", { method: "GET", headers: { Authorization: authorization } });
+  const proofAuth = (key: string, nonce: string, snonce: string, p = mac(key, `client|${nonce}|${snonce}`)) => `Proof ${mac(key, "kid")} ${snonce} ${p}`;
+  async function helloOk(key: string) {
+    const nonce = hex();
+    const r = await hello({ kid: mac(key, "kid"), nonce });
+    expect(r.status).toBe(200);
+    return { nonce, snonce: JSON.parse(r.body).snonce as string };
+  }
+
+  it("옛 Floor <열쇠> 인증은 stream·ack 모두 401", async () => {
+    const key = hub.register("s1", "co-1")!;
+    expect((await stream(`Floor ${key}`)).status).toBe(401);
+    expect((await send("/channel/ack", { headers: { Authorization: `Floor ${key}`, "Content-Type": "application/json" }, body: '{"id":"x"}' })).status).toBe(401);
+    expect(hub.view("s1")?.connected).toBe(false);
+  });
+
+  it("모르는 kid는 401, nonce·kid가 64자 hex가 아니거나 본문이 1kb를 넘으면 400", async () => {
+    hub.register("s1", "co-1");
+    expect((await hello({ kid: hex(), nonce: hex() })).status).toBe(401);
+    for (const b of [{ kid: hex(), nonce: "x" }, { kid: hex().toUpperCase(), nonce: hex() }, { kid: hex() }, [], "s"]) expect((await hello(b)).status, JSON.stringify(b)).toBe(400);
+    expect((await hello({ kid: hex(), nonce: hex(), pad: "x".repeat(1100) })).status).toBe(413);
+  });
+
+  it("클라이언트 proof가 틀리면 401이고 그 snonce는 지워진다(맞는 proof로 다시 써도 401)", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const { nonce, snonce } = await helloOk(key);
+    expect((await stream(proofAuth(key, nonce, snonce, hex()))).status).toBe(401);
+    expect((await stream(proofAuth(key, nonce, snonce))).status).toBe(401);
+    expect(hub.view("s1")?.connected).toBe(false);
+  });
+
+  it("다른 층 열쇠·서버 proof를 그대로 돌려준 값·nonce를 바꾼 proof는 401", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const other = hub.register("s2", "co-2")!;
+    const a = await helloOk(key);
+    expect((await stream(proofAuth(key, a.nonce, a.snonce, mac(other, `client|${a.nonce}|${a.snonce}`)))).status).toBe(401);
+    const b = await helloOk(key);
+    expect((await stream(proofAuth(key, b.nonce, b.snonce, mac(key, `server|${b.nonce}|${b.snonce}`)))).status).toBe(401);
+    const c = await helloOk(key);
+    expect((await stream(proofAuth(key, hex(), c.snonce))).status).toBe(401);
+  });
+
+  it(`미결 snonce는 층마다 ${MAX_PENDING}개(오래된 것부터 버림), ${PENDING_MS / 1000}초가 지나면 무효`, async () => {
+    const key = hub.register("s1", "co-1")!;
+    const all = [];
+    for (let i = 0; i <= MAX_PENDING; i++) all.push(await helloOk(key));
+    expect((await stream(proofAuth(key, all[0].nonce, all[0].snonce))).status).toBe(401);
+    const old = all[1];
+    skew = PENDING_MS + 1;
+    expect((await stream(proofAuth(key, old.nonce, old.snonce))).status).toBe(401);
+    const fresh = await helloOk(key);
+    const s = openStream(key);
+    await s.ready;
+    expect(s.status()).toBe(200);
+    expect(fresh.snonce).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("ack 토큰은 연결마다 새로 나오고, 연결이 끊기면 무효", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const a = openStream(key);
+    await a.ready;
+    const first = a.ack();
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    const ack = (t: string) => send("/channel/ack", { headers: { Authorization: `Ack ${t}`, "Content-Type": "application/json" }, body: '{"id":"x"}' });
+    expect((await ack(first)).status).toBe(200);
+    const b = openStream(key); // 새 연결이 옛 연결을 끊는다
+    await b.ready;
+    expect(b.ack()).not.toBe(first);
+    expect((await ack(first)).status).toBe(401);
+    expect((await ack(b.ack())).status).toBe(200);
+    expect((await ack(key)).status).toBe(401);
+    b.close();
+    await until(() => hub.view("s1")?.connected === false);
+    expect((await ack(b.ack())).status).toBe(401);
+  });
+
+  it("hello·stream·ack의 응답과 로그에 열쇠·proof 값이 나오지 않는다", async () => {
+    const logs = join(tmp, "logs");
+    setLogger(new Logger({ dir: logs }));
+    const key = hub.register("s1", "co-1")!;
+    const { nonce, snonce } = await helloOk(key);
+    await stream(proofAuth(key, nonce, snonce, hex()));
+    const s = openStream(key);
+    await s.ready;
+    const text = readdirSync(logs).map((f) => readFileSync(join(logs, f), "utf8")).join("");
+    expect(text).toContain("channel-connect");
+    for (const v of [key, snonce, mac(key, "kid"), s.ack()]) expect(text).not.toContain(v);
   });
 });

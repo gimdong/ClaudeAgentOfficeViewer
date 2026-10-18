@@ -601,21 +601,32 @@ export function createApp(
     });
   });
 
-  // channel 서버(플러그인)가 거는 나가는 연결(Phase 4b 스펙 5장). 쿠키가 아니라 층 열쇠로만 인증하고, 브라우저(Origin 있음)는 거부한다
+  // channel 서버(플러그인)가 거는 나가는 연결(Phase 4b 스펙 5장). 쿠키가 아니라 층 열쇠의 증명으로만 인증하고(B257 — 열쇠 원문은 오가지 않는다),
+  // 브라우저(Origin 있음)는 본문을 읽기 전에 거부한다
   if (opts.channels) {
     const { hub: ch } = opts.channels;
-    const keyOf = (req: express.Request) => /^Floor ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];
-    app.get("/channel/stream", (req, res) => {
-      if (req.headers.origin !== undefined) return void res.status(403).end();
-      if (!ch.attach(keyOf(req), res)) return void res.status(401).end();
-      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    const HEX = /^[0-9a-f]{64}$/;
+    const noBrowser = (req: express.Request, res: express.Response, next: express.NextFunction) => (req.headers.origin === undefined ? next() : void res.status(403).end());
+    const body = express.json({ limit: "1kb", type: () => true });
+    app.post("/channel/hello", noBrowser, body, (req, res) => {
+      const b = req.body as { kid?: unknown; nonce?: unknown } | undefined;
+      if (typeof b?.kid !== "string" || !HEX.test(b.kid) || typeof b.nonce !== "string" || !HEX.test(b.nonce)) return void res.status(400).end();
+      const r = ch.hello(b.kid, b.nonce);
+      if (r) res.json(r);
+      else res.status(401).end();
+    });
+    app.get("/channel/stream", noBrowser, (req, res) => {
+      const m = /^Proof ([0-9a-f]{64}) ([0-9a-f]{64}) ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "");
+      const a = m && ch.attach({ kid: m[1], snonce: m[2], proof: m[3] }, res);
+      if (!a) return void res.status(401).end();
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Office-Ack": a.ack });
       res.flushHeaders(); // 첫 지시나 심장박동을 기다리지 않고 연결됨을 알린다
       const heartbeat = setInterval(() => res.write(": ping\n\n"), opts.heartbeatMs ?? 15_000);
       req.on("close", () => clearInterval(heartbeat));
     });
-    app.post("/channel/ack", express.json({ limit: "1kb", type: () => true }), (req, res) => {
-      if (req.headers.origin !== undefined) return void res.status(403).end();
-      res.status(ch.ack(keyOf(req), (req.body as { id?: unknown } | undefined)?.id) ? 200 : 401).json({});
+    app.post("/channel/ack", noBrowser, body, (req, res) => {
+      const t = /^Ack ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];
+      res.status(t && ch.ack(t, (req.body as { id?: unknown } | undefined)?.id) ? 200 : 401).json({});
     });
   }
 

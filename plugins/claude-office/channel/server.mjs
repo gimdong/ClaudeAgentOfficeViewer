@@ -2,6 +2,8 @@
 // - 포트를 열지 않는다. 대시보드가 띄운 층에만 있는 CLAUDE_OFFICE_FLOOR_KEY가 있으면 대시보드(127.0.0.1)로 나가는 SSE 연결을 건다
 // - 열쇠가 없는 세션(대시보드가 띄우지 않은 모든 세션)에서는 연결도, 안내 문구도, 알림도 내지 않는다
 // - process.env에서 아래 두 이름만 읽는다. 그 밖의 값(세션 메시징 토큰 등)은 읽지도 보내지도 않는다
+// - 열쇠 원문은 보내지 않는다(B257). 대시보드가 먼저 열쇠를 안다는 것을 증명해야 이쪽도 증명하고, 지시마다 연결 키의 MAC을 확인한다
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createInterface } from "node:readline";
 
 const KEY = process.env.CLAUDE_OFFICE_FLOOR_KEY;
@@ -43,26 +45,37 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 });
 process.stdin.on("end", () => process.exit(0));
 
-const auth = { Authorization: `Floor ${KEY}` };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const HEX = /^[0-9a-f]{64}$/;
+const mac = (k, m) => createHmac("sha256", k).update(m).digest("hex");
+// 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다)
+const same = (a, b) => typeof a === "string" && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const KID = live ? mac(KEY, "kid") : "";
 
 async function connect(attempt) {
   for (;;) {
     try {
-      const res = await fetch(`${BASE}/channel/stream`, { headers: { ...auth, Accept: "text/event-stream" } });
-      if (res.status === 401 || res.status === 403) return; // 열쇠가 더는 유효하지 않다(대시보드가 다시 켜짐 등) — 조용히 멈춘다
-      if (res.ok && res.body) {
-        attempt = 0;
-        await read(res.body);
+      // 시도마다 새 nonce. 서버 proof가 없거나 틀리면(열쇠를 모르는 가짜 서버) 스트림을 열지 않고 다시 시도한다
+      const nonce = randomBytes(32).toString("hex");
+      const h = await fetch(`${BASE}/channel/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kid: KID, nonce }) });
+      if (h.status === 401 || h.status === 403) return; // 열쇠가 더는 유효하지 않다(대시보드가 다시 켜짐 등) — 조용히 멈춘다
+      const { snonce, proof } = h.ok ? await h.json() : {};
+      if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `server|${nonce}|${snonce}`))) {
+        const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `client|${nonce}|${snonce}`)}`, Accept: "text/event-stream" } });
+        const ack = res.headers.get("x-office-ack") ?? "";
+        if (res.ok && res.body && HEX.test(ack)) {
+          attempt = 0;
+          await read(res.body, mac(KEY, `session|${nonce}|${snonce}`), ack);
+        }
       }
     } catch {
-      // 대시보드가 꺼졌거나 아직 안 켜짐 — 다시 잇는다
+      // 대시보드가 꺼졌거나 아직 안 켜짐, 또는 MAC이 틀려 끊음 — 다시 잇는다
     }
     await sleep(Math.min(30_000, 1000 * 2 ** Math.min(attempt++, 5)));
   }
 }
 
-async function read(body) {
+async function read(body, sk, ack) {
   const dec = new TextDecoder();
   let buf = "";
   for await (const chunk of body) {
@@ -81,8 +94,10 @@ async function read(body) {
         continue;
       }
       if (typeof msg?.id !== "string" || typeof msg?.text !== "string") continue;
+      // 글을 바꾼 중계(B264): 넣지 않고 연결을 끊는다(던지면 스트림을 닫고 connect가 다시 잇는다)
+      if (!same(msg.mac, mac(sk, `${msg.id}|${msg.text}`))) throw new Error("mac");
       send({ jsonrpc: "2.0", method: "notifications/claude/channel", params: { content: msg.text, meta: { source: "dashboard" } } });
-      await fetch(`${BASE}/channel/ack`, { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ id: msg.id }) }).catch(() => {});
+      await fetch(`${BASE}/channel/ack`, { method: "POST", headers: { Authorization: `Ack ${ack}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: msg.id }) }).catch(() => {});
     }
   }
 }

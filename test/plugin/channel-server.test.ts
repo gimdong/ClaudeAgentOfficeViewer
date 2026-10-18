@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -18,22 +19,41 @@ afterEach(async () => {
   server = undefined;
 });
 
-/** 가짜 대시보드: /channel/stream에 SSE로 instruction을 하나 보내고, 받은 요청을 모두 기록한다 */
-async function fakeDashboard(onStream?: (res: ServerResponse) => void) {
+const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
+const TEXT = 'say "hi" $(rm -rf /)\nline2';
+type Mode = "good" | "no-proof" | "bad-proof" | "tamper";
+/**
+ * 가짜 대시보드(B257 핸드셰이크): good은 열쇠를 아는 진짜처럼 증명하고 MAC을 붙인다. no-proof·bad-proof는 열쇠를 모르는 가짜 서버,
+ * tamper는 핸드셰이크는 그대로 중계하지만 지시 글을 바꾸는 중계자. 받은 요청은 모두 기록한다
+ */
+async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse) => void } = {}) {
+  const mode = o.mode ?? "good";
   const seen: Array<{ url: string; auth?: string; body: string; headers: IncomingMessage["headers"] }> = [];
+  const nonces = new Map<string, string>();
+  let streams = 0;
   server = createServer((req, res) => {
     let body = "";
     req.on("data", (d) => (body += d));
     req.on("end", () => {
       seen.push({ url: req.url ?? "", auth: req.headers.authorization, body, headers: req.headers });
-      if (req.url === "/channel/stream") {
-        res.writeHead(200, { "Content-Type": "text/event-stream" });
-        (onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text: 'say "hi" $(rm -rf /)\nline2' })}\n\n`)))(res);
+      if (req.url === "/channel/hello") {
+        const { nonce } = JSON.parse(body);
+        const snonce = randomBytes(32).toString("hex");
+        nonces.set(snonce, nonce);
+        const proof = mode === "no-proof" ? undefined : mode === "bad-proof" ? randomBytes(32).toString("hex") : mac(KEY, `server|${nonce}|${snonce}`);
+        res.end(JSON.stringify({ snonce, proof }));
+      } else if (req.url === "/channel/stream") {
+        streams++;
+        const [, , snonce] = (req.headers.authorization ?? "").split(" ");
+        const sk = mac(KEY, `session|${nonces.get(snonce)}|${snonce}`);
+        res.writeHead(200, { "Content-Type": "text/event-stream", "X-Office-Ack": "f".repeat(64) });
+        const text = mode === "tamper" ? "rm -rf ~" : TEXT;
+        (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, `i1|${TEXT}`) })}\n\n`)))(res);
       } else res.end("{}");
     });
   });
   await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
-  return { port: (server.address() as AddressInfo).port, seen };
+  return { port: (server.address() as AddressInfo).port, seen, streams: () => streams };
 }
 
 function start(env: Record<string, string>) {
@@ -82,21 +102,49 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     const init = JSON.parse(out[0]).result;
     expect(init.capabilities.experimental).toEqual({ "claude/channel": {} });
     const note = out.map((l) => JSON.parse(l)).find((m) => m.method === "notifications/claude/channel");
-    expect(note.params.content).toBe('say "hi" $(rm -rf /)\nline2');
-    expect(d.seen.every((s) => s.auth === `Floor ${KEY}`)).toBe(true);
-    expect(JSON.parse(d.seen.find((s) => s.url === "/channel/ack")!.body)).toEqual({ id: "i1" });
+    expect(note.params.content).toBe(TEXT);
+    expect(d.seen.map((s) => s.url).slice(0, 3)).toEqual(["/channel/hello", "/channel/stream", "/channel/ack"]);
+    const ack = d.seen.find((s) => s.url === "/channel/ack")!;
+    expect(ack.auth).toBe(`Ack ${"f".repeat(64)}`);
+    expect(JSON.parse(ack.body)).toEqual({ id: "i1" });
+    expect(JSON.stringify(d.seen)).not.toContain(KEY);
     const leaked = d.seen.some((s) => JSON.stringify(s).includes(FAKE_MSG_TOKEN)) || out.some((l) => l.includes(FAKE_MSG_TOKEN));
     expect(leaked).toBe(false);
   });
 
   it("스트림이 끊기면 다시 잇는다", async () => {
     let n = 0;
-    const d = await fakeDashboard((res) => {
-      n++;
-      res.end();
+    const d = await fakeDashboard({
+      onStream: (res) => {
+        n++;
+        res.end();
+      },
     });
     start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
     await until(() => n >= 2, 5000);
+  });
+
+  for (const mode of ["no-proof", "bad-proof"] as const) {
+    it(`가짜 서버(${mode})면 스트림을 열지 않고 지시 0, 열쇠 원문은 어떤 요청에도 없고, 새 nonce로 다시 시도한다`, async () => {
+      const d = await fakeDashboard({ mode });
+      const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+      await until(() => d.seen.filter((s) => s.url === "/channel/hello").length >= 2, 5000);
+      expect(d.streams()).toBe(0);
+      expect(out.some((l) => l.includes("notifications/claude/channel"))).toBe(false);
+      expect(JSON.stringify(d.seen)).not.toContain(KEY);
+      const [a, b] = d.seen.filter((s) => s.url === "/channel/hello").map((s) => JSON.parse(s.body));
+      expect(a.kid).toBe(b.kid);
+      expect(a.nonce).not.toBe(b.nonce);
+      expect(a.nonce).toMatch(/^[0-9a-f]{64}$/);
+    });
+  }
+
+  it("중계자가 지시 글을 바꾸면(MAC 불일치) 넣지 않고 ack도 없이 연결을 끊고 다시 잇는다", async () => {
+    const d = await fakeDashboard({ mode: "tamper" });
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    await until(() => d.streams() >= 2, 5000);
+    expect(out.some((l) => l.includes("notifications/claude/channel"))).toBe(false);
+    expect(d.seen.some((s) => s.url === "/channel/ack")).toBe(false);
   });
 
   it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
