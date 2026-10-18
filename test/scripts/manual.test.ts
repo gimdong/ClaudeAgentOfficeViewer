@@ -10,6 +10,7 @@ import { PAUSED_REASON } from "../../server/decisions/protocol";
 import { SUB_MAX, SUB_TEXT } from "../../web/office/SubDesks";
 import { RE_TEXT } from "../../web/floors/ReopenDialog";
 import { MAX_LAUNCHED } from "../../src/shared/types";
+import { UID_REJECT_BODY } from "../../server/peer";
 import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
 
@@ -894,6 +895,21 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // 화면 단추 글자 = 숨기기(아이콘 없음), 설명서 어디에도 '삭제'가 남지 않음(폐업 신고와 헷갈리지 않게)
     expect(read("web/building/FloorControls.tsx")).not.toMatch(/>\s*삭제\s*</);
     expect(prose.includes("삭제")).toBe(false);
+  });
+
+  it("Linux 같은 계정 검사: 거절 문구·doctor 문구가 코드와 같고, 다른 계정·다른 컨테이너·Linux만을 적는다(Phase 5 §2·§7)", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const s6 = prose.slice(prose.indexOf('<h2 id="s6">'), prose.indexOf('<h2 id="s7">'));
+    const at = s6.indexOf('<h3 id="same-user">');
+    expect(at).toBeGreaterThan(-1);
+    const sec = s6.slice(at, s6.indexOf("<h3", at + 1));
+    expect(sec).toContain(`<h3 id="same-user">"${UID_REJECT_BODY}"가 떠요(Linux)</h3>`);
+    expect(sec).toContain(`<pre class="out">${UID_REJECT_BODY}</pre>`);
+    const tpl = /item\("hooks", "warn", "실시간 이벤트", `(다른 계정의 접속 \$\{uidRejected\}[^`]*)`\)/.exec(read("server/diag/doctor.ts"))![1];
+    expect(sec).toContain(`<pre class="out">⚠️ 실시간 이벤트: ${tpl.replace("${uidRejected}", "3")}</pre>`);
+    for (const s of ["<strong>다른 계정</strong>", "<strong>다른 컨테이너</strong>", "같은 계정이어도", "이 검사를 끄는 설정은 없습니다", "macOS와 Windows에서는 이 검사를 하지 않습니다"]) expect(sec, s).toContain(s);
+    expect(read("server/peer.ts")).toMatch(/linux/);
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
