@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Agent Office — English guide</title>
+<!-- English version of the Korean manual's install, start and troubleshooting chapters. One self-contained file, no external requests. No version number here, so version bumps do not touch this file. -->
+<style>
+  :root {
+    --bg: #fbfaf7; --ink: #1d1b2e; --muted: #5f5b73; --line: #dcd8e6; --panel: #ffffff;
+    --code-bg: #1b1930; --code-ink: #f1eefc; --accent: #2f6fd6; --ok: #1f8a4c; --warn: #9a6a00; --fail: #c23b3b;
+    --tip-bg: #eef5ff; --warn-bg: #fff6e0;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14121f; --ink: #ece9f7; --muted: #a7a2bd; --line: #34304a; --panel: #1c1a2b;
+      --code-bg: #0b0a17; --accent: #7fb0ff; --ok: #59d18a; --warn: #f0c14b; --fail: #ff7a7a;
+      --tip-bg: #1a2640; --warn-bg: #2e2612;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.7 -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 1.8rem; line-height: 1.3; margin: 0 0 4px; }
+  h2 { font-size: 1.35rem; margin: 56px 0 12px; padding-top: 12px; border-top: 2px solid var(--line); }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; }
+  a { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  nav.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 20px; }
+  nav.toc ol { margin: 0; padding-left: 1.3em; }
+  ol.steps { padding-left: 1.4em; }
+  ol.steps > li { margin: 0 0 18px; }
+  .term { border-bottom: 1px dotted var(--muted); }
+  .box { border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .ok-box { border: 2px solid var(--ok); }
+  .ok-box::before { content: "If you see this, it worked"; display: block; font-weight: 700; color: var(--ok); margin-bottom: 4px; }
+  .tip { background: var(--tip-bg); }
+  .caution { background: var(--warn-bg); }
+  .cmd { position: relative; margin: 8px 0; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 12px 84px 12px 14px; overflow-x: auto; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  pre.out { padding-right: 14px; }
+  .copy { position: absolute; top: 8px; right: 8px; min-width: 64px; min-height: 32px; border: 1px solid #56507a; border-radius: 6px; background: #2b2748; color: #fff; font: inherit; font-size: 14px; cursor: pointer; }
+  .copy:focus-visible, .tabs button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 16px 0 0; }
+  .tabs button { font: inherit; font-size: 15px; padding: 8px 16px; min-height: 40px; border: 1px solid var(--line); border-bottom: none; border-radius: 8px 8px 0 0; background: var(--bg); color: var(--ink); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--panel); font-weight: 700; }
+  .os-panel { border: 1px solid var(--line); border-radius: 0 8px 8px 8px; background: var(--panel); padding: 4px 16px 8px; margin-bottom: 16px; }
+  .os-panel > .os-name { font-weight: 700; margin-top: 12px; }
+  .js .os-panel > .os-name { display: none; }
+  figure.fig { margin: 16px 0; }
+  figure.fig svg { display: block; width: 100%; max-width: 640px; height: auto; }
+  .fig-slot, .shot-slot { border: 2px dashed var(--line); border-radius: 8px; color: var(--muted); text-align: center; padding: 24px 12px; margin: 12px 0; font-size: 14px; }
+  .shot-slot { aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 8px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: .9em; }
+  dt { font-weight: 700; margin-top: 8px; }
+  dd { margin: 0 0 8px 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .os-panel:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .symptom { border-left: 4px solid var(--accent); padding-left: 12px; margin: 20px 0; }
+  pre { padding-right: 14px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Claude Agent Office — English guide</h1>
+<p class="sub">Install, start and troubleshoot. For everything else (reading the screen, decision reports, budgets, permission policies, floor controls) see the <a href="index.html">Korean manual</a>. The dashboard and the installer show messages in Korean; this guide quotes them and gives the meaning in English.</p>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#start">Start and stop</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<h2 id="install">1. Install</h2>
+<h3>Before you start</h3>
+<ol class="steps">
+  <li><strong>Claude Code</strong> is installed and you have run it at least once. Check in a terminal:
+    <pre><code>claude --version</code></pre>
+    <p>One line with a version number appears (for example <code>2.1.0 (Claude Code)</code>).</p></li>
+  <li><strong>Node.js 24 or later.</strong> Check:
+    <pre><code>node --version</code></pre>
+    <p>It should start with <code>v24</code> or higher. If not, install the LTS release from <a href="https://nodejs.org">nodejs.org</a>, then close and reopen the terminal.</p></li>
+</ol>
+<p>Download the installer from the project's Releases page: <code>claude-office-&lt;version&gt;.tar.gz</code> for macOS and Linux, <code>claude-office-&lt;version&gt;.zip</code> for Windows. Do not use the "Source code (zip / tar.gz)" archives; GitHub attaches them to every release and they are not installers. No internet connection is needed to install. Program files go into <code>~/.claude-office</code> only (Windows: <code>C:\Users\&lt;user name&gt;\.claude-office</code>).</p>
+
+<div class="os-panel"><p class="os-name">macOS</p>
+  <ol class="steps">
+    <li>Put the file in your <strong>Downloads</strong> folder and open the Terminal app.</li>
+    <li>Extract it and run the installer:
+      <pre><code>cd ~/Downloads &amp;&amp; tar -xzf claude-office-&lt;version&gt;.tar.gz &amp;&amp; cd claude-office-&lt;version&gt; &amp;&amp; sh install.sh</code></pre></li>
+    <li>Answer the two questions (below).</li>
+  </ol>
+  <div class="box caution">The beta is not signed by Apple. If macOS warns about an unidentified developer, open <strong>System Settings → Privacy &amp; Security</strong>, click <strong>Open Anyway</strong>, and run the same command again.</div>
+</div>
+<div class="os-panel"><p class="os-name">Linux</p>
+  <ol class="steps">
+    <li>Put the file in your <strong>Downloads</strong> folder and open a terminal.</li>
+    <li>Extract it and run the installer:
+      <pre><code>cd ~/Downloads &amp;&amp; tar -xzf claude-office-&lt;version&gt;.tar.gz &amp;&amp; cd claude-office-&lt;version&gt; &amp;&amp; sh install.sh</code></pre></li>
+    <li>Answer the two questions (below).</li>
+  </ol>
+</div>
+<div class="os-panel"><p class="os-name">Windows (not yet verified in the beta)</p>
+  <ol class="steps">
+    <li>Put the file in your <strong>Downloads</strong> folder. Open <strong>PowerShell</strong> (or Windows Terminal) from the Start menu — not PowerShell ISE.</li>
+    <li>Extract it and run the installer. <code>-ExecutionPolicy Bypass</code> allows this one script to run; it does not change your computer's settings.
+      <pre><code>cd $HOME\Downloads; Expand-Archive claude-office-&lt;version&gt;.zip -DestinationPath . -Force; cd claude-office-&lt;version&gt;; powershell -ExecutionPolicy Bypass -File .\install.ps1</code></pre></li>
+    <li>If Windows says the file is not digitally signed, unblock the extracted folder and try again:
+      <pre><code>Get-ChildItem -Recurse $HOME\Downloads\claude-office-&lt;version&gt; | Unblock-File</code></pre>
+      <p>If it is still blocked, your company's policy blocks it; ask your IT administrator.</p></li>
+    <li>Answer the two questions (below).</li>
+  </ol>
+</div>
+
+<h3>The two questions</h3>
+<dl>
+  <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
+  <dd>"Add the claude-office command to PATH in ~/.zshrc?" Press <kbd>y</kbd> so you can type <code>claude-office</code> from any folder. The file name may be <code>~/.bash_profile</code> or <code>~/.bashrc</code> depending on your shell; on Windows it asks about the user PATH. If you press <kbd>n</kbd>, the last line tells you the full path to run instead.</dd>
+  <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? … [y/N]</code></dt>
+  <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own.</dd>
+</dl>
+<div class="box ok-box">
+  <p>The installer finishes with a setup check (doctor) and this last line:</p>
+  <pre class="out">설치 완료. 새 터미널에서 claude-office 를 실행하세요.</pre>
+  <p>"Installed. Run claude-office in a new terminal." Two yellow lines right after installing are normal, because the dashboard is not running yet: <code>⚠️ 포트: 서버가 꺼져 있습니다(4317)</code> (port: server is off) and <code>⚠️ 실시간 이벤트: 서버가 꺼져 있어 확인하지 못했습니다</code> (live events: not checked because the server is off).</p>
+</div>
+
+<h2 id="start">2. Start and stop</h2>
+<h3>Start</h3>
+<ol class="steps">
+  <li>Open a new terminal (PowerShell on Windows) and run:
+    <pre><code>claude-office</code></pre>
+    <p>If you answered <kbd>n</kbd> to the PATH question, run the full path instead: <code>~/.claude-office/bin/claude-office</code> (Windows: <code>$HOME\.claude-office\bin\claude-office.cmd</code>).</p></li>
+  <li>Your browser opens the dashboard. The address carries an access key at first; it disappears from the address bar once the page opens, and the browser remembers it for a year. After that you can bookmark <code>http://127.0.0.1:4317</code> (<code>127.0.0.1</code> means "this computer").</li>
+</ol>
+<div class="box ok-box">
+  <pre class="out">이 창을 닫으면 대시보드가 꺼집니다.
+Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.claude)</pre>
+  <p>"Closing this window stops the dashboard." The browser shows a building with floors, and <strong>● LIVE</strong> at the right of the top bar.</p>
+</div>
+<ul>
+  <li><code>claude-office open</code> opens the running dashboard again in your default browser (with the key); <code>claude-office open Safari</code> opens it in a named browser (macOS). It does not start a second server.</li>
+  <li>Running <code>claude-office</code> while the dashboard is already running reopens it in the browser and exits: <code>이미 켜져 있습니다. 브라우저에서 대시보드를 다시 열었습니다. …</code> ("Already running. Reopened the dashboard in the browser.")</li>
+</ul>
+<div class="box caution">Keep the terminal window open while you use the dashboard (you can minimize it). Do not start it from inside Claude Code with <code>! claude-office</code>: it keeps running with no window to stop it.</div>
+<h3>Stop</h3>
+<p>Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal that runs the dashboard, or close that window. Claude Code keeps working. While the dashboard is off, Claude Code may show <code>PreToolUse:Bash hook error</code> with <code>connect ECONNREFUSED 127.0.0.1:4317</code>; that only means the plugin could not reach the dashboard. Permission policies and floor pausing do not apply while it is off.</p>
+
+<h2 id="trouble">3. Troubleshooting</h2>
+<h3>Run the setup check first</h3>
+<pre><code>claude-office doctor</code></pre>
+<p>Each line is marked ✅ (fine), ⚠️ (check) or ❌ (problem), and ⚠️/❌ lines are followed by <strong>→</strong> and how to fix it. Follow that line.</p>
+<h3>Send a diagnostics file</h3>
+<p>If it is not fixed, make a diagnostics file and send it to whoever supports you. It contains only what is needed to find the problem — <strong>no conversation content, names or secrets</strong>; folder names are replaced with numbers like <code>&lt;project-1&gt;</code>. Either click <strong>진단</strong> (Diagnostics) in the top bar and then <strong>진단 파일 만들기</strong> (Make diagnostics file) and <strong>받기</strong> (Download), or run:</p>
+<pre><code>claude-office diag</code></pre>
+<p>It prints the file location, for example <code>~/.claude-office/diagnostics/claude-office-diag-20261001-093000.json</code>.</p>
+
+<h3>The dashboard says "터미널에서 claude-office로 열어 주세요"</h3>
+<p>"Open it with claude-office from the terminal." The dashboard opens only in a browser that has the access key, so that other web pages cannot click "allow" for you. This appears when you typed <code>http://127.0.0.1:4317</code> in a browser that was never opened through <code>claude-office</code>, after clearing cookies, in a private window, or in another browser. Run <code>claude-office</code> (or <code>claude-office open</code>) once more.</p>
+
+<h3>The browser did not open and the terminal printed an address</h3>
+<pre class="out">브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: http://127.0.0.1:4317/?k=…
+이 주소는 열쇠입니다. 남에게 보내지 마세요.</pre>
+<p>"Could not open the browser. Paste this address into your browser." Copy the whole line including everything after <code>?k=</code>. <strong>This address is a key; do not share it</strong>, and keep it out of screen shares and pasted logs.</p>
+
+<h3>I want to stop the dashboard but there is no window</h3>
+<p>This happens if you started it with <code>!</code> inside Claude Code or closed the window. In a new terminal (macOS / Linux):</p>
+<pre><code>lsof -ti :4317 | xargs kill</code></pre>
+<p>On Windows (PowerShell): <code>Get-NetTCPConnection -LocalPort 4317 | ForEach-Object { Stop-Process -Id $_.OwningProcess }</code>. Then start it again from a normal terminal.</p>
+
+<h3>I installed a new version but the screen did not change</h3>
+<p>An older dashboard is still running. <code>claude-office</code> then prints <code>이전 버전 대시보드가 켜져 있습니다. …</code> ("An older dashboard is running…"). Stop it in its terminal with <kbd>Ctrl</kbd>+<kbd>C</kbd> (or as in the previous item), then run <code>claude-office</code> again. Close any old browser tab whose address showed <code>?k=</code>.</p>
+
+<h3>"포트 4317번이 이미 사용 중입니다"</h3>
+<p>"Port 4317 is already in use." Another program (or the old v1 viewer) is using port 4317. <code>claude-office doctor</code> shows which. Stopping that program is best; starting on another port with <code>--port</code> works, but then the plugin cannot reach the dashboard (no speech bubbles or answering).</p>
+
+<h3>"Node.js 24 이상이 필요합니다"</h3>
+<p>"Node.js 24 or later is required." Install Node.js 24 (see <a href="#install">Before you start</a>), close and reopen the terminal, and try again.</p>
+
+<h3>Characters appear but no speech bubbles or raised hands</h3>
+<p>Claude Code is not reaching the dashboard. doctor shows <code>⚠️ 실시간 이벤트: 받은 이벤트 0건</code> (live events: 0 received).</p>
+<ol>
+  <li>Do anything in a Claude Code session once.</li>
+  <li>If doctor's <strong>플러그인</strong> (plugin) line is ⚠️, install the plugin as it says, then close and reopen Claude Code.</li>
+  <li>If doctor shows <code>❌ 회사 관리자 설정: 있음: 관리자 hook만 허용</code> (company managed settings: only managed hooks allowed), or everything is ✅ and it still does not work, your company's managed settings are blocking the plugin. Send your administrator the <a href="https://github.com/gimdong/ClaudeAgentOfficeViewer/blob/main/docs/admin.md">administrator guide</a>.</li>
+</ol>
+
+<h3>Linux: "같은 사용자 계정의 프로그램만 접속할 수 있습니다"</h3>
+<p>"Only programs of the same user account can connect." On Linux the dashboard accepts connections only from processes of the user account that started it. Another account on a shared machine, or a container running as a different user, gets this reply (HTTP 403). This is intended. Start the dashboard as the same account that runs Claude Code. doctor counts these refusals:</p>
+<pre class="out">⚠️ 실시간 이벤트: 다른 계정의 접속 {n}건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.</pre>
+<p>"Blocked {n} connections from other accounts. Normal on a computer shared by several people."</p>
+
+<h3>The installer finished with "no" without asking</h3>
+<pre class="out">입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.</pre>
+<p>"Could not read input, so treated as 'no'. Run again with --yes to install." It ran somewhere it could not ask you, such as <code>!</code> inside Claude Code. Run it again in a normal terminal, or answer yes to both questions with <code>sh install.sh --yes</code> (Windows: <code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes</code>).</p>
+
+<h3>Uninstall</h3>
+<pre><code>claude-office uninstall</code></pre>
+<p>It asks two questions: whether to remove the Claude Code plugin, and whether to delete logs and diagnostics files (default: keep). Answer <kbd>n</kbd> to the second if you still need to send a diagnostics file. <code>claude-office uninstall --yes</code> answers yes to both.</p>
+</main>
+</body>
+</html>

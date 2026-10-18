@@ -1,3 +1,5 @@
+[English](README.md)
+
 # Claude Agent Office Viewer
 
 Claude Code의 토큰 사용량·잔여량, 실행 중인 세션, agent team 팀원 상태를 네온 도트 사무실로 보여주는 로컬 대시보드입니다.

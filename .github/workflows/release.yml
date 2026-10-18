@@ -51,13 +51,23 @@ jobs:
           pre=""
           case "$VERSION" in *-*) pre="--prerelease" ;; esac
           cat > notes.md <<NOTES
+          > **Source code (zip / tar.gz)** below is the source archive GitHub attaches to every release automatically. Do not use it to install.
+
+          ## Installers
+          - **macOS / Linux:** \`claude-office-${VERSION}.tar.gz\` → \`tar -xzf claude-office-${VERSION}.tar.gz && cd claude-office-${VERSION} && sh install.sh\`
+          - **Windows:** \`claude-office-${VERSION}.zip\` → extract it and run \`install.ps1\` (not yet verified in the beta)
+          - Checksums: \`claude-office-${VERSION}.sha256\`
+          - Requires Node.js 24 or later and Claude Code. English guide: \`manual-en.html\` in the archive (also \`docs/manual/en.html\` in the repository). The dashboard and installer messages are in Korean.
+
+          ---
+
           > 아래 **Source code (zip / tar.gz)**는 GitHub가 모든 릴리스에 자동으로 붙이는 소스 묶음입니다. 설치에는 쓰지 마세요.
 
           ## 설치 파일
           - **macOS·Linux:** \`claude-office-${VERSION}.tar.gz\` → \`tar -xzf claude-office-${VERSION}.tar.gz && cd claude-office-${VERSION} && sh install.sh\`
           - **Windows:** \`claude-office-${VERSION}.zip\` → 압축을 풀고 \`install.ps1\` 실행
           - 체크섬: \`claude-office-${VERSION}.sha256\`
-          - 자세한 순서는 압축 안의 \`사용설명서.html\` 4장
+          - 자세한 순서는 압축 안의 \`사용설명서.html\` 3장
           NOTES
           gh release create "${GITHUB_REF_NAME}" $pre --title "${GITHUB_REF_NAME}" --notes-file notes.md --generate-notes \
             "release/claude-office-${VERSION}.tar.gz" "release/claude-office-${VERSION}.zip" "release/claude-office-${VERSION}.sha256"
