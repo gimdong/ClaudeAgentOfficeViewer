@@ -53,12 +53,10 @@ function main() {
   const pluginJson = readJson(r("plugins/claude-office/.claude-plugin/plugin.json"));
   const marketplace = readJson(r(".claude-plugin/marketplace.json"));
   const marketplaceEntry = marketplace.plugins?.find((p) => p.name === "claude-office");
-  // hooks.json의 모든 hook이 보내는 플러그인 버전 헤더(Phase 5 §3)도 같아야 한다. 없거나 서로 다르면 그 값을 보인다
-  const hooksPath = r("plugins/claude-office/hooks/hooks.json");
-  const headerVersions = existsSync(hooksPath)
-    ? [...new Set(Object.values(readJson(hooksPath).hooks ?? {}).flatMap((groups) => groups.flatMap((g) => g.hooks.map((h) => h.headers?.["X-Claude-Office-Plugin"]))))]
-    : [];
-  const versions = { "package.json": v, "plugin.json": pluginJson.version, "marketplace.json": marketplaceEntry?.version, "hooks.json": headerVersions.length === 1 ? headerVersions[0] : headerVersions.join(",") || undefined };
+  // relay가 hook 요청 평문에 싣는 플러그인 버전(Phase 6a §2 — hooks.json 헤더를 대신함)도 같아야 한다
+  const relayPath = r("plugins/claude-office/hooks/relay.cjs");
+  const relayVersion = existsSync(relayPath) ? /const PLUGIN_VERSION = "([^"]+)";/.exec(readFileSync(relayPath, "utf8"))?.[1] : undefined;
+  const versions = { "package.json": v, "plugin.json": pluginJson.version, "marketplace.json": marketplaceEntry?.version, "relay.cjs": relayVersion };
   const mismatched = Object.entries(versions).filter(([, val]) => val !== v);
   if (mismatched.length > 0) {
     console.error(`[package-beta] 버전 불일치: ${JSON.stringify(versions)}`);

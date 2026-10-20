@@ -1,18 +1,18 @@
 {
-  "description": "Claude Agent Office Viewer로 이벤트를 보냅니다. 서버가 꺼져 있으면 연결 실패로 끝나고 세션은 그대로 진행합니다.",
+  "description": "Claude Agent Office Viewer로 이벤트를 암호화해 보냅니다(relay.cjs). 대시보드가 꺼져 있거나 무엇이든 실패하면 아무것도 돌려주지 않고 끝나, 세션은 평소 권한 흐름으로 진행합니다. node·열쇠 파일 자리는 설치 스크립트가 절대 경로로 바꿉니다.",
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 600, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "PermissionDenied": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "Notification": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "TeammateIdle": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }]
+    "SessionStart": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "PostToolUseFailure": [{"matcher": "*", "hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "PermissionRequest": [{"matcher": "*", "hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 600}]}],
+    "PermissionDenied": [{"matcher": "*", "hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "SubagentStart": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "SubagentStop": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "TeammateIdle": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "__NODE__", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"], "timeout": 10}]}]
   }
 }

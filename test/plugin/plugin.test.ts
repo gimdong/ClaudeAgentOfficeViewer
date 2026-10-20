@@ -13,7 +13,7 @@ const EVENTS = [
 ];
 const TOOL_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "PermissionDenied"];
 
-type Hook = { type: string; url: string; timeout: number; headers?: Record<string, string> };
+type Hook = { type: string; command: string; args: string[]; timeout: number };
 type HookFile = { hooks: Record<string, Array<{ matcher?: string; hooks: Hook[] }>> };
 const readJson = async <T>(p: string): Promise<T> => JSON.parse(await readFile(p, "utf8")) as T;
 const allHooks = (f: HookFile) => Object.values(f.hooks).flatMap((groups) => groups.flatMap((g) => g.hooks));
@@ -35,13 +35,14 @@ describe("plugin.json", () => {
     expect(p.license).toBe("MIT");
   });
 
-  it("버전은 2.0.0-beta.13로 네 곳이 같다", async () => {
+  it("버전은 2.0.0-beta.13로 다섯 곳이 같다(relay.cjs의 PLUGIN_VERSION 포함, Phase 6a)", async () => {
     const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
     const lock = await readJson<{ version: string; packages: Record<string, { version?: string }> }>(join(ROOT, "package-lock.json"));
     const plugin = await readJson<{ version: string }>(join(PLUGIN, ".claude-plugin/plugin.json"));
     const m = await readJson<{ plugins: Array<{ name: string; version: string }> }>(join(ROOT, ".claude-plugin/marketplace.json"));
     expect(pkg.version).toBe("2.0.0-beta.13");
-    expect([lock.version, lock.packages[""].version, plugin.version, m.plugins.find((x) => x.name === "claude-office")?.version]).toEqual(Array(4).fill(pkg.version));
+    const relay = /const PLUGIN_VERSION = "([^"]+)";/.exec(await readFile(join(PLUGIN, "hooks/relay.cjs"), "utf8"))?.[1];
+    expect([lock.version, lock.packages[""].version, plugin.version, m.plugins.find((x) => x.name === "claude-office")?.version, relay]).toEqual(Array(5).fill(pkg.version));
   });
 
   it("저장소 LICENSE는 MIT이고 package.json도 MIT다 (Ruling P5)", async () => {
@@ -58,27 +59,27 @@ describe("hooks.json", () => {
     expect(Object.keys(f.hooks).sort()).toEqual([...EVENTS].sort());
   });
 
-  it("모든 hook은 http 타입, 같은 URL이다", async () => {
+  it("모든 hook은 exec form command: 자리 표시자 node + relay.cjs + 자리 표시자 열쇠 파일, onFailure·url·headers 없음(Phase 6a §2)", async () => {
     const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
     const hooks = allHooks(f);
     expect(hooks).toHaveLength(EVENTS.length);
     for (const h of hooks) {
-      expect(h.type).toBe("http");
-      expect(h.url).toBe("http://127.0.0.1:4317/hooks/event");
+      expect(Object.keys(h).sort()).toEqual(["args", "command", "timeout", "type"]);
+      expect([h.type, h.command, h.args]).toEqual(["command", "__NODE__", ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "__KEYFILE__"]]);
     }
   });
 
-  it("모든 hook이 플러그인 버전 헤더(X-Claude-Office-Plugin = package.json 버전)를 보낸다(Phase 5 §3)", async () => {
-    const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
-    const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
-    for (const h of allHooks(f)) expect(h.headers).toEqual({ "X-Claude-Office-Plugin": pkg.version });
+  it("자리 표시자는 command·args에만 있다(설치 스크립트가 JSON으로 바꾸는 자리)", async () => {
+    const text = await readFile(join(PLUGIN, "hooks/hooks.json"), "utf8");
+    expect(text.split("__NODE__").length - 1).toBe(EVENTS.length);
+    expect(text.split("__KEYFILE__").length - 1).toBe(EVENTS.length);
   });
 
-  it("PermissionRequest만 timeout 600, 나머지 12개는 5", async () => {
+  it("PermissionRequest만 timeout 600, 나머지 12개는 10", async () => {
     const f = await readJson<HookFile>(join(PLUGIN, "hooks/hooks.json"));
-    // 대시보드 답을 기다린다(스펙 3.1). 서버는 590초에 놓아준다
+    // 대시보드 답을 기다린다(스펙 3.1). relay는 595초, 서버는 590초에 놓아준다
     expect(f.hooks.PermissionRequest.flatMap((g) => g.hooks.map((h) => h.timeout))).toEqual([600]);
-    for (const e of EVENTS.filter((x) => x !== "PermissionRequest")) expect(f.hooks[e].flatMap((g) => g.hooks.map((h) => h.timeout))).toEqual([5]);
+    for (const e of EVENTS.filter((x) => x !== "PermissionRequest")) expect(f.hooks[e].flatMap((g) => g.hooks.map((h) => h.timeout))).toEqual([10]);
   });
 
   it("도구 이벤트는 matcher '*'를 쓴다", async () => {
@@ -94,23 +95,18 @@ describe("make-dev-plugin", () => {
   });
   afterEach(() => rm(tmp, { recursive: true, force: true }));
 
-  it("포트만 바꾸고 나머지는 그대로 복사한다", async () => {
+  it("node·열쇠 파일 자리를 채우고 relay 인자 끝에 포트를 붙인다. 나머지는 그대로 복사한다", async () => {
     const out = join(tmp, "dev");
-    execFileSync("node", [join(ROOT, "scripts/make-dev-plugin.mjs"), "--port", "4318", "--out", out], { stdio: "pipe" });
+    execFileSync("node", [join(ROOT, "scripts/make-dev-plugin.mjs"), "--port", "4318", "--out", out, "--key", "/k/hook.key"], { stdio: "pipe" });
     const dev = await readJson<HookFile>(join(out, "hooks/hooks.json"));
-    expect(new Set(allHooks(dev).map((h) => h.url))).toEqual(new Set(["http://127.0.0.1:4318/hooks/event"]));
-    const origText = await readFile(join(PLUGIN, "hooks/hooks.json"), "utf8");
-    const devText = await readFile(join(out, "hooks/hooks.json"), "utf8");
-    expect(devText.replaceAll(":4318/", ":4317/")).toBe(origText);
-    expect(await readFile(join(out, ".claude-plugin/plugin.json"), "utf8")).toBe(await readFile(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
-  });
-
-  it("make-dev-plugin 사본도 PermissionRequest timeout 600을 유지한다", async () => {
-    const out = join(tmp, "dev");
-    execFileSync("node", [join(ROOT, "scripts/make-dev-plugin.mjs"), "--port", "4319", "--out", out], { stdio: "pipe" });
-    const dev = await readJson<HookFile>(join(out, "hooks/hooks.json"));
+    for (const h of allHooks(dev)) {
+      expect(h.command).toBe(process.execPath);
+      expect(h.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", "/k/hook.key", "4318"]);
+    }
     expect(dev.hooks.PermissionRequest[0].hooks[0].timeout).toBe(600);
-    expect(dev.hooks.PreToolUse[0].hooks[0].timeout).toBe(5);
+    expect(dev.hooks.PreToolUse[0].hooks[0].timeout).toBe(10);
+    expect(await readFile(join(out, ".claude-plugin/plugin.json"), "utf8")).toBe(await readFile(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
+    expect(await readFile(join(out, "hooks/relay.cjs"), "utf8")).toBe(await readFile(join(PLUGIN, "hooks/relay.cjs"), "utf8"));
   });
 
   it("포트가 잘못되면 종료 코드 1", () => {

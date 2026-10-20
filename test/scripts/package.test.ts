@@ -162,18 +162,19 @@ describe("npm run package:beta", () => {
     expect(readFileSync(join(ROOT, "docs/manual/index.html"), "utf8")).toContain('href="en.html"');
   });
 
-  it("패키지 속 플러그인의 모든 hook이 VERSION과 같은 버전 헤더를 보낸다(Phase 5 §3)", () => {
+  it("패키지 속 플러그인: relay.cjs가 VERSION을 보내고, hooks.json은 자리 표시자 원본 그대로(Phase 6a §2)", () => {
     requireBuildOk();
-    const f = JSON.parse(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")) as { hooks: Record<string, Array<{ hooks: Array<{ headers?: Record<string, string> }> }>> };
-    for (const groups of Object.values(f.hooks)) for (const g of groups) for (const h of g.hooks) expect(h.headers?.["X-Claude-Office-Plugin"]).toBe(VERSION);
+    const relay = readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/relay.cjs"), "utf8");
+    expect(/const PLUGIN_VERSION = "([^"]+)";/.exec(relay)?.[1]).toBe(VERSION);
+    expect(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")).toBe(readFileSync(join(ROOT, "plugins/claude-office/hooks/hooks.json"), "utf8"));
   });
 
-  it("패키지 속 플러그인의 PermissionRequest hook timeout은 600, 나머지는 5(Phase 2)", () => {
+  it("패키지 속 플러그인의 PermissionRequest hook timeout은 600, 나머지는 10(Phase 6a)", () => {
     requireBuildOk();
     const f = JSON.parse(readFileSync(join(RELEASE_DIR, "plugin/plugins/claude-office/hooks/hooks.json"), "utf8")) as { hooks: Record<string, Array<{ hooks: Array<{ timeout: number }> }>> };
     for (const [event, groups] of Object.entries(f.hooks)) {
       const timeouts = groups.flatMap((g) => g.hooks.map((h) => h.timeout));
-      expect(timeouts, event).toEqual([event === "PermissionRequest" ? 600 : 5]);
+      expect(timeouts, event).toEqual([event === "PermissionRequest" ? 600 : 10]);
     }
   });
 
