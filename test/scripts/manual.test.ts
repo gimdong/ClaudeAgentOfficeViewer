@@ -13,6 +13,8 @@ import { MAX_LAUNCHED } from "../../src/shared/types";
 import { UID_REJECT_BODY } from "../../server/peer";
 import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
+// Phase 6a 칩 문구(계획 Global Constraints). HUD 상수 대조는 Task 3 커밋 뒤에 더한다
+const LEGACY_CHIP = "옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요";
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -33,8 +35,8 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).not.toMatch(/@import/i);
   });
 
-  it("스펙 10장의 9개 절이 순서대로 있다", () => {
-    const h2 = [...html.matchAll(/<h2 id="s(\d)">([^<]+)<\/h2>/g)].map((m) => m[2]);
+  it("스펙 10장의 9개 절 + 부록 C(Phase 6a)가 순서대로 있다", () => {
+    const h2 = [...html.matchAll(/<h2 id="s(\d+)">([^<]+)<\/h2>/g)].map((m) => m[2]);
     expect(h2).toEqual([
       "1. 이 프로그램이 하는 일",
       "2. 준비물",
@@ -45,6 +47,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
       "7. 지우기",
       "8. 부록 A: 회사 관리자에게 전달할 설정",
       "9. 부록 B: 베타에서 알려진 제한",
+      "10. 부록 C: beta.14 설치본 확인",
     ]);
   });
 
@@ -547,6 +550,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(others.size).toBe(1);
       expect(prose).toContain(`최대 ${pr}초(${pr / 60}분) 동안 응답을 기다렸다가`);
       expect(prose).toContain(`다른 hook의 timeout은 ${[...others][0]}초입니다.`);
+      // relay 자체 대기 한도(Phase 6a 스펙 3장 8번)
+      const relayWait = num(read("plugins/claude-office/hooks/relay.cjs"), /"PermissionRequest" \? [\d_]+ : ([\d_]+)\)/);
+      expect(prose).toContain(`대시보드가 ${relayWait / 1000}초 안에 답하지 않으면 플러그인이 먼저 결정 없이 끝냅니다.`);
     });
 
     it("터미널에서 먼저 답해도 대시보드 요청이 잠깐 남고, 그때 누른 답은 적용되지 않는다(B70·B71, #190)", () => {
@@ -572,7 +578,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(q).toMatch(/if \(event === "SessionEnd"\)/);
       expect(read("server/budget/gate.ts")).toMatch(/c\.toolUseId === toolUseId\)\) this\.continue\(sessionId\)/);
       const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
-      expect(a).toContain("같은 PC의 다른 프로그램(이 PC에 로그인한 다른 사용자의 프로그램도 포함, 127.0.0.1에 닿을 수 있는 모든 프로그램)이 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>대시보드가 켜져 있는 동안에는 어느 경우에도 도구 허용을 만들어 내지는 못하고, Claude Code 창의 권한 창은 그대로 뜹니다. 대시보드가 꺼져 있을 때는 아래와 다릅니다. 여러 사람이 함께 쓰는 PC나 서버에 설치할 때는 이 점을 고려해 주세요. 막으려면 hook 요청 인증이 필요한데, 이번 버전에는 없습니다.");
+      expect(a).toContain("같은 PC의 다른 프로그램(이 PC에 로그인한 다른 사용자의 프로그램도 포함, 127.0.0.1에 닿을 수 있는 모든 프로그램)이 옛 입구로 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>대시보드가 켜져 있는 동안에는 어느 경우에도 도구 허용을 만들어 내지는 못하고, Claude Code 창의 권한 창은 그대로 뜹니다. 대시보드가 꺼져 있을 때는 아래와 다릅니다. 여러 사람이 함께 쓰는 PC나 서버에 설치할 때는 이 점을 고려해 주세요. Linux에서는 다른 계정의 접속을 대시보드가 모두 거절하므로(<a href=\"#same-user\">6장</a>) 다른 계정은 옛 입구도 쓸 수 없습니다.");
       expect(a).not.toContain("가짜 hook을 보내면 화면에 가짜 요청이 뜰 수 있지만");
       expect(a).not.toContain("허용이나 거부를 대신 만들어 내지는 못합니다"); // B73: 맺음은 "도구 허용…권한 창은 그대로"
     });
@@ -727,11 +733,19 @@ describe("사용설명서(docs/manual/index.html)", () => {
     it("대시보드가 꺼져 있을 때의 hook 오류 표시(Task 12 P7: 막히지 않고 ECONNREFUSED가 보임)", () => {
       const off = "<code>connect ECONNREFUSED 127.0.0.1:4317</code>";
       const s4 = between('<h2 id="s4">', '<h2 id="s5">');
-      expect(s4).toContain(`<code>PreToolUse:Bash hook error</code>와 ${off} 같은 표시가 보일 수 있습니다. 대시보드에 닿지 못했다는 뜻일 뿐이고, Claude Code는 그대로 일합니다.`);
-      expect(s5).toContain("뒤에 <code>connect ECONNREFUSED</code>가 붙어 있으면 정책이 막은 것이 아니라 대시보드가 꺼져 있는 것이고, 도구는 그대로 실행됩니다");
-      expect(between('<h3 id="policy-not-applied">', "<h3")).toContain(`Claude Code 창에 ${off}이 보였다면 그때 대시보드가 꺼져 있었던 것입니다.`);
-      // 플러그인 hook 주소의 포트가 4317이다
-      expect(read("plugins/claude-office/hooks/hooks.json")).toContain("http://127.0.0.1:4317/hooks/event");
+      // Phase 6a: relay는 대시보드가 꺼지면 무출력 exit 0(스펙 3장 7·9번) → 표시 없음. ECONNREFUSED는 옛 플러그인 창에서만
+      expect(s4).toContain("대시보드를 끈 채 Claude Code를 쓰면 Claude Code는 아무 표시 없이 평소처럼 일하고, 권한이 필요하면 Claude Code 창에서 묻습니다.");
+      expect(s4).toContain(`옛 플러그인(beta.13 이하)이 남은 창에서는 <code>PreToolUse:Bash hook error</code>와 ${off} 같은 표시가 보일 수 있습니다. 대시보드에 닿지 못했다는 뜻일 뿐이고, Claude Code는 그대로 일합니다.`);
+      expect(s5).toContain("옛 플러그인(beta.13 이하)이 남은 창에서 그 뒤에 <code>connect ECONNREFUSED</code>가 붙어 있으면 정책이 막은 것이 아니라 대시보드가 꺼져 있는 것이고, 도구는 그대로 실행됩니다");
+      expect(between('<h3 id="policy-not-applied">', "<h3")).toContain(`대시보드가 꺼져 있으면 Claude Code는 아무 표시 없이 평소처럼 일합니다(옛 플러그인이 남은 창에서는 ${off}이 보입니다).`);
+      expect(prose, "HTTP hook 기준 옛 괄호").not.toContain("(HTTP hook의 동작)");
+      // 플러그인 hook은 relay를 거쳐 4317로 간다(Phase 6a 스펙 2·3장)
+      const hooks = JSON.parse(read("plugins/claude-office/hooks/hooks.json")).hooks as Record<string, { hooks: { type: string; args?: string[] }[] }[]>;
+      for (const [ev, groups] of Object.entries(hooks)) for (const g of groups) for (const h of g.hooks) {
+        expect(h.type, ev).toBe("command");
+        expect(h.args?.[0], ev).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs");
+      }
+      expect(read("plugins/claude-office/hooks/relay.cjs")).toMatch(/127\.0\.0\.1[\s\S]*4317|4317[\s\S]*127\.0\.0\.1/);
     });
 
     it("Phase 3로 사실이 바뀐 옛 문장이 남아 있지 않다", () => {
@@ -924,7 +938,14 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(at).toBeGreaterThan(-1);
     const block = a.slice(at, a.indexOf("</div>", at));
     for (const s of [
-      "<strong>대시보드가 꺼져 있으면 다른 계정이 대신 답할 수 있습니다(여러 사람이 쓰는 컴퓨터).</strong>",
+      // Phase 6a: beta.14부터 고침(약속 문장 없이), 옛 버전·옛 플러그인은 위험 그대로
+      "<strong>대시보드가 꺼져 있을 때 다른 계정이 대신 답할 수 있던 문제는 beta.14부터 고쳤습니다.</strong>",
+      "내 계정만 읽을 수 있는 열쇠 파일(<code>~/.claude-office/hook.key</code>)로 암호화해",
+      "이때 Claude Code는 평소처럼 Claude Code 창에서 묻습니다",
+      "<strong>beta.13 이하, 또는 옛 플러그인이 남아 있는 동안에는 위험이 그대로입니다.</strong>",
+      "<code>/reload-plugins</code>를 실행하거나 다시 열 때까지 옛 플러그인으로 보냅니다",
+      `<code>${LEGACY_CHIP}</code>`,
+      "옛 버전이나 옛 플러그인을 쓰는 동안의 대처:",
       "입력한 지시, 도구 입력과 결과(예: 명령, 파일 내용)를 받습니다",
       "권한 창 없이 바로 허용하거나 입력을 바꾸는 것까지",
       "Claude가 읽는 대화에 글을 끼워 넣을 수 있습니다",
@@ -942,8 +963,43 @@ describe("사용설명서(docs/manual/index.html)", () => {
     // 약속 문장 없음(B259)
     for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(block, w).not.toContain(w);
     // 3장 꼬리(B269)와 6장 ④ 본문(B261 방향)
-    expect(prose).toContain('스스로 허용하거나 거부하지는 않고, 127.0.0.1:4317에서 듣는 프로그램의 답을 그대로 전합니다(<a href="#hook-risk">대시보드가 꺼져 있을 때</a>).');
+    expect(prose).toContain('스스로 허용하거나 거부하지는 않고, 같은 열쇠 파일을 쓰는 이 컴퓨터의 대시보드가 보낸 답만 전합니다(<a href="#hook-risk">대시보드가 꺼져 있을 때</a>).');
+    // 열쇠 파일 이름은 서버가 만드는 이름과 같다
+    expect(read("server/paths.ts")).toContain('hookKeyFile: join(prefix, "hook.key")');
+    // 가짜 hook 문단은 옛 입구 기준(Phase 6a 스펙 4장 — beta.14는 옛 /hooks/event를 함께 받음)
+    expect(a).toContain("<strong>옛 hook 입구는 인증하지 않습니다(판정).</strong>");
+    expect(a).not.toContain("이번 버전에는 없습니다");
+    expect(read("server/app.ts")).toContain('"/hooks/event"');
     expect(prose).toContain("<strong>모르는 프로그램</strong>이면 다른 번호로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요");
+  });
+
+  it("Phase 6a: 원격에서 보기(SSH 터널) 절이 스펙 6장과 런처를 따른다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const at = prose.indexOf('<h3 id="remote">원격에서 보기(SSH 터널)</h3>');
+    expect(at).toBeGreaterThan(prose.indexOf('<h2 id="s4">'));
+    expect(at).toBeLessThan(prose.indexOf('<h2 id="s5">'));
+    const sec = prose.slice(at, prose.indexOf('<h2 id="s5">'));
+    for (const s of [
+      "<code>ssh -L 4317:127.0.0.1:4317 &lt;원격 컴퓨터&gt;</code>",
+      "<code>claude-office url</code>",
+      "브라우저는 열지 않습니다",
+      "<code>ssh -L 14317:127.0.0.1:4317 &lt;원격 컴퓨터&gt;</code>",
+      "<code>127.0.0.1:14317</code>",
+      "<strong>이 주소는 열쇠입니다. 남에게 보내지 마세요.</strong>",
+    ]) expect(sec, s).toContain(s);
+    // 런처 url 명령·번호별 쿠키(B297)는 Task 4 커밋 뒤에 대조한다
+    expect(read).toBeTypeOf("function");
+  });
+
+  it("Phase 6a: 부록 C 설치본 확인 8항목(스펙 9장) + 원격 Linux 터널(B296)", () => {
+    const c = html.slice(html.indexOf('<h2 id="s10">'), html.indexOf("</main>"));
+    const items = c.slice(c.indexOf('<ol class="install-checks">'), c.indexOf("</ol>")).match(/<li>/g) ?? [];
+    expect(items.length).toBe(9);
+    for (const s of ["정책이 막는지", "허용·거부가 그대로 적용되는지", "먼저 답하면 손들기가 닫히는지", "대시보드를 끄면 평소처럼 묻는지", "다른 hook과 함께 쓸 때", "작업 폴더와 프로젝트", "대화에 글이 끼어들지 않는지", "<code>claude --debug</code>", "<code>cancelled</code>", `<code>${UID_REJECT_BODY}</code>`]) expect(c, s).toContain(s);
+    expect(html).toContain('<li><a href="#s10">부록 C: beta.14 설치본 확인</a></li>');
+    // 약속 문장 없음(B259) — 고친 hook 위험·부록 C 모두
+    for (const w of ["다음 버전", "곧 고칠", "예정", "beta.15"]) expect(c + html.slice(html.indexOf('<p id="hook-risk">'), html.indexOf('<h2 id="s9">')), w).not.toContain(w);
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
