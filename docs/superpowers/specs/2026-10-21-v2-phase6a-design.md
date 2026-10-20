@@ -26,7 +26,7 @@
 3. 열쇠(32바이트 hex)에서 HKDF로 요청용 키·응답용 키를 따로 만든다.
 4. 요청 평문 `{v:1, id:<16바이트 랜덤 hex>, ts:<ms>, plugin:<버전>, event:<입력 JSON>}`을 AES-256-GCM(12바이트 IV)으로 암호화해 `POST 127.0.0.1:4317/hooks/v2`(`node:net`로 직접 HTTP/1.1) 한 번에 보낸다. 본문: `{kid, iv, ct, tag}` (kid = 열쇠의 SHA-256 앞 8바이트 hex). **소켓은 응답을 다 받은 뒤에만 닫는다**(`write`만 쓰고 `end`/half-close 금지 — 쓰기 쪽을 닫으면 서버가 곧바로 연결 끊김으로 보고 PermissionRequest를 닫는다, security 실측).
 5. 응답 `{iv, ct, tag}`를 응답용 키로 풀고, 평문 `{id:<같은 id>, out:<hook 출력 JSON 또는 null>}`을 확인한다. id가 다르거나 풀리지 않으면 끝.
-6. `out`이 객체이고, 최상위 키가 허용 목록(`hookSpecificOutput`, `decision`, `reason`, `systemMessage`, `suppressOutput`) 안이며, `out.hookSpecificOutput?.hookEventName`이 받은 이벤트 이름과 같거나 없을 때만 `JSON.stringify(out)`을 stdout에 쓰고, 쓰기가 끝난 뒤 exit 0.
+6. `out`이 객체이고, 최상위 키가 `hookSpecificOutput` 하나뿐이며(서버는 `server/decisions/protocol.ts`에서 이것만 만든다 — 옛 `decision:"approve"`·PostToolUse `decision:"block"`+`reason` 경로를 닫는다), `out.hookSpecificOutput?.hookEventName`이 받은 이벤트 이름과 같거나 없을 때만 `JSON.stringify(out)`을 stdout에 쓰고, 쓰기가 끝난 뒤 exit 0.
 7. **출력 안전 규칙:** 모든 오류·예외·신호·타임아웃에서 stdout 없이 exit 0. exit 2·exit 1을 쓰지 않는다. UserPromptSubmit·SessionStart·Stop·SubagentStop·TeammateIdle에는 `out`이 있어도 쓰지 않는다(문맥 주입·멈춤 방지).
 8. **자체 대기 한도:** 연결부터 응답까지 이벤트 timeout보다 5초 짧게(PermissionRequest 595초, 그 밖 5초). 넘으면 끝.
 9. 연결 실패(대시보드 꺼짐)는 곧바로 끝. 로그를 남기지 않는다. 복호화·형식 실패만 `<PREFIX>/logs/relay.log`(0600)에 이유 한 단어 + 시각을 남긴다(본문·열쇠 없음, 1MB 넘으면 앞을 지움).
