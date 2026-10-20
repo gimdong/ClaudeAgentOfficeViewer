@@ -108,6 +108,7 @@ async function read(body, sk, ack) {
       if (!same(msg.mac, mac(sk, JSON.stringify([msg.id, msg.text])))) throw new Error("mac");
       if (seen.has(msg.id)) continue;
       seen.add(msg.id);
+      if (seen.size > 1000) seen.delete(seen.values().next().value); // 오래 붙어 있는 연결에서도 기억은 1000개(넣은 순서로 오래된 것부터)
       send({ jsonrpc: "2.0", method: "notifications/claude/channel", params: { content: msg.text, meta: { source: "dashboard" } } });
       await fetch(`${BASE}/channel/ack`, { method: "POST", headers: { Authorization: `Ack ${ack}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: msg.id }) }).catch(() => {});
     }

@@ -37,7 +37,7 @@ type Mode = "good" | "no-proof" | "bad-proof" | "tamper";
  * 가짜 대시보드(B257 핸드셰이크): good은 열쇠를 아는 진짜처럼 증명하고 MAC을 붙인다. no-proof·bad-proof는 열쇠를 모르는 가짜 서버,
  * tamper는 핸드셰이크는 그대로 중계하지만 지시 글을 바꾸는 중계자. 받은 요청은 모두 기록한다
  */
-async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse) => void } = {}) {
+async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, sk: string) => void } = {}) {
   const mode = o.mode ?? "good";
   const seen: Array<{ url: string; auth?: string; body: string; headers: IncomingMessage["headers"] }> = [];
   const nonces = new Map<string, string>();
@@ -59,7 +59,7 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse) 
         const sk = mac(KEY, `session|${nonces.get(snonce)}|${snonce}`);
         res.writeHead(200, { "Content-Type": "text/event-stream", "X-Office-Ack": "f".repeat(64) });
         const text = mode === "tamper" ? "rm -rf ~" : TEXT;
-        (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, JSON.stringify(["i1", TEXT])) })}\n\n`)))(res);
+        (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, JSON.stringify(["i1", TEXT])) })}\n\n`)))(res, sk);
       } else res.end("{}");
     });
   });
@@ -157,6 +157,22 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     expect(out.some((l) => l.includes("notifications/claude/channel"))).toBe(false);
     expect(d.seen.some((s) => s.url === "/channel/ack")).toBe(false);
   });
+
+  it("연결마다 본 id는 1000개까지만 기억한다(오래된 것부터 잊는다, B268 상한)", async () => {
+    const ev = (sk: string, id: string) => `event: instruction\ndata: ${JSON.stringify({ id, text: id, mac: mac(sk, JSON.stringify([id, id])) })}\n\n`;
+    const d = await fakeDashboard({
+      onStream: (res, sk) => {
+        const ids = Array.from({ length: 1001 }, (_, i) => `i${i}`);
+        res.write(ids.map((id) => ev(sk, id)).join("") + ev(sk, "i1000") + ev(sk, "i0"));
+      },
+    });
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
+    const notes = () => out.filter((l) => l.includes("notifications/claude/channel")).map((l) => JSON.parse(l).params.content as string);
+    await until(() => notes().length >= 1002, 8000);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(notes().filter((t) => t === "i1000")).toHaveLength(1); // 최근 것은 다시 넣지 않는다
+    expect(notes().filter((t) => t === "i0")).toHaveLength(2); // 가장 오래된 것은 잊었다
+  }, 15_000);
 
   it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
     const src = readFileSync(SCRIPT, "utf8");
