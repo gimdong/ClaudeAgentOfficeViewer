@@ -254,8 +254,9 @@ export class ChannelHub {
   }
 
   private push(f: Floor, iid: string, text: string): void {
-    // 이벤트마다 연결 키로 MAC(B264): 핸드셰이크를 중계하는 쪽이 글을 바꾸면 channel 서버가 버린다
-    f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(f.sk!, `${iid}|${text}`) })}\n\n`);
+    // 이벤트마다 연결 키로 MAC(B264): 핸드셰이크를 중계하는 쪽이 글을 바꾸면 channel 서버가 버린다.
+    // 입력은 JSON 배열(B268) — "id|text"는 구분자를 옮겨 글 앞부분을 id로 넘기는 변조를 막지 못한다
+    f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(f.sk!, JSON.stringify([iid, text])) })}\n\n`);
     f.last = { id: iid, state: "sent" };
   }
   private byKid(kid: string): [string, Floor] | null {

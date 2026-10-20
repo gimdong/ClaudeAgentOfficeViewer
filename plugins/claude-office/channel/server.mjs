@@ -86,6 +86,7 @@ async function connect(attempt) {
 
 async function read(body, sk, ack) {
   const dec = new TextDecoder();
+  const seen = new Set(); // 이 연결에서 넣은 지시 id(B268 — 같은 지시를 다시 보내는 재전송은 넣지 않는다)
   let buf = "";
   for await (const chunk of body) {
     buf += dec.decode(chunk, { stream: true });
@@ -104,7 +105,9 @@ async function read(body, sk, ack) {
       }
       if (typeof msg?.id !== "string" || typeof msg?.text !== "string") continue;
       // 글을 바꾼 중계(B264): 넣지 않고 연결을 끊는다(던지면 스트림을 닫고 connect가 다시 잇는다)
-      if (!same(msg.mac, mac(sk, `${msg.id}|${msg.text}`))) throw new Error("mac");
+      if (!same(msg.mac, mac(sk, JSON.stringify([msg.id, msg.text])))) throw new Error("mac");
+      if (seen.has(msg.id)) continue;
+      seen.add(msg.id);
       send({ jsonrpc: "2.0", method: "notifications/claude/channel", params: { content: msg.text, meta: { source: "dashboard" } } });
       await fetch(`${BASE}/channel/ack`, { method: "POST", headers: { Authorization: `Ack ${ack}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: msg.id }) }).catch(() => {});
     }

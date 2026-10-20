@@ -59,7 +59,7 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse) 
         const sk = mac(KEY, `session|${nonces.get(snonce)}|${snonce}`);
         res.writeHead(200, { "Content-Type": "text/event-stream", "X-Office-Ack": "f".repeat(64) });
         const text = mode === "tamper" ? "rm -rf ~" : TEXT;
-        (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, `i1|${TEXT}`) })}\n\n`)))(res);
+        (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, JSON.stringify(["i1", TEXT])) })}\n\n`)))(res);
       } else res.end("{}");
     });
   });

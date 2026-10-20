@@ -179,7 +179,7 @@ describe("새 층·지시·보관(스펙 4·6·7장)", () => {
     const r = JSON.parse((await post("/api/floors/s1/instruct", { text: "고쳐 줘 \"a\"" })).body);
     expect(r.state).toBe("sent");
     await until(() => s.got.join("").includes("event: instruction"));
-    expect(instructions(s.got)).toEqual([{ id: r.id, text: "고쳐 줘 \"a\"", mac: mac(s.sk(), `${r.id}|고쳐 줘 "a"`) }]);
+    expect(instructions(s.got)).toEqual([{ id: r.id, text: "고쳐 줘 \"a\"", mac: mac(s.sk(), JSON.stringify([r.id, '고쳐 줘 "a"'])) }]);
     expect(hub.view("s1")?.last).toBe("sent");
     expect((await send("/channel/ack", { headers: { Authorization: `Ack ${s.ack()}`, "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) })).status).toBe(200);
     expect(hub.view("s1")?.last).toBe("delivered");
