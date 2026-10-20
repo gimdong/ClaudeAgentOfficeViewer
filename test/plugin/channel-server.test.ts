@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -12,7 +13,17 @@ const FAKE_MSG_TOKEN = "fake-messaging-token-should-never-leave";
 
 let child: ChildProcess | undefined;
 let server: Server | undefined;
+let keyDir: string | undefined;
+/** 대시보드처럼 열쇠를 0600 파일에 두고 그 경로만 넘긴다(B265) */
+function keyFile() {
+  keyDir = mkdtempSync(join(tmpdir(), "co-chkey-"));
+  const f = join(keyDir, "co-1.key");
+  writeFileSync(f, KEY, { mode: 0o600 });
+  return f;
+}
 afterEach(async () => {
+  if (keyDir) rmSync(keyDir, { recursive: true, force: true });
+  keyDir = undefined;
   child?.kill();
   child = undefined;
   await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
@@ -97,7 +108,7 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
 
   it("열쇠가 있으면 SSE로 받은 지시를 그대로 channel 알림으로 넣고 ack를 보낸다. 메시징 토큰은 어디에도 보내지 않는다", async () => {
     const d = await fakeDashboard();
-    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
     await until(() => d.seen.some((s) => s.url === "/channel/ack"));
     const init = JSON.parse(out[0]).result;
     expect(init.capabilities.experimental).toEqual({ "claude/channel": {} });
@@ -120,14 +131,14 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
         res.end();
       },
     });
-    start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
     await until(() => n >= 2, 5000);
   });
 
   for (const mode of ["no-proof", "bad-proof"] as const) {
     it(`가짜 서버(${mode})면 스트림을 열지 않고 지시 0, 열쇠 원문은 어떤 요청에도 없고, 새 nonce로 다시 시도한다`, async () => {
       const d = await fakeDashboard({ mode });
-      const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+      const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
       await until(() => d.seen.filter((s) => s.url === "/channel/hello").length >= 2, 5000);
       expect(d.streams()).toBe(0);
       expect(out.some((l) => l.includes("notifications/claude/channel"))).toBe(false);
@@ -141,7 +152,7 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
 
   it("중계자가 지시 글을 바꾸면(MAC 불일치) 넣지 않고 ack도 없이 연결을 끊고 다시 잇는다", async () => {
     const d = await fakeDashboard({ mode: "tamper" });
-    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
     await until(() => d.streams() >= 2, 5000);
     expect(out.some((l) => l.includes("notifications/claude/channel"))).toBe(false);
     expect(d.seen.some((s) => s.url === "/channel/ack")).toBe(false);
@@ -150,7 +161,7 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
   it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
     const src = readFileSync(SCRIPT, "utf8");
     const names = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
-    expect([...new Set(names)].sort()).toEqual(["CLAUDE_OFFICE_FLOOR_KEY", "CLAUDE_OFFICE_PORT"]);
+    expect([...new Set(names)].sort()).toEqual(["CLAUDE_OFFICE_FLOOR_KEY_FILE", "CLAUDE_OFFICE_PORT"]);
     expect(/process\.env\[/.test(src) || /Object\.(keys|entries)\(process\.env\)/.test(src)).toBe(false);
   });
 

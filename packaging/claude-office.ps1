@@ -118,6 +118,24 @@ function Set-UserPathIfChanged([string]$NewValue, [string]$OldValue) {
   [Environment]::SetEnvironmentVariable($dummy, $null, "User")
 }
 
+# 토큰 주소를 브라우저 열기의 인자에 싣지 않는다(B265 — 프로세스 인자는 같은 컴퓨터의 다른 계정도 본다).
+# 사용자 임시 폴더(사용자 프로필 ACL — 다른 계정은 못 읽는다) 아래 새 폴더에 토큰 주소로 넘기는 HTML을 쓰고 그 경로만 연 뒤
+# 30초 뒤 지운다(sh와 같은 방식, Ruling B267). open 하위 명령은 바로 끝나므로 지우기는 따로 띄운 숨은 powershell이 한다
+# (Remove-Item은 $Prefix 아래만 쓰는 규칙이 있어 .NET Directory.Delete로 지운다)
+# runspace에서도 쓰려고 함수가 아니라 scriptblock으로 둔다(runspace는 이 스크립트의 함수를 보지 못한다)
+$OpenKeyUrl = {
+  param($url, $app)
+  $d = Join-Path ([System.IO.Path]::GetTempPath()) ("claude-office-open-" + [guid]::NewGuid().ToString("N"))
+  $null = New-Item -ItemType Directory -Force -Confirm:$false -Path $d
+  $f = Join-Path $d "open.html"
+  [System.IO.File]::WriteAllText($f, "<!doctype html><meta charset=`"utf-8`"><meta name=`"referrer`" content=`"no-referrer`"><meta http-equiv=`"refresh`" content=`"0;url=$url`"><script>location.replace(`"$url`")</script><title>Claude Agent Office</title>")
+  try {
+    if ($app) { Start-Process -FilePath $app -ArgumentList "`"$f`"" -ErrorAction Stop } else { Start-Process $f -ErrorAction Stop }
+  } finally {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 30; [System.IO.Directory]::Delete('$($d.Replace("'", "''"))', `$true)"
+  }
+}
+
 $cmd = if ($RestArgs.Count -gt 0) { $RestArgs[0] } else { "" }
 switch ($cmd) {
   { $_ -in @("doctor", "diag") } {
@@ -146,7 +164,7 @@ switch ($cmd) {
       if ($t) { $url = "$url" + "?k=$t" }
     }
     try {
-      if ($app) { Start-Process -FilePath $app -ArgumentList $url -ErrorAction Stop } else { Start-Process $url -ErrorAction Stop }
+      & $OpenKeyUrl $url $app
       exit 0
     } catch {
       [Console]::WriteLine("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url")
@@ -259,18 +277,18 @@ switch ($cmd) {
       # 백그라운드 job(Start-Job)은 콘솔에 쓰지 못하므로 같은 프로세스의 runspace에서 열고, 열기에 실패했을 때만
       # 붙여 넣을 주소를 콘솔에 쓴다(Ruling B45, sh와 같은 문구). 로그에는 쓰지 않는다
       $opener = [powershell]::Create().AddScript({
-        param($p, $tokenFile)
+        param($p, $tokenFile, $openSrc)
         Start-Sleep -Seconds 1
         $url = "http://127.0.0.1:$p/"
         if (Test-Path -LiteralPath $tokenFile) {
           $t = ([System.IO.File]::ReadAllText($tokenFile)).Trim()
           if ($t) { $url = "$url" + "?k=$t" }
         }
-        try { Start-Process $url -ErrorAction Stop } catch {
+        try { & ([scriptblock]::Create($openSrc)) $url "" } catch {
           [Console]::WriteLine("브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url")
           [Console]::WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")
         }
-      }).AddArgument($port).AddArgument((Join-Path $Prefix "token"))
+      }).AddArgument($port).AddArgument((Join-Path $Prefix "token")).AddArgument($OpenKeyUrl.ToString())
       $null = $opener.BeginInvoke()
     }
     # SPEC 3장 명령 표: sh와 글자까지 같은 안내(B17).

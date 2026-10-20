@@ -66,6 +66,24 @@ major=$(node -v | sed 's/^v\([0-9]*\).*/\1/')
 EOF_NO=0
 ask() { printf '%s [y/N] ' "$1"; read -r a || { [ -n "${a:-}" ] || EOF_NO=1; }; [ "$a" = y ] || [ "$a" = Y ]; }
 
+# 토큰 주소를 브라우저 열기 명령의 인자에 싣지 않는다(B265 — 프로세스 인자는 같은 컴퓨터의 다른 계정도 ps로 본다).
+# 0700 임시 폴더에 0600 HTML(토큰 주소로 넘기는 페이지)을 쓰고 그 경로만 연다. 30초 뒤 지운다(Ruling B267).
+# Linux는 홈 아래(snap·flatpak 브라우저는 /tmp와 홈의 숨김 폴더를 못 읽는다), macOS는 사용자 전용 TMPDIR.
+# 사용: open_url <주소> [브라우저 이름]. 실패하면 1(부르는 쪽이 붙여 넣을 주소를 안내한다). `||`와 함께 불러 set -e를 끈다
+open_url() {
+  if [ "$(uname 2>/dev/null)" = Linux ]; then base=$HOME/claude-office-open; else base=${TMPDIR:-/tmp}/claude-office; fi
+  d=$(umask 077 && mktemp -d "$base.XXXXXX" 2>/dev/null) || return 1
+  f="$d/open.html"
+  if ! (umask 077 && printf '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=%s"><script>location.replace("%s")</script><title>Claude Agent Office</title>\n' "$1" "$1" > "$f"); then
+    rm -rf "$d"
+    return 1
+  fi
+  if [ -n "${2:-}" ]; then open -a "$2" "$f" 2>/dev/null; else open "$f" 2>/dev/null || xdg-open "$f" 2>/dev/null; fi
+  rc=$?
+  (sleep 30; rm -rf "$d") >/dev/null 2>&1 </dev/null &
+  return $rc
+}
+
 cmd="${1:-}"
 case "$cmd" in
   doctor|diag)
@@ -91,11 +109,7 @@ case "$cmd" in
     done
     url="http://127.0.0.1:$port/"
     if [ -s "$PREFIX/token" ]; then url="${url}?k=$(tr -d ' \n\r' < "$PREFIX/token")"; fi
-    if [ -n "$app" ]; then
-      open -a "$app" "$url" 2>/dev/null && exit 0
-    else
-      { open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null; } && exit 0
-    fi
+    open_url "$url" "$app" && exit 0
     echo "브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url"
     echo "이 주소는 열쇠입니다. 남에게 보내지 마세요."
     exit 1
@@ -212,7 +226,7 @@ case "$cmd" in
         sleep 1
         url="http://127.0.0.1:$port/"
         if [ -s "$PREFIX/token" ]; then url="${url}?k=$(tr -d ' \n\r' < "$PREFIX/token")"; fi
-        open "$url" 2>/dev/null || xdg-open "$url" 2>/dev/null || {
+        open_url "$url" || {
           echo "브라우저를 열지 못했습니다. 이 주소를 브라우저에 붙여 넣어 주세요: $url"
           echo "이 주소는 열쇠입니다. 남에게 보내지 마세요."
         }

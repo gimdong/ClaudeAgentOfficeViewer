@@ -11,7 +11,7 @@ import { BudgetStore } from "./budget/store";
 import { DecisionQueue, type DecisionStats } from "./decisions/queue";
 import { PolicyGate } from "./policy/gate";
 import { FloorControl, type FloorStats } from "./floors/control";
-import { ChannelHub } from "./floors/channels";
+import { ChannelHub, floorKeyFile } from "./floors/channels";
 import { findExecutable, launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "./floors/launch";
 import { ancestorsOf, Reopener } from "./floors/reopen";
 import { execFile, execFileSync } from "node:child_process";
@@ -271,8 +271,11 @@ async function main(): Promise<void> {
   const tmuxFound = platform() === "win32" ? undefined : findExecutable("tmux");
   const tmuxBin = tmuxFound && tmuxVersionOk((() => { try { return execFileSync(tmuxFound, ["-V"], { encoding: "utf8", timeout: 3000 }); } catch { return ""; } })()) ? tmuxFound : undefined;
   const claudeBin = platform() === "win32" ? undefined : process.env.CLAUDE_OFFICE_CLAUDE_BIN ?? findExecutable("claude", process.env.PATH, [join(homedir(), ".local/bin")]);
+  // 층 열쇠 파일(B265): tmux에는 이 폴더의 파일 경로만 넘긴다
+  const floorKeyDir = join(dirname(paths.stateFile), "floors");
   const channels = new ChannelHub({
     file: join(dirname(paths.stateFile), "experimental.json"),
+    keyDir: floorKeyDir,
     available: platform() === "win32" ? { ok: false, reason: "windows" } : !tmuxBin ? { ok: false, reason: "tmux" } : !claudeBin ? { ok: false, reason: "claude" } : { ok: true },
     onChange: () => hub.poke(),
   });
@@ -281,9 +284,15 @@ async function main(): Promise<void> {
   const startFloor = async (sessionId: string, input: LaunchInput, resume?: string) => {
     if (!tmuxBin || !claudeBin) return { ok: false as const, error: "tmux" as const };
     const tmuxName = `co-${randomBytes(4).toString("hex")}`;
-    const key = channels.register(sessionId, tmuxName);
+    let key: string | null;
+    try {
+      key = channels.register(sessionId, tmuxName);
+    } catch (e) {
+      getLogger().warn("floors", "key file failed", { error: errInfo(e) });
+      return { ok: false as const, error: "tmux" as const };
+    }
     if (!key) return { ok: false as const, error: "limit" as const };
-    const args = launchArgs({ ...input, tmuxName, claude: claudeBin, channelSpec: process.env.CLAUDE_OFFICE_CHANNEL_SPEC ?? "plugin:claude-office@claude-office", sessionId, key, port: opts.port, socket: process.env.CLAUDE_OFFICE_TMUX_SOCKET, ...(resume ? { resume } : {}) });
+    const args = launchArgs({ ...input, tmuxName, claude: claudeBin, channelSpec: process.env.CLAUDE_OFFICE_CHANNEL_SPEC ?? "plugin:claude-office@claude-office", sessionId, keyFile: floorKeyFile(floorKeyDir, tmuxName), port: opts.port, socket: process.env.CLAUDE_OFFICE_TMUX_SOCKET, ...(resume ? { resume } : {}) });
     const ok = await new Promise<boolean>((r) => execFile(tmuxBin, args, { timeout: 10_000 }, (e) => (e && getLogger().warn("floors", "launch failed", { error: errInfo(e) }), r(!e))));
     if (!ok) {
       channels.unregister(sessionId);

@@ -59,10 +59,10 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
       expect(installSh, cmd).toContain(cmd);
       expect(installPs1, cmd).toContain(cmd);
     }
-    // FB-10: open 하위 명령은 두 런처에 모두 있다(ps1은 Start-Process로 연다)
+    // FB-10: open 하위 명령은 두 런처에 모두 있다(ps1은 $OpenKeyUrl — HTML 파일을 Start-Process로 연다, B265)
     expect(launcherSh).toContain("  open)");
     expect(launcherPs1).toContain('"open" {');
-    expect(launcherPs1).toMatch(/"open" \{[\s\S]*Start-Process/);
+    expect(launcherPs1).toMatch(/"open" \{[\s\S]*& \$OpenKeyUrl \$url \$app/);
     for (const cmd of ["plugin uninstall claude-office@claude-office --scope user", "plugin marketplace remove claude-office"]) {
       expect(launcherSh, cmd).toContain(cmd);
       expect(launcherPs1, cmd).toContain(cmd);
@@ -428,12 +428,14 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     }
   });
 
-  it("claude-office.ps1(정적): 토큰이 있으면 ?k= 주소로 열고, 실패할 때만 안내를 콘솔에 쓴다", () => {
+  it("claude-office.ps1(정적): 토큰이 있으면 ?k= 주소로 넘기는 HTML을 열고, 실패할 때만 안내를 콘솔에 쓴다", () => {
     const text = readFileSync(LAUNCHER_PS1, "utf8");
     expect(text).toContain('Join-Path $Prefix "token"');
     expect(text).toMatch(/\?k=/);
     expect(text).toContain("Start-Sleep -Seconds 1");
-    expect(text).toMatch(/Start-Process \$url -ErrorAction Stop/);
+    // 토큰 주소는 프로세스 인자에 싣지 않는다(B265): 토큰 주소로 넘기는 HTML을 쓰고 그 경로만 연다
+    expect(text.split("\n").filter((l) => !l.trim().startsWith("#")).some((l) => /Start-Process[^\n]*\$url/.test(l))).toBe(false);
+    expect(text).toMatch(/Start-Process \$f -ErrorAction Stop/);
     // 백그라운드 job은 콘솔에 쓰지 못하므로 같은 프로세스의 runspace에서 연다
     expect(text).toContain("[powershell]::Create()");
     expect(text.split("\n").filter((l) => !l.trim().startsWith("#")).some((l) => l.includes("Start-Job"))).toBe(false);

@@ -1,12 +1,21 @@
 // Claude Office channel 서버(Phase 4b 스펙 5장). 의존성 없는 stdio MCP(줄 단위 JSON-RPC).
-// - 포트를 열지 않는다. 대시보드가 띄운 층에만 있는 CLAUDE_OFFICE_FLOOR_KEY가 있으면 대시보드(127.0.0.1)로 나가는 SSE 연결을 건다
+// - 포트를 열지 않는다. 대시보드가 띄운 층에만 있는 CLAUDE_OFFICE_FLOOR_KEY_FILE(0600 열쇠 파일, B265 — 열쇠 원문은 프로세스 인자·환경에
+//   싣지 않는다)을 읽을 수 있으면 대시보드(127.0.0.1)로 나가는 SSE 연결을 건다
 // - 열쇠가 없는 세션(대시보드가 띄우지 않은 모든 세션)에서는 연결도, 안내 문구도, 알림도 내지 않는다
 // - process.env에서 아래 두 이름만 읽는다. 그 밖의 값(세션 메시징 토큰 등)은 읽지도 보내지도 않는다
 // - 열쇠 원문은 보내지 않는다(B257). 대시보드가 먼저 열쇠를 안다는 것을 증명해야 이쪽도 증명하고, 지시마다 연결 키의 MAC을 확인한다
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
-const KEY = process.env.CLAUDE_OFFICE_FLOOR_KEY;
+const KEY_FILE = process.env.CLAUDE_OFFICE_FLOOR_KEY_FILE;
+const KEY = (() => {
+  try {
+    return KEY_FILE ? readFileSync(KEY_FILE, "utf8").trim() : undefined;
+  } catch {
+    return undefined; // 파일이 없거나 못 읽으면 열쇠 없는 세션과 같다(조용히)
+  }
+})();
 const PORT = process.env.CLAUDE_OFFICE_PORT;
 const BASE = `http://127.0.0.1:${/^\d{2,5}$/.test(PORT ?? "") ? PORT : "4317"}`;
 // 새 런타임이 2026-07-28로 협상하면 channel로 등록되지 않는다(스파이크 Q1 함정). 이 revision으로 고정한다

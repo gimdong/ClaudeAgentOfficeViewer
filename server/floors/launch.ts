@@ -41,12 +41,12 @@ export function validateLaunch(b: unknown, home = homedir()): { ok: true; value:
  * tmux 인자(스펙 4.2). 셸을 거치지 않는다. 첫 지시는 channel 옵션 **앞**에 둔다 —
  * 그 옵션은 값을 여러 개 받아 뒤의 프롬프트를 삼킨다(스파이크 Q4 함정)
  */
-export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: string; sessionId: string; key: string; port: number; socket?: string; /** 옮겨 열기: 이 대화를 이어서 연다(--session-id 대신) */ resume?: string } & LaunchInput): string[] {
+export function launchArgs(o: { tmuxName: string; claude: string; channelSpec: string; sessionId: string; /** 층 열쇠 파일 경로(B265 — 열쇠 원문은 인자에 싣지 않는다. ps로 다른 계정도 본다) */ keyFile: string; port: number; socket?: string; /** 옮겨 열기: 이 대화를 이어서 연다(--session-id 대신) */ resume?: string } & LaunchInput): string[] {
   return [
     ...(o.socket ? ["-L", o.socket] : []),
     // tmux는 -c 값을 형식 문자열로 펼친다(#(cmd)는 명령 실행). ##는 글자 # 하나(B258)
     "new-session", "-d", "-s", o.tmuxName, "-c", o.cwd.replaceAll("#", "##"),
-    "-e", `CLAUDE_OFFICE_FLOOR_KEY=${o.key}`, "-e", `CLAUDE_OFFICE_PORT=${o.port}`,
+    "-e", `CLAUDE_OFFICE_FLOOR_KEY_FILE=${o.keyFile}`, "-e", `CLAUDE_OFFICE_PORT=${o.port}`,
     // agent team은 Claude Code의 실험 기능이라 이 환경변수가 있어야 켜진다. 사용자 설정 파일은 건드리지 않는다
     ...(o.mode === "team" ? ["-e", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"] : []),
     "--",

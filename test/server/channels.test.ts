@@ -1,13 +1,13 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS } from "../../server/floors/channels";
+import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -115,10 +115,10 @@ const until = async (f: () => boolean) => {
 describe("launchArgs·validateLaunch(스펙 4.2)", () => {
   it("셸 없이 인자 배열, 첫 지시는 channel 옵션 앞(따옴표·$()·줄바꿈도 한 인자)", () => {
     const prompt = 'do "x" $(rm -rf ~)\nnext';
-    const a = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "plugin:claude-office@claude-office", sessionId: "u1", key: "k".repeat(64), port: 4317, cwd: "/w", name: "alpha", model: "sonnet", prompt });
-    expect(a).toEqual(["new-session", "-d", "-s", "co-1", "-c", "/w", "-e", `CLAUDE_OFFICE_FLOOR_KEY=${"k".repeat(64)}`, "-e", "CLAUDE_OFFICE_PORT=4317", "--", "/c/claude", "--session-id", "u1", "--name", "alpha", "--model", "sonnet", prompt, "--dangerously-load-development-channels", "plugin:claude-office@claude-office"]);
+    const a = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "plugin:claude-office@claude-office", sessionId: "u1", keyFile: "/k/co-1.key", port: 4317, cwd: "/w", name: "alpha", model: "sonnet", prompt });
+    expect(a).toEqual(["new-session", "-d", "-s", "co-1", "-c", "/w", "-e", "CLAUDE_OFFICE_FLOOR_KEY_FILE=/k/co-1.key", "-e", "CLAUDE_OFFICE_PORT=4317", "--", "/c/claude", "--session-id", "u1", "--name", "alpha", "--model", "sonnet", prompt, "--dangerously-load-development-channels", "plugin:claude-office@claude-office"]);
     expect(a.indexOf(prompt)).toBeLessThan(a.indexOf("--dangerously-load-development-channels"));
-    const b = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "s", sessionId: "u1", key: "k", port: 1, cwd: "/w", name: "n", socket: "p4bt" });
+    const b = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "s", sessionId: "u1", keyFile: "/k", port: 1, cwd: "/w", name: "n", socket: "p4bt" });
     expect(b.slice(0, 2)).toEqual(["-L", "p4bt"]);
     expect(b.includes("--model")).toBe(false);
   });
@@ -267,7 +267,7 @@ describe("리뷰 #410 수정", () => {
 
 describe("일하는 방식(서브에이전트/agent team)", () => {
   it("team이면 tmux -e로 agent team 환경변수를 넘기고, 기본(서브에이전트)은 넘기지 않는다. 모르는 값은 400", () => {
-    const base = { tmuxName: "co-1", claude: "/c", channelSpec: "s", sessionId: "u", key: "k", port: 1, cwd: "/w", name: "n" };
+    const base = { tmuxName: "co-1", claude: "/c", channelSpec: "s", sessionId: "u", keyFile: "/k", port: 1, cwd: "/w", name: "n" };
     expect(launchArgs({ ...base, mode: "team" })).toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(launchArgs(base).some((a) => a.includes("AGENT_TEAMS"))).toBe(false);
     const a = launchArgs({ ...base, mode: "team" });
@@ -367,5 +367,31 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     const text = readdirSync(logs).map((f) => readFileSync(join(logs, f), "utf8")).join("");
     expect(text).toContain("channel-connect");
     for (const v of [key, snonce, mac(key, "kid"), s.ack()]) expect(text).not.toContain(v);
+  });
+});
+
+describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않는다)", () => {
+  it("keyDir이 있으면 등록할 때 0700 폴더에 0600 파일로 쓰고, 해제하면 지운다. load는 지난 실행의 열쇠 파일을 지운다", () => {
+    const keyDir = join(tmp, "floors");
+    mkdirSync(keyDir, { mode: 0o755 });
+    writeFileSync(join(keyDir, "co-old.key"), "stale");
+    const h = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    h.load();
+    expect(existsSync(join(keyDir, "co-old.key"))).toBe(false);
+    const key = h.register("s1", "co-1")!;
+    const f = floorKeyFile(keyDir, "co-1");
+    expect(readFileSync(f, "utf8")).toBe(key);
+    expect(statSync(f).mode & 0o777).toBe(0o600);
+    expect(statSync(keyDir).mode & 0o777).toBe(0o700);
+    h.unregister("s1");
+    expect(existsSync(f)).toBe(false);
+  });
+
+  it("열쇠 파일을 쓰지 못하면 등록하지 않고 던진다(층 수에 남지 않는다)", () => {
+    const blocker = join(tmp, "not-a-dir");
+    writeFileSync(blocker, "");
+    const h = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir: blocker });
+    expect(() => h.register("s1", "co-1")).toThrow();
+    expect(h.launchedCount()).toBe(0);
   });
 });

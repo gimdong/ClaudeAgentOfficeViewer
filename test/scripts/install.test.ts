@@ -555,8 +555,7 @@ describe("packaging/install.sh, claude-office.sh", () => {
       requireBuildOk();
       const rig = makeRig();
       try {
-        writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
-        chmodSync(join(rig.stubBin, "open"), 0o755);
+        fileOpener(rig);
 
         const prefix = join(rig.home, ".claude-office");
         expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
@@ -583,11 +582,11 @@ describe("packaging/install.sh, claude-office.sh", () => {
           const deadline = Date.now() + 5000;
           let log = "";
           for (;;) {
-            log = readFileSync(rig.stubLog, "utf8");
-            if (log.includes(`open http://127.0.0.1:${port}/`) || Date.now() > deadline) break;
+            log = opened(rig);
+            if (log.includes(`http://127.0.0.1:${port}/`) || Date.now() > deadline) break;
             await new Promise((r) => setTimeout(r, 100));
           }
-          expect(log).toContain(`open http://127.0.0.1:${port}/`);
+          expect(log).toContain(`http://127.0.0.1:${port}/`);
         } finally {
           await killAndWait(child);
         }
@@ -932,6 +931,16 @@ function fakeNode(rig: Rig) {
   chmodSync(join(rig.stubBin, "node"), 0o755);
 }
 
+/**
+ * 가짜 open: 인자를 STUB_LOG에, 인자가 파일이면 그 내용을 STUB_LOG.content에 적는다.
+ * 런처는 토큰 주소를 인자로 넘기지 않고 0600 HTML(토큰 주소로 넘기는 페이지)의 경로만 연다(B265)
+ */
+function fileOpener(rig: Rig) {
+  writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\nfor a; do [ -f "$a" ] && cat "$a" >> "$STUB_LOG.content"; done\nexit 0\n');
+  chmodSync(join(rig.stubBin, "open"), 0o755);
+}
+const opened = (rig: Rig) => (existsSync(`${rig.stubLog}.content`) ? readFileSync(`${rig.stubLog}.content`, "utf8") : "");
+
 /** 런처를 켜고 끝날 때까지(가짜 node는 4초) 출력을 모은다 */
 function runLauncher(prefix: string, e: NodeJS.ProcessEnv, args: string[] = ["--port", "5999"]) {
   return spawnSync(join(prefix, "bin/claude-office"), args, { env: e, encoding: "utf8", timeout: 15_000 });
@@ -1006,20 +1015,21 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
     }
   });
 
-  it("런처: 토큰이 있으면 ?k=<토큰> 주소로 열고, 열리면 출력에 토큰 값이 없다", () => {
+  it("런처: 토큰이 있으면 ?k=<토큰> 주소로 넘기는 HTML을 열고(인자에는 토큰 없음), 열리면 출력에 토큰 값이 없다", () => {
     requireBuildOk();
     const rig = makeRig();
     try {
       const prefix = join(rig.home, ".claude-office");
       expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
-      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
-      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fileOpener(rig);
       fakeNode(rig);
       writeFileSync(rig.stubLog, "");
       const token = readFileSync(join(prefix, "token"), "utf8");
       const r = runLauncher(prefix, env(rig));
       const log = readFileSync(rig.stubLog, "utf8");
-      expect(log.includes(`open http://127.0.0.1:5999/?k=${token}`)).toBe(true);
+      expect(/^open \/.+\.html$/.test(log.trim())).toBe(true);
+      expect(log.includes(token)).toBe(false);
+      expect(opened(rig).includes(`http://127.0.0.1:5999/?k=${token}`)).toBe(true);
       expect((r.stdout + r.stderr).includes(token)).toBe(false);
       expect(r.stdout).not.toContain("브라우저를 열지 못했습니다");
     } finally {
@@ -1033,20 +1043,22 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
     try {
       const prefix = join(rig.home, ".claude-office");
       expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
-      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
-      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fileOpener(rig);
       fakeNode(rig);
       const token = readFileSync(join(prefix, "token"), "utf8").trim();
       writeFileSync(rig.stubLog, "");
       let r = runLauncher(prefix, env(rig), ["open"]);
       expect(r.status).toBe(0);
-      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe(`open http://127.0.0.1:4317/?k=${token}`);
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toMatch(/^open \/.+\.html$/);
+      expect(opened(rig).includes(`http://127.0.0.1:4317/?k=${token}`)).toBe(true);
       expect((r.stdout + r.stderr).includes(token)).toBe(false);
       expect(r.stdout + r.stderr).not.toContain("이 창을 닫으면"); // 서버를 켜지 않는다
       writeFileSync(rig.stubLog, "");
+      rmSync(`${rig.stubLog}.content`, { force: true });
       r = runLauncher(prefix, env(rig), ["open", "Safari", "--port", "5999"]);
       expect(r.status).toBe(0);
-      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe(`open -a Safari http://127.0.0.1:5999/?k=${token}`);
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toMatch(/^open -a Safari \/.+\.html$/);
+      expect(opened(rig).includes(`http://127.0.0.1:5999/?k=${token}`)).toBe(true);
     } finally {
       rig.cleanup();
     }
@@ -1059,12 +1071,13 @@ describe("Phase 2 토큰 — install.sh·런처(Task 11)", () => {
       const prefix = join(rig.home, ".claude-office");
       expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
       rmSync(join(prefix, "token"));
-      writeFileSync(join(rig.stubBin, "open"), '#!/bin/sh\necho "open $@" >> "$STUB_LOG"\n');
-      chmodSync(join(rig.stubBin, "open"), 0o755);
+      fileOpener(rig);
       fakeNode(rig);
       writeFileSync(rig.stubLog, "");
       runLauncher(prefix, env(rig));
-      expect(readFileSync(rig.stubLog, "utf8").trim()).toBe("open http://127.0.0.1:5999/");
+      expect(readFileSync(rig.stubLog, "utf8").trim()).toMatch(/^open \/.+\.html$/);
+      expect(opened(rig)).toContain('"http://127.0.0.1:5999/"');
+      expect(opened(rig)).not.toContain("?k=");
     } finally {
       rig.cleanup();
     }

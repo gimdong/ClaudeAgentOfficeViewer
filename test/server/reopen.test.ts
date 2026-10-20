@@ -20,7 +20,7 @@ const rec = (p: Partial<SessionRecord> = {}): SessionRecord => ({ pid: 2001, ses
 
 describe("launchArgs — 옮겨 열기(--resume)", () => {
   it("--session-id 대신 --resume <대화 id>, 첫 지시 없음, channel 옵션 앞", () => {
-    const a = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "plugin:claude-office@claude-office", sessionId: "s1", key: "k", port: 4317, cwd: "/w", name: "alpha", resume: "conv-1" });
+    const a = launchArgs({ tmuxName: "co-1", claude: "/c/claude", channelSpec: "plugin:claude-office@claude-office", sessionId: "s1", keyFile: "/k/co-1.key", port: 4317, cwd: "/w", name: "alpha", resume: "conv-1" });
     expect(a.slice(a.indexOf("--"))).toEqual(["--", "/c/claude", "--resume", "conv-1", "--name", "alpha", "--dangerously-load-development-channels", "plugin:claude-office@claude-office"]);
     expect(a.includes("--session-id")).toBe(false);
   });

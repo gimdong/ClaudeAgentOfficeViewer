@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { MAX_LAUNCHED } from "../../src/shared/types";
 import { errInfo, getLogger } from "../log";
@@ -12,6 +12,8 @@ export const MAX_TEXT = 8_000;
 /** 핸드셰이크(B257)의 미결 snonce: 층마다 이만큼(넘치면 오래된 것부터 버림), 이 시간 뒤 무효. 층이 MAX_LAUNCHED개까지라 전체도 32개를 넘지 않는다 */
 export const MAX_PENDING = 4;
 export const PENDING_MS = 30_000;
+/** 층 열쇠 파일(B265). channel 서버가 CLAUDE_OFFICE_FLOOR_KEY_FILE로 받아 읽는다 */
+export const floorKeyFile = (dir: string, tmux: string) => join(dir, `${tmux}.key`);
 
 export interface ChannelView {
   connected: boolean;
@@ -40,9 +42,12 @@ export class ChannelHub {
   private readonly floors = new Map<string, Floor>();
   private enabledFlag = false;
   private readonly no = new Map<string, number>();
-  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number }) {}
+  /** keyDir: 층 열쇠 파일을 둘 폴더(0700). 없으면 파일을 쓰지 않는다(테스트) */
+  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string }) {}
 
   load(): void {
+    // 지난 실행의 열쇠는 이제 쓸 데가 없다(열쇠는 메모리에만 있었다)
+    if (this.o.keyDir) rmSync(this.o.keyDir, { recursive: true, force: true });
     try {
       this.enabledFlag = JSON.parse(readFileSync(this.o.file, "utf8"))?.channels === true;
     } catch (e) {
@@ -71,10 +76,15 @@ export class ChannelHub {
     }
   }
 
-  /** 새 층 등록. 열쇠는 64자 hex */
+  /** 새 층 등록. 열쇠는 64자 hex. keyDir이 있으면 열쇠 파일(0600)을 먼저 쓰고, 못 쓰면 등록하지 않고 던진다 */
   register(sessionId: string, tmux: string): string | null {
     if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
     const key = randomBytes(32).toString("hex");
+    if (this.o.keyDir) {
+      mkdirSync(this.o.keyDir, { recursive: true, mode: 0o700 });
+      chmodSync(this.o.keyDir, 0o700);
+      writeFileSync(floorKeyFile(this.o.keyDir, tmux), key, { mode: 0o600, flag: "wx" });
+    }
     this.floors.set(sessionId, { key, kid: mac(key, "kid"), tmux, at: (this.o.now ?? Date.now)(), seen: false, pending: [], held: [] });
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
     this.changed();
@@ -84,6 +94,7 @@ export class ChannelHub {
     const f = this.floors.get(sessionId);
     if (!f) return;
     f.conn?.end();
+    if (this.o.keyDir) rmSync(floorKeyFile(this.o.keyDir, f.tmux), { force: true });
     this.floors.delete(sessionId);
     this.changed();
   }
