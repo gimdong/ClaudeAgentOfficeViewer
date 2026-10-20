@@ -71,7 +71,8 @@ exit 0
   it("기본 실행(서버 켜기 + 브라우저 열기)", async () => {
     child = spawn(join(prefix, "bin/claude-office"), ["--port", String(PORT)], { env, stdio: "ignore" });
     const t = Date.now();
-    while (!read("argv") && Date.now() - t < 5000) await new Promise((r) => setTimeout(r, 50));
+    // 가짜 opener는 argv를 먼저, mode·content를 나중에 쓴다 — 마지막에 쓰는 content까지 기다린다
+    while (!read("content") && Date.now() - t < 5000) await new Promise((r) => setTimeout(r, 50));
     expect(read("argv")).not.toBe("");
     expectSafeOpen();
   });
