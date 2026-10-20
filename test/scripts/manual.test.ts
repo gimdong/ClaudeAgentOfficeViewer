@@ -572,7 +572,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(q).toMatch(/if \(event === "SessionEnd"\)/);
       expect(read("server/budget/gate.ts")).toMatch(/c\.toolUseId === toolUseId\)\) this\.continue\(sessionId\)/);
       const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
-      expect(a).toContain("같은 PC의 다른 프로그램(이 PC에 로그인한 다른 사용자의 프로그램도 포함, 127.0.0.1에 닿을 수 있는 모든 프로그램)이 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>어느 경우에도 도구 허용을 만들어 내지는 못하고, Claude Code 창의 권한 창은 그대로 뜹니다. 여러 사람이 함께 쓰는 PC나 서버에 설치할 때는 이 점을 고려해 주세요. 막으려면 hook 요청 인증이 필요한데, 이번 버전에는 없습니다.");
+      expect(a).toContain("같은 PC의 다른 프로그램(이 PC에 로그인한 다른 사용자의 프로그램도 포함, 127.0.0.1에 닿을 수 있는 모든 프로그램)이 가짜 hook을 보내면 다음 일이 생길 수 있습니다. 이것이 남은 위험입니다.</p>\n  <ul>\n    <li>화면에 가짜 요청이 뜰 수 있습니다. 그 요청에 답해도 실제 Claude Code에는 영향이 없습니다.</li>\n    <li>가짜 요청을 많이 보내 대기 요청 상한(50건)을 채우면, 그동안 진짜 요청은 대시보드를 거치지 않고 Claude Code 창에서만 묻습니다.</li>\n    <li>세션 id를 아는 프로그램은 \"끝났다\"는 가짜 소식으로 대시보드의 진짜 요청을 닫을 수 있습니다. 그 요청은 Claude Code 창에 그대로 남으므로 거기서 답하면 됩니다.</li>\n    <li>도구 호출 id를 아는 프로그램은 예산 관문의 \"계속\"을 흉내 낼 수 있습니다. 그러면 예산 확인을 한 번 건너뜁니다.</li>\n  </ul>\n  <p>대시보드가 켜져 있는 동안에는 어느 경우에도 도구 허용을 만들어 내지는 못하고, Claude Code 창의 권한 창은 그대로 뜹니다. 대시보드가 꺼져 있을 때는 아래와 다릅니다. 여러 사람이 함께 쓰는 PC나 서버에 설치할 때는 이 점을 고려해 주세요. 막으려면 hook 요청 인증이 필요한데, 이번 버전에는 없습니다.");
       expect(a).not.toContain("가짜 hook을 보내면 화면에 가짜 요청이 뜰 수 있지만");
       expect(a).not.toContain("허용이나 거부를 대신 만들어 내지는 못합니다"); // B73: 맺음은 "도구 허용…권한 창은 그대로"
     });
@@ -914,6 +914,36 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(sec).toContain(`<pre class="out">⚠️ 실시간 이벤트: ${okTpl}. ${tpl.replace("${uidRejected}", "3")}</pre>`);
     for (const s of ["<strong>다른 계정</strong>", "<strong>다른 컨테이너</strong>", "같은 계정이어도", "이 검사를 끄는 설정은 없습니다", "macOS와 Windows에서는 이 검사를 하지 않습니다"]) expect(sec, s).toContain(s);
     expect(read("server/peer.ts")).toMatch(/linux/);
+  });
+
+  it("대시보드가 꺼진 동안의 hook 위험(Critical-1 (a), B259·B261·B269): 부록 A 블록·3장 꼬리·6장 ④가 확정 글자·코드와 같다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const a = prose.slice(prose.indexOf('<h2 id="s8">'), prose.indexOf('<h2 id="s9">'));
+    const at = a.indexOf('<p id="hook-risk">');
+    expect(at).toBeGreaterThan(-1);
+    const block = a.slice(at, a.indexOf("</div>", at));
+    for (const s of [
+      "<strong>대시보드가 꺼져 있으면 다른 계정이 대신 답할 수 있습니다(여러 사람이 쓰는 컴퓨터).</strong>",
+      "입력한 지시, 도구 입력과 결과(예: 명령, 파일 내용)를 받습니다",
+      "권한 창 없이 바로 허용하거나 입력을 바꾸는 것까지",
+      "Claude가 읽는 대화에 글을 끼워 넣을 수 있습니다",
+      "같은 컴퓨터에서 내 계정이 아닌 계정으로 도는 프로그램(다른 사람, 따로 계정을 쓰는 서비스)이 없으면 해당하지 않습니다",
+      "<code>claude plugin disable claude-office@claude-office --scope user</code>",
+      "<code>/reload-plugins</code>를 실행하거나 다시 열어야 적용됩니다",
+      "모르는 프로그램이 4317을 쓰고 있다면 다른 포트로 켜지 말고",
+    ]) expect(block, s).toContain(s);
+    // 플러그인 명령 이름·scope는 설치 스크립트와 같다
+    expect(read("packaging/install.sh")).toContain("claude plugin install claude-office@claude-office --scope user");
+    // doctor 포트 fail 글자
+    const doctor = read("server/diag/doctor.ts");
+    const portFail = /item\("port", "fail", "포트", `([^`]*)`/.exec(doctor)![1].replace("${d.port}", "4317");
+    expect(block).toContain(`<code>❌ 포트: ${portFail}</code>`);
+    // 약속 문장 없음(B259)
+    for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(block, w).not.toContain(w);
+    // 3장 꼬리(B269)와 6장 ④ 본문(B261 방향)
+    expect(prose).toContain('스스로 허용하거나 거부하지는 않고, 127.0.0.1:4317에서 듣는 프로그램의 답을 그대로 전합니다(<a href="#hook-risk">대시보드가 꺼져 있을 때</a>).');
+    expect(prose).toContain("<strong>모르는 프로그램</strong>이면 다른 번호로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요");
   });
 
   it("비밀값 모양과 실제 사용자 경로가 없다", () => {
