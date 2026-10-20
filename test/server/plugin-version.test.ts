@@ -62,4 +62,10 @@ describe("Snapshot.plugin", () => {
     expect((await build("2.0.0-beta.11")).plugin).toEqual({ version: "2.0.0-beta.11", match: false });
     expect((await build("unknown")).plugin).toEqual({ version: "unknown", match: false });
   });
+
+  it("옛 http 입구로 온 세션이 있으면 legacy:true(Phase 6a §4)", async () => {
+    const b = (legacy: boolean) => new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, version: "2.0.0-beta.12", plugin: () => "2.0.0-beta.12", pluginLegacy: () => legacy }).build();
+    expect((await b(true)).plugin).toEqual({ version: "2.0.0-beta.12", match: true, legacy: true });
+    expect((await b(false)).plugin).toEqual({ version: "2.0.0-beta.12", match: true });
+  });
 });

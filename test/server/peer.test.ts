@@ -194,9 +194,9 @@ describe("createApp 연결(Review Focus 2)", () => {
 
   it("hook·/api·화면 모두 403 + 본문, 403-uid만 세고 기존 403·415와 두 번 세지 않는다. Host 검사가 먼저다", async () => {
     for (const [p, m] of [["/hooks/event", "POST"], ["/api/snapshot", "GET"], ["/", "GET"]] as const) expect(await send(p, m)).toEqual({ status: 403, body: UID_REJECT_BODY });
-    expect(stats.view().rejected).toEqual({ "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 3 });
+    expect(stats.view().rejected).toEqual({ "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 3, "401-v2": 0 });
     // Host가 틀리면 Host 검사가 먼저 답한다(403, uid 검사·셈 없음)
     expect((await send("/hooks/event", "POST", { Host: "evil.example" })).status).toBe(403);
-    expect(stats.view().rejected).toEqual({ "403": 1, "415": 0, "413": 0, "400": 0, "403-uid": 3 });
+    expect(stats.view().rejected).toEqual({ "403": 1, "415": 0, "413": 0, "400": 0, "403-uid": 3, "401-v2": 0 });
   });
 });

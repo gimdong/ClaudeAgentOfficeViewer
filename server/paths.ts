@@ -13,6 +13,8 @@ export interface OfficePaths {
   stateFile: string;
   /** 권한 정책 파일(Phase 3 스펙 4.1). tokenFile과 같이 --log-dir를 따라가지 않는다 */
   policyFile: string;
+  /** hook relay 열쇠(Phase 6a §4). tokenFile 옆 */
+  hookKeyFile: string;
 }
 
 /**
@@ -26,7 +28,7 @@ export function resolvePaths(o: { moduleUrl: string; env: NodeJS.ProcessEnv; log
   const staticDir = basename(file) === "server.mjs" ? join(here, "web") : resolve(here, "../dist/web");
   const prefix = o.env.CLAUDE_OFFICE_PREFIX ? resolve(o.env.CLAUDE_OFFICE_PREFIX) : null;
   const base = prefix
-    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics"), tokenFile: join(prefix, "token"), stateFile: join(prefix, "state.json"), policyFile: join(prefix, "policy.json") }
-    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics"), tokenFile: resolve(here, "../.logs/token"), stateFile: resolve(here, "../.logs/state.json"), policyFile: resolve(here, "../.logs/policy.json") };
+    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics"), tokenFile: join(prefix, "token"), hookKeyFile: join(prefix, "hook.key"), stateFile: join(prefix, "state.json"), policyFile: join(prefix, "policy.json") }
+    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics"), tokenFile: resolve(here, "../.logs/token"), hookKeyFile: resolve(here, "../.logs/hook.key"), stateFile: resolve(here, "../.logs/state.json"), policyFile: resolve(here, "../.logs/policy.json") };
   return { mode: prefix ? "installed" : "dev", prefix, staticDir, ...base, ...(o.logDir ? { logDir: resolve(o.logDir) } : {}) };
 }

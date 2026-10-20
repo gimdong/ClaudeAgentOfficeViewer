@@ -28,7 +28,8 @@ describe("HookStats", () => {
       total: 3,
       byEvent: { PreToolUse: 2, Stop: 1 },
       lastAt: "2026-10-01T03:00:00.000Z",
-      rejected: { "403": 1, "415": 0, "413": 1, "400": 0, "403-uid": 0 },
+      rejected: { "403": 1, "415": 0, "413": 1, "400": 0, "403-uid": 0, "401-v2": 0 },
+      v2: 0,
       last10min: 3,
     });
   });

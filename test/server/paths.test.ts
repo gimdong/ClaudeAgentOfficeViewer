@@ -14,6 +14,7 @@ describe("resolvePaths", () => {
       diagDir: resolve("/p/diagnostics"),
       staticDir: resolve("/x/app/app/web"),
       tokenFile: resolve("/p/token"),
+      hookKeyFile: resolve("/p/hook.key"),
       stateFile: resolve("/p/state.json"),
       policyFile: resolve("/p/policy.json"),
     });
@@ -27,6 +28,7 @@ describe("resolvePaths", () => {
       diagDir: resolve("/repo/.logs/diagnostics"),
       staticDir: resolve("/repo/dist/web"),
       tokenFile: resolve("/repo/.logs/token"),
+      hookKeyFile: resolve("/repo/.logs/hook.key"),
       stateFile: resolve("/repo/.logs/state.json"),
       policyFile: resolve("/repo/.logs/policy.json"),
     });

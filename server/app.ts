@@ -17,6 +17,8 @@ import type { SessionRecord } from "./collectors/sessions";
 import type { TerminateResult } from "./floors/control";
 import { MAX_TEXT, type ChannelHub } from "./floors/channels";
 import { sameUserGuard } from "./peer";
+import { openRequest, sealResponse, type HookKeys, type ReplayWindow } from "./hooks/v2";
+import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
 
@@ -73,14 +75,41 @@ export function isSameOrigin(origin: string | undefined, host: string | undefine
   }
 }
 
+/** handleHook이 쓰는 응답 모양: 결정 큐가 붙잡는 모양 + headersSent */
+type HookResponse = HeldResponse & { readonly headersSent: boolean };
+
+/** /hooks/v2 응답 어댑터: 200 json·end를 {id, out}으로 암호화해 한 번만 보낸다. 그 밖의 상태는 401 빈 본문 */
+function sealed(real: express.Response, id: string, keys: HookKeys): HookResponse {
+  const send = (code: number, out: unknown) => {
+    if (real.headersSent) return;
+    if (code === 200) real.status(200).json(sealResponse(id, out, keys));
+    else real.status(401).end();
+  };
+  return {
+    get writableEnded() {
+      return real.writableEnded;
+    },
+    get headersSent() {
+      return real.headersSent;
+    },
+    on: (event, fn) => real.on(event, fn),
+    status: (code) => ({ json: (b: unknown) => send(code, b), end: () => send(code, null) }),
+  };
+}
+
 export function createApp(
   hub: Pick<SnapshotHub, "current" | "subscribe"> & Partial<Pick<SnapshotHub, "poke">>,
   opts: {
     staticDir?: string;
     heartbeatMs?: number;
     onHookEvent?: (input: Record<string, unknown>) => void;
-    /** hook이 보낸 플러그인 버전(X-Claude-Office-Plugin, Phase 5 §3). 헤더가 없으면 "unknown" */
-    onPluginVersion?: (version: string) => void;
+    /**
+     * hook이 보낸 플러그인 버전(Phase 5 §3). 옛 /hooks/event는 X-Claude-Office-Plugin 헤더(없으면 "unknown")에 legacy=true,
+     * /hooks/v2는 요청 평문의 plugin에 legacy=false(Phase 6a §4). sessionId는 대화 키로 바꾼 값
+     */
+    onPluginVersion?: (version: string, legacy: boolean, sessionId: string) => void;
+    /** 암호화 hook 입구(Phase 6a §4). keys()가 null이면(열쇠 파일 소유자가 다름 등) 입구를 닫는다(모두 401) */
+    hookV2?: { keys(): HookKeys | null; seen: ReplayWindow };
     /** hook의 session_id를 대화 키로 바꾼다(B194 — 합친 층의 층 id로 온 hook). 모르는 id는 그대로. 없으면 바꾸지 않는다 */
     normalizeSession?: (sessionId: string) => string;
     stats?: HookStats;
@@ -135,6 +164,98 @@ export function createApp(
   // 같은 계정만 받기(Phase 5 §2): Host 검사 바로 뒤, 모든 경로(hook·channel·/api·화면). 셈은 403-uid만(Host의 403과 겹치지 않음)
   app.use(sameUserGuard({ ...opts.sameUser, onReject: () => opts.stats?.reject("403-uid") }));
 
+  /**
+   * hook 이벤트 처리(Phase 1~5의 /hooks/event 본문). 옛 입구와 /hooks/v2가 같이 부른다(Phase 6a §4).
+   * res는 실제 응답 또는 v2의 암호화 어댑터 — 200 json/end만 쓰고, PermissionRequest는 결정 큐가 붙잡는다
+   */
+  const handleHook = (raw: Record<string, unknown>, res: HookResponse, pluginVersion: string, legacy: boolean): void => {
+    // 맨 앞 한 곳에서 session_id를 대화 키로 바꾼 복사본을 모든 관문(일시정지·정책·예산·큐·이벤트·서브에이전트)에 넘긴다(B194)
+    const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
+    const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
+    opts.stats?.accept(input.hook_event_name as string);
+    try {
+      // 버전 문자열은 부르는 쪽이 40자로 자른다(스냅샷이 커지지 않게)
+      opts.onPluginVersion?.(pluginVersion, legacy, input.session_id as string);
+    } catch (e) {
+      getLogger().error("hooks", "plugin version failed", { error: errInfo(e) });
+    }
+    const isPre = input.hook_event_name === "PreToolUse";
+    // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다
+    // (막힌 호출이 "작업 중"으로 남지 않게, Phase 3 B79). 판정이 던지면 일시정지가 없는 것처럼 이어 간다
+    if (isPre) {
+      try {
+        const paused = opts.floors?.preToolUse(input);
+        if (paused) return void res.status(200).json(paused);
+      } catch (e) {
+        getLogger().error("floors", "pause check failed", { error: errInfo(e) });
+        if (res.headersSent) return;
+      }
+    }
+    // 정책 판정(스펙 6.2). 판정에서 예외가 나면 로그만 남기고 정책이 없는 것처럼 이어 간다(스펙 6.4)
+    let verdict: PolicyVerdict | null = null;
+    if (isPre) {
+      try {
+        verdict = opts.policy?.preToolUse(input) ?? null;
+      } catch (e) {
+        getLogger().error("policy", "check failed", { error: errInfo(e) });
+      }
+    }
+    // 1. 정책 deny: 즉시 답한다. 예산 관문·큐·이벤트 저장소를 거치지 않는다(막힌 호출이 "작업 중"으로 남지 않게, Ruling B79).
+    // respond()가 던지면 아래 단계로 그대로 내려간다(정책 오류가 도구를 막지 않는다)
+    if (verdict?.decision === "deny") {
+      try {
+        return void res.status(200).json(verdict.respond());
+      } catch (e) {
+        getLogger().error("policy", "deny failed", { error: errInfo(e) });
+        if (res.headersSent) return;
+      }
+    }
+    try {
+      opts.onHookEvent?.(input);
+    } catch (e) {
+      // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
+      getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
+    }
+    try {
+      // 터미널이 먼저 답한 결정을 닫는다(Ruling B70). 예산의 "터미널 허용 = 계속"은 위 onHookEvent의 관문이 먼저 판정한다
+      opts.decisions?.onEvent(input);
+    } catch (e) {
+      getLogger().error("hooks", "decision event failed", { error: errInfo(e) });
+    }
+    try {
+      if (isPre) {
+        // 2. 예산 관문이 정책 ask보다 먼저다 — 예산 ask는 뒤따르는 PermissionRequest가 예산 결정으로 짝지어져야 한다(B48)
+        const out = opts.gate?.preToolUse(input);
+        if (out) return void res.status(200).json(out);
+      } else if (input.hook_event_name === "PermissionRequest" && opts.decisions) {
+        const budget = opts.gate?.claim(input);
+        let byPolicy = false;
+        if (!budget) {
+          try {
+            byPolicy = opts.policy?.claim(input) ?? false;
+          } catch (e) {
+            getLogger().error("policy", "claim failed", { error: errInfo(e) });
+          }
+        }
+        // 붙잡은 응답에는 큐만 쓴다(대시보드 답, 590초 빈 200, 상한 초과 빈 200)
+        opts.decisions.hold(input, res, budget ? { kind: "budget", budget } : byPolicy ? { policy: true } : undefined);
+        return;
+      }
+    } catch (e) {
+      getLogger().error("hooks", "decision handling failed", { error: errInfo(e) });
+      if (res.headersSent) return;
+    }
+    // 3. 정책 ask
+    if (verdict?.decision === "ask") {
+      try {
+        return void res.status(200).json(verdict.respond());
+      } catch (e) {
+        getLogger().error("policy", "ask failed", { error: errInfo(e) });
+        if (res.headersSent) return;
+      }
+    }
+    res.status(200).end();
+  };
   // hook 이벤트 수신(스펙 5장). hook 요청은 인증하지 않는다(Phase 2 스펙 7.2 — 결정을 요청할 뿐이다). Host 검사(위), Origin 거부,
   // Content-Type 강제로 외부 웹페이지의 위조 요청을 막는다: 다른 출처의 브라우저가 JSON을 보내려면
   // 사전 확인이 필요한데 이 서버는 CORS를 허용하지 않는다. Claude Code의 hook 요청에는 Origin이 없다.
@@ -165,97 +286,37 @@ export function createApp(
         res.status(400).end();
         return;
       }
-      // 맨 앞 한 곳에서 session_id를 대화 키로 바꾼 복사본을 모든 관문(일시정지·정책·예산·큐·이벤트·서브에이전트)에 넘긴다(B194)
-      const raw = body as Record<string, unknown>;
-      const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
-      const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
-      opts.stats?.accept(input.hook_event_name as string);
-      try {
-        // 버전 문자열은 짧게만(헤더는 인증하지 않는다 — 스냅샷이 커지지 않게)
-        opts.onPluginVersion?.((req.get("X-Claude-Office-Plugin") ?? "unknown").slice(0, 40));
-      } catch (e) {
-        getLogger().error("hooks", "plugin version failed", { error: errInfo(e) });
-      }
-      const isPre = input.hook_event_name === "PreToolUse";
-      // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다
-      // (막힌 호출이 "작업 중"으로 남지 않게, Phase 3 B79). 판정이 던지면 일시정지가 없는 것처럼 이어 간다
-      if (isPre) {
-        try {
-          const paused = opts.floors?.preToolUse(input);
-          if (paused) return void res.status(200).json(paused);
-        } catch (e) {
-          getLogger().error("floors", "pause check failed", { error: errInfo(e) });
-          if (res.headersSent) return;
-        }
-      }
-      // 정책 판정(스펙 6.2). 판정에서 예외가 나면 로그만 남기고 정책이 없는 것처럼 이어 간다(스펙 6.4)
-      let verdict: PolicyVerdict | null = null;
-      if (isPre) {
-        try {
-          verdict = opts.policy?.preToolUse(input) ?? null;
-        } catch (e) {
-          getLogger().error("policy", "check failed", { error: errInfo(e) });
-        }
-      }
-      // 1. 정책 deny: 즉시 답한다. 예산 관문·큐·이벤트 저장소를 거치지 않는다(막힌 호출이 "작업 중"으로 남지 않게, Ruling B79).
-      // respond()가 던지면 아래 단계로 그대로 내려간다(정책 오류가 도구를 막지 않는다)
-      if (verdict?.decision === "deny") {
-        try {
-          return void res.status(200).json(verdict.respond());
-        } catch (e) {
-          getLogger().error("policy", "deny failed", { error: errInfo(e) });
-          if (res.headersSent) return;
-        }
-      }
-      try {
-        opts.onHookEvent?.(input);
-      } catch (e) {
-        // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
-        getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
-      }
-      try {
-        // 터미널이 먼저 답한 결정을 닫는다(Ruling B70). 예산의 "터미널 허용 = 계속"은 위 onHookEvent의 관문이 먼저 판정한다
-        opts.decisions?.onEvent(input);
-      } catch (e) {
-        getLogger().error("hooks", "decision event failed", { error: errInfo(e) });
-      }
-      try {
-        if (isPre) {
-          // 2. 예산 관문이 정책 ask보다 먼저다 — 예산 ask는 뒤따르는 PermissionRequest가 예산 결정으로 짝지어져야 한다(B48)
-          const out = opts.gate?.preToolUse(input);
-          if (out) return void res.status(200).json(out);
-        } else if (input.hook_event_name === "PermissionRequest" && opts.decisions) {
-          const budget = opts.gate?.claim(input);
-          let byPolicy = false;
-          if (!budget) {
-            try {
-              byPolicy = opts.policy?.claim(input) ?? false;
-            } catch (e) {
-              getLogger().error("policy", "claim failed", { error: errInfo(e) });
-            }
-          }
-          // 붙잡은 응답에는 큐만 쓴다(대시보드 답, 590초 빈 200, 상한 초과 빈 200)
-          opts.decisions.hold(input, res, budget ? { kind: "budget", budget } : byPolicy ? { policy: true } : undefined);
-          return;
-        }
-      } catch (e) {
-        getLogger().error("hooks", "decision handling failed", { error: errInfo(e) });
-        if (res.headersSent) return;
-      }
-      // 3. 정책 ask
-      if (verdict?.decision === "ask") {
-        try {
-          return void res.status(200).json(verdict.respond());
-        } catch (e) {
-          getLogger().error("policy", "ask failed", { error: errInfo(e) });
-          if (res.headersSent) return;
-        }
-      }
-      res.status(200).end();
+      handleHook(body as Record<string, unknown>, res, (req.get("X-Claude-Office-Plugin") ?? "unknown").slice(0, 40), true);
     },
   );
+  // 암호화 hook 입구(Phase 6a §4): Host·같은 계정(위) → Origin 거부 → JSON 1MB → kid·GCM·v·ts·재전송 창 → 같은 처리 함수.
+  // 응답은 응답 키로 암호화한다. 실패는 모두 401 빈 본문(이유는 응답·로그에 싣지 않는다)
+  if (opts.hookV2) {
+    const v2 = opts.hookV2;
+    const fail = (res: express.Response) => {
+      opts.stats?.reject("401-v2");
+      res.status(401).end();
+    };
+    app.post(
+      "/hooks/v2",
+      (req, res, next) => (req.headers.origin === undefined ? next() : fail(res)),
+      express.json({ limit: "1mb", type: () => true }),
+      (req, res) => {
+        const keys = v2.keys();
+        const r = keys ? openRequest(req.body, keys, Date.now(), v2.seen) : null;
+        if (!keys || !r?.ok) return fail(res);
+        opts.stats?.acceptV2();
+        handleHook(r.event, sealed(res, r.id, keys), r.plugin, false);
+      },
+    );
+  }
   // express.json이 낸 오류(본문 초과 413, JSON 문법 400)를 이 경로에서만 짧게 돌려준다
   app.use((err: { status?: number }, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path === "/hooks/v2") {
+      opts.stats?.reject("401-v2");
+      res.status(401).end();
+      return;
+    }
     if (req.path !== "/hooks/event") {
       next(err);
       return;

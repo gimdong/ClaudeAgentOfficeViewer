@@ -16,7 +16,9 @@ export const KNOWN_EVENTS: ReadonlySet<string> = new Set([
 export class HookStats {
   private byEvent: Record<string, number> = {};
   // 403-uid: 같은 계정 검사(Phase 5 §2)가 막은 접속. 모든 경로에서 센다
-  private rejected: Record<Rejected, number> = { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0 };
+  // 401-v2: 암호화 입구(/hooks/v2, Phase 6a §4)가 거절한 요청(형식·kid·복호화·ts·재전송 모두)
+  private rejected: Record<Rejected, number> = { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0, "401-v2": 0 };
+  private v2 = 0; // /hooks/v2로 받은 수
   private times: number[] = []; // 최근 10분 수신 시각
   private total = 0;
   private lastAt: number | null = null;
@@ -34,6 +36,10 @@ export class HookStats {
     while (this.times.length && this.times[0] < t - TEN_MIN) this.times.shift();
   }
 
+  acceptV2(): void {
+    this.v2++;
+  }
+
   reject(kind: Rejected): void {
     this.rejected[kind]++;
   }
@@ -45,6 +51,7 @@ export class HookStats {
       byEvent: { ...this.byEvent },
       lastAt: this.lastAt === null ? null : new Date(this.lastAt).toISOString(),
       rejected: { ...this.rejected },
+      v2: this.v2,
       last10min: this.times.filter((t) => t >= since).length,
     };
   }

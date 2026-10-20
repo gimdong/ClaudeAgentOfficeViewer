@@ -29,7 +29,7 @@ beforeEach(async () => {
   opened.length = 0;
   await h.write("app/web/index.html", "<!doctype html>");
   await h.write("app/server.mjs", "");
-  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web"), tokenFile: h.path("prefix/token"), stateFile: h.path("prefix/state.json"), policyFile: h.path("prefix/policy.json") };
+  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web"), tokenFile: h.path("prefix/token"), hookKeyFile: h.path("prefix/hook.key"), stateFile: h.path("prefix/state.json"), policyFile: h.path("prefix/policy.json") };
 });
 afterEach(() => h.cleanup());
 
@@ -37,7 +37,8 @@ const stats = (o: Partial<HookStatsView> = {}): HookStatsView => ({
   total: 0,
   byEvent: {},
   lastAt: null,
-  rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0 },
+  rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 0, "401-v2": 0 },
+  v2: 0,
   last10min: 0,
   ...o,
 });
@@ -279,20 +280,20 @@ describe("runDoctor", () => {
     expect(zero.fix).toContain("플러그인");
     const ok = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4 }) });
     expect(ok).toMatchObject({ status: "ok", detail: "최근 10분 4건" });
-    const rej = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 2, "415": 0, "413": 0, "400": 1, "403-uid": 0 } }) });
+    const rej = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 2, "415": 0, "413": 0, "400": 1, "403-uid": 0, "401-v2": 0 } }) });
     expect(rej.status).toBe("warn");
     expect(rej.detail).toContain("3");
     // 다른 계정의 접속은 기존 거부 합계 경고보다 먼저, 따로(Phase 5 §2)
-    const uid = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 2, "415": 0, "413": 0, "400": 1, "403-uid": 4 } }) });
+    const uid = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 2, "415": 0, "413": 0, "400": 1, "403-uid": 4, "401-v2": 0 } }) });
     // 기존 판정(거부 3건)에 덧붙인다(B251 M1)
     expect(uid).toMatchObject({ status: "warn", detail: "거부된 요청 3건. 다른 계정의 접속 4건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다." });
     // 이벤트 0건 진단이 가려지지 않는다
-    const uidZero = await item("hooks", { hooks: async () => stats({ total: 0, rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 2 } }) });
+    const uidZero = await item("hooks", { hooks: async () => stats({ total: 0, rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 2, "401-v2": 0 } }) });
     expect(uidZero.status).toBe("warn");
     expect(uidZero.detail).toBe("받은 이벤트 0건. 다른 계정의 접속 2건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.");
     expect(uidZero.fix).toContain("플러그인");
     // 나머지가 정상이어도 상태는 warn(둘 중 나쁜 쪽)
-    const uidOk = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 1 } }) });
+    const uidOk = await item("hooks", { hooks: async () => stats({ total: 9, last10min: 4, rejected: { "403": 0, "415": 0, "413": 0, "400": 0, "403-uid": 1, "401-v2": 0 } }) });
     expect(uidOk).toMatchObject({ status: "warn", detail: "최근 10분 4건. 다른 계정의 접속 1건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다." });
   });
 
@@ -359,7 +360,7 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     expect(pick(items, "hooks").status).toBe("ok");
     expect(noted(items)).toEqual([]);
     // 거부된 요청이 있어도(이벤트는 닿음) 붙지 않는다
-    expect(noted(await runDoctor(deps({ hooks: async () => stats({ total: 3, last10min: 3, rejected: { "403": 1, "415": 0, "413": 0, "400": 0, "403-uid": 0 } }) })))).toEqual([]);
+    expect(noted(await runDoctor(deps({ hooks: async () => stats({ total: 3, last10min: 3, rejected: { "403": 1, "415": 0, "413": 0, "400": 0, "403-uid": 0, "401-v2": 0 } }) })))).toEqual([]);
     // 정말 꺼져 이벤트가 0건이면 hooks 안내에 붙는다
     expect(noted(await runDoctor(deps({ hooks: zero })))).toEqual(["hooks"]);
   });

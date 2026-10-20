@@ -187,7 +187,8 @@ export interface Snapshot {
   /** 이 스냅샷을 만든 서버의 버전(FB-7). beta.4 이전 서버는 싣지 않으므로 화면은 "없음"도 불일치로 본다 */
   serverVersion?: string;
   /** 마지막 hook이 보낸 플러그인 버전과 서버 버전이 같은지(Phase 5 §3). hook을 한 번도 받지 않았으면 없음 */
-  plugin?: { version: string; match: boolean };
+  /** legacy: 옛 http 입구(/hooks/event)로 온 세션이 남아 있다(Phase 6a §4, beta.14 동안만) */
+  plugin?: { version: string; match: boolean; legacy?: true };
   error?: string;
   usage: UsageSummary;
   budget: { fiveHour?: number; weekly?: number };
@@ -211,7 +212,7 @@ export interface Snapshot {
 export type DoctorStatus = "ok" | "warn" | "fail";
 /** doctor 항목. detail에는 값이 아니라 있음/없음과 숫자만 넣는다 */
 export interface DoctorItem { id: string; status: DoctorStatus; title: string; detail: string; fix: string }
-export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<"403" | "415" | "413" | "400" | "403-uid", number>; last10min: number }
+export interface HookStatsView { total: number; byEvent: Record<string, number>; lastAt: string | null; rejected: Record<"403" | "415" | "413" | "400" | "403-uid" | "401-v2", number>; /** /hooks/v2로 받은 수(Phase 6a) */ v2: number; last10min: number }
 /** GET /api/diagnostics. 경로는 "~"로 치환되어 온다 */
 export interface DiagnosticsSummary { doctor: DoctorItem[]; hooks: HookStatsView; errorsLastHour: number; logDir: string; diagDir: string }
 
