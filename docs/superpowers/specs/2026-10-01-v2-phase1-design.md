@@ -194,7 +194,7 @@ v1의 수집기(파일 기반)는 그대로 둔다. hook 이벤트는 **실시�
 
 ## 12. 끝에서 끝까지 확인 (T1.8)
 
-실험 폴더(`/Users/gdh/Code/claude_project/spikes/phase1/`)에서 진행한다.
+실험 폴더(`~/Code/claude_project/spikes/phase1/`)에서 진행한다.
 1. 개발 서버를 4318에서 띄운다(v1 뷰어 4317은 그대로 둔다).
 2. `make-dev-plugin --port 4318`로 만든 플러그인을 `claude --plugin-dir …`로 Haiku 실험 세션에 로드한다.
 3. 실험 세션에서 차례로 실행한다.

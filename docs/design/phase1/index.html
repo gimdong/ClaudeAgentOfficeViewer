@@ -427,7 +427,7 @@ function makeFloors(opt) {
     M("director", "lead", "working", { tool: "SendMessage", to: "developer" }, { secs: 3 }),
     M("developer", "dev", "decision", { tool: "Bash", command: "npm run test -- --run web/" }, { kind: "permission", model: "sonnet", tokens: "112.4k" }),
     M("reviewer", "reviewer", "working", { tool: "Read", path: "docs/superpowers/specs/2026-09-28-claude-office-design.md" }, { secs: 41 }),
-    M("designer", "generic", "working", { tool: "Edit", path: "/Users/gdh/Code/claude_project/designs/phase1/index.html" }, { color: NEON.pink }),
+    M("designer", "generic", "working", { tool: "Edit", path: "~/Code/claude_project/designs/phase1/index.html" }, { color: NEON.pink }),
   ];
   if (opt.members === "many") {
     team3.push(

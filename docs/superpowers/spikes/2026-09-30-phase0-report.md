@@ -1,8 +1,8 @@
 # Phase 0 Spike 보고서: Claude Code 제어 지점 확인
 
-- 지시서: `/Users/gdh/Code/claude_project/spikes/phase0/BRIEF.md`
-- 로드맵: `/Users/gdh/.claude/plans/mighty-floating-feigenbaum.md`
-- 실험 공간(버림): `/Users/gdh/Code/claude_project/spikes/phase0/` — 증거는 각 `T0.x/evidence/`
+- 지시서: `~/Code/claude_project/spikes/phase0/BRIEF.md`
+- 로드맵: `~/.claude/plans/mighty-floating-feigenbaum.md`
+- 실험 공간(버림): `~/Code/claude_project/spikes/phase0/` — 증거는 각 `T0.x/evidence/`
 - Claude Code 버전: 2.1.284로 시작, 실험 도중 자동 업데이트로 2.1.285. T0.1은 두 버전 모두에서 같은 결과, T0.2 이후는 2.1.285.
 - 실험 세션 모델: `claude-haiku-4-5`. 실험용 hook은 모두 실험 폴더의 `.claude/settings.local.json`에만 둠.
 
