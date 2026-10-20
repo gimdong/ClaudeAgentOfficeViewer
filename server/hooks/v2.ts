@@ -19,9 +19,11 @@ export const HOOK_V2 = {
   tagBytes: 16,
   idBytes: 16,
   kidBytes: 8,
-  /** 받는 ts: now-30초 ≤ ts ≤ now+5초. 본 id는 max(ts, 받은 시각)+30초까지 기억 */
+  /** 받는 ts: now-30초 ≤ ts ≤ now+2초. 본 id는 max(ts, 받은 시각)+30초까지 기억 */
   windowMs: 30_000,
-  futureMs: 5_000,
+  futureMs: 2_000,
+  /** /hooks/v2 JSON 본문 상한(relay stdin 1MB가 base64로 늘어난 크기) */
+  maxBody: "1.5mb",
   maxSeen: 10_000,
 } as const;
 

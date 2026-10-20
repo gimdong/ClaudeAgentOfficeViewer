@@ -17,7 +17,7 @@ import type { SessionRecord } from "./collectors/sessions";
 import type { TerminateResult } from "./floors/control";
 import { MAX_TEXT, type ChannelHub } from "./floors/channels";
 import { sameUserGuard } from "./peer";
-import { openRequest, sealResponse, type HookKeys, type ReplayWindow } from "./hooks/v2";
+import { HOOK_V2, openRequest, sealResponse, type HookKeys, type ReplayWindow } from "./hooks/v2";
 import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
@@ -289,7 +289,7 @@ export function createApp(
       handleHook(body as Record<string, unknown>, res, (req.get("X-Claude-Office-Plugin") ?? "unknown").slice(0, 40), true);
     },
   );
-  // 암호화 hook 입구(Phase 6a §4): Host·같은 계정(위) → Origin 거부 → JSON 1MB → kid·GCM·v·ts·재전송 창 → 같은 처리 함수.
+  // 암호화 hook 입구(Phase 6a §4): Host·같은 계정(위) → Origin 거부 → JSON 1.5MB → kid·GCM·v·ts·재전송 창 → 같은 처리 함수.
   // 응답은 응답 키로 암호화한다. 실패는 모두 401 빈 본문(이유는 응답·로그에 싣지 않는다)
   if (opts.hookV2) {
     const v2 = opts.hookV2;
@@ -300,7 +300,7 @@ export function createApp(
     app.post(
       "/hooks/v2",
       (req, res, next) => (req.headers.origin === undefined ? next() : fail(res)),
-      express.json({ limit: "1mb", type: () => true }),
+      express.json({ limit: HOOK_V2.maxBody, type: () => true }),
       (req, res) => {
         const keys = v2.keys();
         const r = keys ? openRequest(req.body, keys, Date.now(), v2.seen) : null;

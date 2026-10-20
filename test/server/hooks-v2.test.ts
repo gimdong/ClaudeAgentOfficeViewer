@@ -116,12 +116,12 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(() => Buffer.concat([d.update(Buffer.from(ct, "base64")), d.final()])).toThrow();
   });
 
-  it("kid 틀림·1비트 변조·요청 키가 아닌 키·ts 범위 밖(-31초·+6초)·v≠1·id 형식·이벤트 형식은 모두 401 빈 본문", async () => {
+  it("kid 틀림·1비트 변조·요청 키가 아닌 키·ts 범위 밖(-31초·+3초)·v≠1·id 형식·이벤트 형식은 모두 401 빈 본문", async () => {
     const cases: Array<[string, Promise<Res>]> = [
       ["kid", send(plain(pre), { kid: "0".repeat(16) })],
       ["flip", send(plain(pre), { flip: true })],
       ["res key", send(plain(pre), { key: RES })],
-      ["ts+6", send(plain(pre, { ts: Date.now() + 6_000 }))],
+      ["ts+3", send(plain(pre, { ts: Date.now() + 3_000 }))],
       ["ts-31", send(plain(pre, { ts: Date.now() - 31_000 }))],
       ["v2", send(plain(pre, { v: 2 }))],
       ["id", send(plain(pre, { id: "x" }))],
@@ -132,8 +132,9 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(stats.view().v2).toBe(0);
   });
 
-  it("ts는 30초 전부터 5초 뒤까지 받는다", async () => {
-    expect((await send(plain(pre, { ts: Date.now() + 4_000 }))).status).toBe(200);
+  it("ts는 30초 전부터 2초 뒤까지 받고, 1.4MB 본문도 받는다(relay stdin 1MB의 base64)", async () => {
+    expect((await send(plain(pre, { ts: Date.now() + 1_500 }))).status).toBe(200);
+    expect((await send(plain({ ...pre, tool_input: { command: "x".repeat(1024 * 1024) } }))).status).toBe(200);
     expect((await send(plain(pre, { ts: Date.now() - 29_000 }))).status).toBe(200);
   });
 
@@ -143,7 +144,7 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(await post(body)).toEqual({ status: 401, body: "" });
   });
 
-  it("iv 11바이트·tag 15바이트·필드 빠짐·깨진 JSON·1MB 초과·Origin은 401 빈 본문", async () => {
+  it("iv 11바이트·tag 15바이트·필드 빠짐·깨진 JSON·1.5MB 초과·Origin은 401 빈 본문", async () => {
     const ok = seal(plain(pre));
     for (const [n, b] of [
       ["iv", JSON.stringify(seal(plain(pre), { iv: randomBytes(11) }))],
@@ -151,7 +152,7 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
       ["no ct", JSON.stringify({ ...ok, ct: undefined })],
       ["array", "[]"],
       ["broken", "{broken"],
-      ["big", JSON.stringify({ ...ok, pad: "x".repeat(1024 * 1024 + 10) })],
+      ["big", JSON.stringify({ ...ok, pad: "x".repeat(1.5 * 1024 * 1024 + 10) })],
     ] as const) expect(await post(b), n).toEqual({ status: 401, body: "" });
     expect(await post(JSON.stringify(seal(plain(pre))), { Origin: `http://127.0.0.1:${port}` })).toEqual({ status: 401, body: "" });
   });
@@ -192,7 +193,7 @@ describe("재전송 창·키(B292 상수)", () => {
     expect(HOOK_V2).toMatchObject({
       infoReq: "claude-office hook req v1", infoRes: "claude-office hook res v1",
       body: ["kid", "iv", "ct", "tag"], plain: ["v", "id", "ts", "plugin", "event"], reply: ["id", "out"],
-      ivBytes: 12, tagBytes: 16, idBytes: 16, windowMs: 30_000, maxSeen: 10_000,
+      ivBytes: 12, tagBytes: 16, idBytes: 16, windowMs: 30_000, futureMs: 2_000, maxSeen: 10_000, maxBody: "1.5mb",
     });
     const k = deriveKeys(KEY);
     expect([k.req.equals(REQ), k.res.equals(RES), k.kid]).toEqual([true, true, KID]);
