@@ -149,7 +149,7 @@ const checks: Check[] = [
   },
   async (d) => {
     const state = await d.probePort(d.port);
-    if (state === "other") return item("port", "fail", "포트", `다른 프로그램이 ${d.port}을 쓰고 있습니다`, `그 프로그램을 끄거나 다른 포트로 켜 주세요. 다른 포트에서는 말풍선·손들기가 보이지 않습니다(플러그인은 ${HOOK_PORT}로 보냄).`);
+    if (state === "other") return item("port", "fail", "포트", `다른 프로그램이 ${d.port}을 쓰고 있습니다`, `직접 켠 프로그램이면 그 프로그램을 끄거나 다른 포트로 켜 주세요(다른 포트에서는 말풍선·손들기가 보이지 않습니다. 플러그인은 ${HOOK_PORT}로 보냄). 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user`);
     if (state === "v1") return item("port", "warn", "포트", `이전 버전(v1) 서버가 ${d.port}을 쓰고 있습니다 — 끄고 다시 실행해 주세요`, "이전 버전 뷰어를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office 명령으로 다시 켜 주세요.");
     if (state === "timeout") return item("port", "warn", "포트", `${d.port}에서 응답이 없습니다`, "대시보드 창을 닫고 claude-office 명령으로 다시 켜 주세요. 그래도 같으면 컴퓨터를 다시 시작해 주세요.");
     if (state === "free") return item("port", "warn", "포트", `서버가 꺼져 있습니다(${d.port})`, "claude-office 명령으로 대시보드를 켜 주세요.");

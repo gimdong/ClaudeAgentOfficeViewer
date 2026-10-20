@@ -87,7 +87,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
       expect(doctor).toContain(s);
       expect(html).toContain(s);
     }
-    expect(index).toContain("번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.");
+    expect(index).toContain("번이 이미 사용 중입니다. 직접 켠 다른 프로그램이면 그 프로그램을 끄거나 --port 로 다른 포트를 지정하세요. 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user");
     expect(index).toContain("진단 파일을 만들었습니다: ");
     expect(index).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");
     expect(html).toContain("이 파일을 담당자에게 보내 주세요. 대화 내용, 이름, 비밀값은 들어 있지 않습니다.");

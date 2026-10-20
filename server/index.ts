@@ -93,7 +93,7 @@ export function portInUseOutcome(kind: RunningKind, mode: OfficePaths["mode"], p
   }
   if (kind === "phase2-old") return { code: 1, err: `${version ? OLD_RUNNING.replace("이전 버전 대시보드가", `이전 버전 대시보드(${version})가`) : OLD_RUNNING} ${NO_WINDOW_HINT}` };
   if (kind === "beta") return { code: 1, err: `${OLD_RUNNING} ${NO_WINDOW_HINT}` };
-  return { code: 1, err: `포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.` };
+  return { code: 1, err: `포트 ${port}번이 이미 사용 중입니다. 직접 켠 다른 프로그램이면 그 프로그램을 끄거나 --port 로 다른 포트를 지정하세요. 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user` };
 }
 
 /**

@@ -95,6 +95,8 @@ describe("runDoctor", () => {
     const other = await item("port", { probePort: async () => "other" });
     expect(other.status).toBe("fail");
     expect(other.detail).toContain("다른 프로그램이 4317을 쓰고 있습니다");
+    // B261: 모르는 프로그램이면 다른 포트로 피하지 말고 플러그인을 꺼 두라고 안내한다(detail 글자는 문서가 인용해 그대로)
+    expect(other.fix).toBe("직접 켠 프로그램이면 그 프로그램을 끄거나 다른 포트로 켜 주세요(다른 포트에서는 말풍선·손들기가 보이지 않습니다. 플러그인은 4317로 보냄). 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user");
     const free = await item("port", { probePort: async () => "free" });
     expect(free.status).toBe("warn");
     expect(free.detail).toContain("서버가 꺼져 있습니다");

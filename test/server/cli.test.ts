@@ -45,7 +45,7 @@ describe("parseCliArgs", () => {
     const beta = portInUseOutcome("beta", "installed", 4317) as { code: 1; err: string };
     expect(beta.code).toBe(1);
     expect(beta.err.startsWith("이전 버전 대시보드가 켜져 있습니다. 그 대시보드를 켠 터미널 창에서 Ctrl+C를 누르거나 그 창을 닫은 뒤, claude-office를 다시 실행해 주세요.")).toBe(true);
-    expect(portInUseOutcome("other", "dev", 4319)).toEqual({ code: 1, err: "포트 4319번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요." });
+    expect(portInUseOutcome("other", "dev", 4319)).toEqual({ code: 1, err: "포트 4319번이 이미 사용 중입니다. 직접 켠 다른 프로그램이면 그 프로그램을 끄거나 --port 로 다른 포트를 지정하세요. 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user" });
   });
 
   it("FB-8: 버전이 다른 Phase 2 계열 서버는 \"이전 버전\" 안내(버전 표시)와 창이 없을 때의 안내, 종료 코드 1", () => {
@@ -152,7 +152,7 @@ describe("CLI", () => {
     const code = await new Promise<number | null>((r) => child.on("close", r)); // 출력을 다 읽은 뒤("exit"은 더 이를 수 있다)
     blocker.close();
     expect(code).toBe(1);
-    expect(stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+    expect(stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. 직접 켠 다른 프로그램이면 그 프로그램을 끄거나 --port 로 다른 포트를 지정하세요. 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user`);
     // 실패했는데 "켜졌다" 줄이 먼저 찍히면 고객이 성공으로 오해한다(Express 5는 listen 실패에도 콜백을 부른다)
     expect(stdout).not.toContain("Claude Agent Office: http");
     const log = readFileSync(join(logDir, readdirSync(logDir)[0]), "utf8");
@@ -404,7 +404,7 @@ describe("CLI", () => {
     try {
       const r = await run(["--port", String(port), "--claude-home", home, "--log-dir", logDir], { ...process.env, CLAUDE_OFFICE_PREFIX: prefix });
       expect(r.code).toBe(1);
-      expect(r.stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. --port 로 다른 포트를 지정하세요.`);
+      expect(r.stderr).toContain(`포트 ${port}번이 이미 사용 중입니다. 직접 켠 다른 프로그램이면 그 프로그램을 끄거나 --port 로 다른 포트를 지정하세요. 모르는 프로그램이면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요: claude plugin disable claude-office@claude-office --scope user`);
       expect(r.stdout).not.toContain("이미 켜져 있습니다");
     } finally {
       other.close();
