@@ -22,6 +22,8 @@ Claude Agent Office is a local dashboard. Its Claude Code plugin sends hook even
 
 Without these settings the dashboard still shows sessions and token counts, but no speech bubbles, raised hands or answering from the dashboard. `claude-office doctor` reports a managed-settings problem as `❌ 회사 관리자 설정: …` ("company managed settings").
 
+On a computer shared by several accounts (any OS), deploy knowing this: while a user's dashboard is off, another account can take port 4317 and answer that user's hooks (see the [README security model](../README.md#security-model)).
+
 ### What the PLAN bar shows
 
 The PLAN bar in the top bar uses the rate limits that Claude Code passes to the status line. The release does not install the status-line tap yet, so every account currently shows `-- 데이터 없음` (no data); the table shows what each account can provide once it is supported.
@@ -54,6 +56,8 @@ Claude Agent Office는 그 컴퓨터 안에서만 도는 대시보드입니다. 
 - `channelsEnabled`: 실험 기능(작업 지시·새 층)을 쓸 때만 넣습니다. 이 앱은 channel을 `--dangerously-load-development-channels`로 붙이므로 `allowedChannelPlugins`는 필요 없습니다(넣으면 다른 channel 플러그인을 막을 수 있습니다).
 
 이 설정이 없어도 세션과 토큰 숫자는 보이지만, 말풍선·손들기·대시보드에서 답하기는 동작하지 않습니다. `claude-office doctor`는 관리 설정 문제를 `❌ 회사 관리자 설정: …`으로 알려 줍니다.
+
+여러 계정이 쓰는 컴퓨터(운영체제와 무관)에서는 이 위험을 알고 배포하세요: 사용자의 대시보드가 꺼진 동안 다른 계정이 4317을 차지해 그 사용자의 hook에 답할 수 있습니다([README 보안](../README.ko.md#보안) 참고).
 
 ### PLAN 바에 보이는 것
 

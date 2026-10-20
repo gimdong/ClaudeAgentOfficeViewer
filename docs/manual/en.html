@@ -177,7 +177,18 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <p>An older dashboard is still running. <code>claude-office</code> then prints <code>이전 버전 대시보드가 켜져 있습니다. …</code> ("An older dashboard is running…"). Stop it in its terminal with <kbd>Ctrl</kbd>+<kbd>C</kbd> (or as in the previous item), then run <code>claude-office</code> again. Close any old browser tab whose address showed <code>?k=</code>.</p>
 
 <h3>"포트 4317번이 이미 사용 중입니다"</h3>
-<p>"Port 4317 is already in use." Another program (or the old v1 viewer) is using port 4317. <code>claude-office doctor</code> shows which. Stopping that program is best; starting on another port with <code>--port</code> works, but then the plugin cannot reach the dashboard (no speech bubbles or answering).</p>
+<p>"Port 4317 is already in use." Another program (or the old v1 viewer) is using port 4317. <code>claude-office doctor</code> shows which. Stopping that program is best; starting on another port with <code>--port</code> works, but then the plugin cannot reach the dashboard (no speech bubbles or answering). If you do not know the program, do not use another port: see <a href="#port-taken">the next section</a>.</p>
+
+<h3 id="port-taken">When the dashboard is off, another account can answer for it (shared computers)</h3>
+<p>The plugin always sends its hook events to <code>127.0.0.1:4317</code>. If the dashboard is not running and another account on the same computer (another person's, or a service running under its own account) starts its own program on that port first, that program receives your prompts, tool inputs and tool results (for example, commands and file contents). It can answer permission requests in your place (it can allow them without you being asked, or change the input), and add text to the conversation that Claude reads. If no program runs on this computer under an account other than yours (no other people, no services under their own accounts), this does not apply.</p>
+<p>What you can do:</p>
+<ul>
+  <li>When you are not using the dashboard, turn the plugin off: <code>claude plugin disable claude-office@claude-office --scope user</code> (turn it back on with <code>claude plugin enable claude-office@claude-office --scope user</code>). Already open Claude Code windows: run <code>/reload-plugins</code> or restart them.</li>
+  <li>Otherwise, keep the dashboard running whenever you use Claude Code — for example, as a service (such as a <code>systemd --user</code> service on Linux).</li>
+</ul>
+<p>If an unknown program holds port 4317, do not start the dashboard on another port; find out what it is and turn the plugin off until the port is free. <code>claude-office doctor</code> reports a program holding the port as:</p>
+<pre class="out">❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다</pre>
+<p>"Another program is using 4317."</p>
 
 <h3>"Node.js 24 이상이 필요합니다"</h3>
 <p>"Node.js 24 or later is required." Install Node.js 24 (see <a href="#install">Before you start</a>), close and reopen the terminal, and try again.</p>
