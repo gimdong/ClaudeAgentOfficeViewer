@@ -122,7 +122,7 @@
   <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
   <dd>"Add the claude-office command to PATH in ~/.zshrc?" Press <kbd>y</kbd> so you can type <code>claude-office</code> from any folder. The file name may be <code>~/.bash_profile</code> or <code>~/.bashrc</code> depending on your shell; on Windows it asks about the user PATH. If you press <kbd>n</kbd>, the last line tells you the full path to run instead.</dd>
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? … [y/N]</code></dt>
-  <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own.</dd>
+  <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own; it passes on the answer from whatever is listening on <code>127.0.0.1:4317</code> (see <a href="#port-taken">When the dashboard is off</a>).</dd>
 </dl>
 <div class="box ok-box">
   <p>The installer finishes with a setup check (doctor) and this last line:</p>
