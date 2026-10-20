@@ -21,19 +21,19 @@
 - 정적 헤더 `X-Claude-Office-Plugin`은 relay가 요청 평문 안의 `plugin` 필드로 대신 보낸다(버전 칩 유지).
 
 ## 3. relay (`plugins/claude-office/hooks/relay.cjs`, CommonJS, node 내장만)
-1. stdin을 끝까지 읽는다(상한 1MB, 넘으면 끝).
+1. stdin을 끝까지 읽는다(상한 700KB, 넘으면 끝 — base64 암호문이 서버 상한 1MB 안에 들도록).
 2. 열쇠 파일을 연 뒤 `fstat`: 일반 파일, 소유자 = 자기 uid(Windows는 생략), 그룹·다른 사용자 권한 없음(`mode & 0o077 === 0`, 0400·0600 모두 통과, Windows 생략). 아니면 끝.
 3. 열쇠(32바이트 hex)에서 HKDF로 요청용 키·응답용 키를 따로 만든다.
-4. 요청 평문 `{v:1, id:<16바이트 랜덤 hex>, ts:<ms>, plugin:<버전>, event:<입력 JSON>}`을 AES-256-GCM(12바이트 IV)으로 암호화해 `POST 127.0.0.1:4317/hooks/v2`(`node:net`로 직접 HTTP/1.1) 한 번에 보낸다. 본문: `{kid, iv, ct, tag}` (kid = 열쇠의 SHA-256 앞 8바이트 hex).
+4. 요청 평문 `{v:1, id:<16바이트 랜덤 hex>, ts:<ms>, plugin:<버전>, event:<입력 JSON>}`을 AES-256-GCM(12바이트 IV)으로 암호화해 `POST 127.0.0.1:4317/hooks/v2`(`node:net`로 직접 HTTP/1.1) 한 번에 보낸다. 본문: `{kid, iv, ct, tag}` (kid = 열쇠의 SHA-256 앞 8바이트 hex). **소켓은 응답을 다 받은 뒤에만 닫는다**(`write`만 쓰고 `end`/half-close 금지 — 쓰기 쪽을 닫으면 서버가 곧바로 연결 끊김으로 보고 PermissionRequest를 닫는다, security 실측).
 5. 응답 `{iv, ct, tag}`를 응답용 키로 풀고, 평문 `{id:<같은 id>, out:<hook 출력 JSON 또는 null>}`을 확인한다. id가 다르거나 풀리지 않으면 끝.
-6. `out`이 객체이고 `out.hookSpecificOutput?.hookEventName`이 받은 이벤트 이름과 같거나 없을 때만 `JSON.stringify(out)`을 stdout에 쓰고, 쓰기가 끝난 뒤 exit 0.
+6. `out`이 객체이고, 최상위 키가 허용 목록(`hookSpecificOutput`, `decision`, `reason`, `systemMessage`, `suppressOutput`) 안이며, `out.hookSpecificOutput?.hookEventName`이 받은 이벤트 이름과 같거나 없을 때만 `JSON.stringify(out)`을 stdout에 쓰고, 쓰기가 끝난 뒤 exit 0.
 7. **출력 안전 규칙:** 모든 오류·예외·신호·타임아웃에서 stdout 없이 exit 0. exit 2·exit 1을 쓰지 않는다. UserPromptSubmit·SessionStart·Stop·SubagentStop·TeammateIdle에는 `out`이 있어도 쓰지 않는다(문맥 주입·멈춤 방지).
 8. **자체 대기 한도:** 연결부터 응답까지 이벤트 timeout보다 5초 짧게(PermissionRequest 595초, 그 밖 5초). 넘으면 끝.
 9. 연결 실패(대시보드 꺼짐)는 곧바로 끝. 로그를 남기지 않는다. 복호화·형식 실패만 `<PREFIX>/logs/relay.log`(0600)에 이유 한 단어 + 시각을 남긴다(본문·열쇠 없음, 1MB 넘으면 앞을 지움).
 
 ## 4. 서버
 - 처음 켤 때 `<PREFIX>/hook.key`가 없으면 32바이트 랜덤으로 0600(폴더 0700) 생성, 있으면 소유자·권한 검사: 소유자가 자기이고 그룹·다른 사용자 권한이 있으면 0600으로 좁힌다(`auth.ts`의 토큰 처리와 같은 방식). 소유자가 다를 때만 doctor 실패 + `/hooks/v2` 닫음.
-- `POST /hooks/v2`: Host 검사 → 같은 계정 검사(Linux) → Origin 거부 → JSON 본문(상한 1MB) → kid 일치 → GCM 복호화 → `v===1`, `|now-ts| ≤ 30초`, id가 최근 30초 안에 본 적 없음(최대 10,000개, 넘으면 오래된 것부터) → 기존 `/hooks/event` 처리기와 같은 함수로 처리 → 결과를 응답 키로 암호화해 200. 실패는 모두 401 빈 본문.
+- `POST /hooks/v2`: Host 검사 → 같은 계정 검사(Linux) → Origin 거부 → JSON 본문(상한 1MB) → kid 일치 → GCM 복호화 → `v===1`, `now-30초 ≤ ts ≤ now+5초`, id를 본 적 없음(본 id는 `max(ts, 받은 시각)+30초`까지 기억 — 미래 ts로 창을 비껴가지 못하게; 최대 10,000개, 넘치면 창이 지난 것만 지우고 창 안의 id만으로 가득 차면 새 요청을 401 — 창 안 id를 버려 재전송을 다시 열지 않는다) → 기존 `/hooks/event` 처리기와 같은 함수로 처리 → 결과를 응답 키로 암호화해 200. 실패는 모두 401 빈 본문.
 - PermissionRequest 대기 중 연결이 끊기면(relay 종료) 지금과 같이 `res.on('close') && !res.writableEnded`로 닫는다.
 - **옛 `/hooks/event`(http):** beta.14에서만 지금처럼 받는다. 받으면 그 세션을 legacy로 기억하고(세션이 끝나거나 그 세션에서 10분 동안 옛 입구 이벤트가 없으면 잊음), legacy 세션이 하나라도 있으면 스냅샷 `plugin`에 `legacy: true`를 표시하고, HUD 칩 문구를 "옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요"로 바꾼다. beta.15에서 없앤다(스펙 남은 일).
 - 통계: `hooks.v2`(받은 수), `rejected["401-v2"]`.
