@@ -1,18 +1,18 @@
 {
   "description": "Claude Agent Office Viewer로 이벤트를 보냅니다. 서버가 꺼져 있으면 연결 실패로 끝나고 세션은 그대로 진행합니다.",
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 600, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "PermissionDenied": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "Notification": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "TeammateIdle": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.12" } }] }]
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 600, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "PermissionDenied": [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "Notification": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "TeammateIdle": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }],
+    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4317/hooks/event", "timeout": 5, "headers": { "X-Claude-Office-Plugin": "2.0.0-beta.13" } }] }]
   }
 }
