@@ -68,9 +68,9 @@ function holdKeyOf(k: LeadKind, f: Record<string, string>): string {
 
 /**
  * 요청 본문 {kind, ...}을 검사해 틀로 지시문을 만든다. id는 부르는 쪽이 만든 지시 id(r-8hex).
- * members를 주면 팀원 이름은 그 목록(그 층 팀 설정)에 있을 때만 받는다(스펙 12장 b)
+ * 팀원 이름은 members(그 층 팀 설정)에 있을 때만 받는다 — 목록을 모르면(빈 목록) 팀원 이름이 든 지시는 거절(스펙 12장 b·i)
  */
-export function buildLead(body: unknown, id: string, members?: readonly string[]): LeadBuild {
+export function buildLead(body: unknown, id: string, members: readonly string[] = []): LeadBuild {
   const b = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   const kind = b?.kind;
   if (!b || typeof kind !== "string" || !(LEAD_KINDS as readonly string[]).includes(kind)) return { ok: false, error: "kind" };
@@ -85,7 +85,7 @@ export function buildLead(body: unknown, id: string, members?: readonly string[]
     if (name === "text") {
       if (typeof v !== "string" || !v.trim() || v.length > MAX_LEAD_TEXT || v.includes("\0")) return { ok: false, error: "text" };
     } else if (name === "member") {
-      if (typeof v !== "string" || !MEMBER.test(v) || (members && !members.includes(v))) return { ok: false, error: "member" };
+      if (typeof v !== "string" || !MEMBER.test(v) || !members.includes(v)) return { ok: false, error: "member" };
     } else if (name === "choice") {
       if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 6) return { ok: false, error: "choice" };
       f.choice = String(v);

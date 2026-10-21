@@ -179,7 +179,7 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     const wrapper = join(keyDir ?? tmpdir(), "fake-claude.cjs");
     writeFileSync(wrapper, `require("child_process").spawn(process.execPath, [${JSON.stringify(SCRIPT)}], { stdio: "inherit" }).on("exit", (c) => process.exit(c ?? 0));`);
     const env = { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() };
-    for (const argv of [[wrapper, "--agent-id", "tester@team", "--agent-name", "tester", "--team-name", "team"], ["-e", `require("child_process").spawn("sh", ["-c", ${JSON.stringify(`exec "${process.execPath}" "${SCRIPT}"`)}], { stdio: "inherit" }).on("exit", (c) => process.exit(c ?? 0))`, "--", "--agent-id", "tester@team"]]) {
+    for (const argv of [[wrapper, "--agent-id", "tester@team", "--agent-name", "tester", "--team-name", "team"], ["-e", `require("child_process").spawn("sh", ["-c", ${JSON.stringify(`exec "${process.execPath}" "${SCRIPT}"`)}], { stdio: "inherit" }).on("exit", (c) => process.exit(c ?? 0))`, "--", "--agent-id=tester@team", "--agent-name=tester", "--team-name=team"]]) {
       const c = spawn(process.execPath, argv, { env, stdio: ["pipe", "pipe", "pipe"] });
       const lines: string[] = [];
       c.stdout.on("data", (b) => lines.push(...String(b).split("\n").filter(Boolean)));
@@ -194,8 +194,8 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
       c.kill();
     }
     expect(d.seen).toEqual([]);
-    // 대조군: 같은 감싸기라도 --agent-id가 없으면(리드) 연결하고 도구 셋을 낸다
-    const lead = spawn(process.execPath, [wrapper, "--session-id", "s"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    // 대조군: 세 인자가 다 있지 않으면(리드) 연결하고 도구 셋을 낸다 — 첫 지시·이름 글자에 "--agent-id"가 들어 있어도(security Minor-8)
+    const lead = spawn(process.execPath, [wrapper, "--session-id", "s", "--name", "x --agent-id", "첫 지시 --agent-id y 를 보세요"], { env, stdio: ["pipe", "pipe", "pipe"] });
     const out: string[] = [];
     lead.stdout.on("data", (b) => out.push(...String(b).split("\n").filter(Boolean)));
     lead.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");

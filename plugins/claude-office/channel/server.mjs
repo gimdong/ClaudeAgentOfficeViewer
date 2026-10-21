@@ -26,25 +26,41 @@ const BASE = `http://127.0.0.1:${/^\d{2,5}$/.test(PORT ?? "") ? PORT : "4317"}`;
 // 새 런타임이 2026-07-28로 협상하면 channel로 등록되지 않는다(스파이크 Q1 함정). 이 revision으로 고정한다
 export const PROTOCOL = "2025-11-25";
 /**
- * 이 서버를 띄운 claude가 agent team 팀원 프로세스인지: 부모 프로세스 명령줄에 --agent-id가 있으면 팀원.
- * Claude Code는 MCP 서버를 직접 띄우므로 부모가 claude다. 부모가 셸(sh -c 등)이면 그 위 하나만 더 본다 — 더 위로 가면
- * claude 안에서 돌린 다른 프로그램(예: 팀원 세션이 돌린 테스트) 아래의 서버까지 팀원으로 오판한다.
- * ps를 못 쓰면(Windows 등) 팀원이 아닌 것으로 본다 — 그때는 대시보드의 "첫 연결 우선"(12장 g ②)이 막는다
+ * 이 서버를 띄운 claude가 agent team 팀원 프로세스인지(Phase 6b 스펙 12장 g ①). Claude Code 2.1.304에서 확인: 팀원은
+ * `claude --agent-id … --agent-name … --team-name …`로 뜨는 별 프로세스이고 세 인자는 함께 와야 한다(그 버전의 인자 검사).
+ * 세 인자가 모두 따로 된 인자로 있을 때만 팀원으로 본다(security Minor-8 — 첫 지시·이름 글자 속 "--agent-id" 한 낱말로는 오판하지 않게).
+ * Linux는 /proc/<pid>/cmdline(NUL 구분)으로 인자 경계를 정확히 보고, 그 밖은 `ps -o args`(공백으로 이은 한 줄)를 낱말로 나눠 본다.
+ * Claude Code는 MCP 서버를 직접 띄우므로 부모가 claude다. 부모가 셸이면 하나 위까지만 본다(더 위로 가면 팀원 세션 안에서 돌린
+ * 테스트 아래의 서버까지 팀원으로 오판). 한계: 이 인자는 문서에 없는 Claude Code 내부 인자라 이름이 바뀌면 이 판별은 꺼지고
+ * 대시보드의 "첫 연결 우선"(12장 g ②, 같은 층 두 번째 연결은 409)만 남는다. ps를 못 쓰면(Windows 등) 팀원이 아닌 것으로 본다
  */
+const TEAMMATE_FLAGS = ["--agent-id", "--agent-name", "--team-name"];
+function procOf(pid) {
+  if (process.platform === "linux") {
+    try {
+      const argv = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean);
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      return { ppid: Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]), argv };
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const line = execFileSync("ps", ["-o", "ppid=,args=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const m = /^(\d+)\s+([\s\S]*)$/.exec(line);
+    return m ? { ppid: Number(m[1]), argv: m[2].split(/\s+/) } : null;
+  } catch {
+    return null;
+  }
+}
 function teammateProcess() {
   let pid = process.ppid;
   for (let i = 0; i < 2 && pid > 1; i++) {
-    let line;
-    try {
-      line = execFileSync("ps", ["-o", "ppid=,args=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim();
-    } catch {
-      return false;
-    }
-    const m = /^(\d+)\s+(\S+)([\s\S]*)$/.exec(line);
-    if (!m) return false;
-    if (/(^|\s)--agent-id(\s|=|$)/.test(m[3])) return true;
-    if (!/(^|\/)-?(sh|bash|zsh|dash)$/.test(m[2])) return false;
-    pid = Number(m[1]);
+    const p = procOf(pid);
+    if (!p || p.argv.length === 0) return false;
+    if (TEAMMATE_FLAGS.every((f) => p.argv.some((a) => a === f || a.startsWith(`${f}=`)))) return true;
+    if (!/(^|\/)-?(sh|bash|zsh|dash)$/.test(p.argv[0])) return false;
+    pid = p.ppid;
   }
   return false;
 }
