@@ -16,13 +16,13 @@ Claude Agent Office is a local dashboard. Its Claude Code plugin sends hook even
 }
 ```
 
-- `allowedHttpHookUrls`: needed if you restrict HTTP hook URLs. The plugin only posts to the local dashboard.
+- `allowedHttpHookUrls`: needed only while users still run a plugin from an earlier version (plain HTTP hooks), if you restrict HTTP hook URLs. The beta.14 plugin uses command hooks and does not need it.
 - `enabledPlugins`: if `allowManagedHooksOnly` is on, the plugin's hooks run only when the plugin is force-enabled here.
 - `channelsEnabled`: only if users need the experimental features (sending instructions to a floor, starting a new floor). The app attaches its channel with `--dangerously-load-development-channels`, so `allowedChannelPlugins` is not needed (adding it may block other channel plugins).
 
 Without these settings the dashboard still shows sessions and token counts, but no speech bubbles, raised hands or answering from the dashboard. `claude-office doctor` reports a managed-settings problem as `❌ 회사 관리자 설정: …` ("company managed settings").
 
-On a computer shared by several accounts (any OS), deploy knowing this: while a user's dashboard is off, another account can take port 4317 and answer that user's hooks (see the [README security model](../README.md#security-model)).
+On a computer shared by several accounts (any OS), make sure every user installs beta.14 or later from the archive: plugins from earlier versions send plain HTTP hooks that another account can read and answer while the user's dashboard is off (see the [README security model](../README.md#security-model)).
 
 ### What the PLAN bar shows
 
@@ -51,13 +51,13 @@ Claude Agent Office는 그 컴퓨터 안에서만 도는 대시보드입니다. 
 }
 ```
 
-- `allowedHttpHookUrls`: HTTP hook 주소를 제한하고 있다면 필요합니다. 플러그인은 이 컴퓨터의 대시보드로만 보냅니다.
+- `allowedHttpHookUrls`: HTTP hook 주소를 제한하고 있을 때, 사용자가 이전 버전의 플러그인(http hook)을 쓰는 동안만 필요합니다. beta.14 플러그인은 command hook을 써서 필요 없습니다.
 - `enabledPlugins`: `allowManagedHooksOnly`가 켜져 있으면 여기서 플러그인을 강제로 켜야 플러그인의 hook이 동작합니다.
 - `channelsEnabled`: 실험 기능(작업 지시·새 층)을 쓸 때만 넣습니다. 이 앱은 channel을 `--dangerously-load-development-channels`로 붙이므로 `allowedChannelPlugins`는 필요 없습니다(넣으면 다른 channel 플러그인을 막을 수 있습니다).
 
 이 설정이 없어도 세션과 토큰 숫자는 보이지만, 말풍선·손들기·대시보드에서 답하기는 동작하지 않습니다. `claude-office doctor`는 관리 설정 문제를 `❌ 회사 관리자 설정: …`으로 알려 줍니다.
 
-여러 계정이 쓰는 컴퓨터(운영체제와 무관)에서는 이 위험을 알고 배포하세요: 사용자의 대시보드가 꺼진 동안 다른 계정이 4317을 차지해 그 사용자의 hook에 답할 수 있습니다([README 보안](../README.ko.md#보안) 참고).
+여러 계정이 쓰는 컴퓨터(운영체제와 무관)에서는 모든 사용자가 압축 파일로 beta.14 이상을 설치했는지 확인하세요. 이전 버전의 플러그인은 암호화하지 않은 http hook을 보내, 사용자의 대시보드가 꺼진 동안 다른 계정이 읽고 대신 답할 수 있습니다([README 보안](../README.ko.md#보안) 참고).
 
 ### PLAN 바에 보이는 것
 

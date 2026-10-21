@@ -73,6 +73,7 @@
     <li><a href="#install">Install</a></li>
     <li><a href="#start">Start and stop</a></li>
     <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#checks">Appendix: checking an installed copy</a></li>
   </ol>
 </nav>
 
@@ -122,7 +123,7 @@
   <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
   <dd>"Add the claude-office command to PATH in ~/.zshrc?" Press <kbd>y</kbd> so you can type <code>claude-office</code> from any folder. The file name may be <code>~/.bash_profile</code> or <code>~/.bashrc</code> depending on your shell; on Windows it asks about the user PATH. If you press <kbd>n</kbd>, the last line tells you the full path to run instead.</dd>
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? … [y/N]</code></dt>
-  <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own; it passes on the answer from whatever is listening on <code>127.0.0.1:4317</code> (see <a href="#port-taken">When the dashboard is off</a>).</dd>
+  <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own; it passes on the answer from whatever is listening on <code>127.0.0.1:4317</code> (see <a href="#port-taken">Another account on port 4317</a>).</dd>
 </dl>
 <div class="box ok-box">
   <p>The installer finishes with a setup check (doctor) and this last line:</p>
@@ -149,7 +150,26 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 </ul>
 <div class="box caution">Keep the terminal window open while you use the dashboard (you can minimize it). Do not start it from inside Claude Code with <code>! claude-office</code>: it keeps running with no window to stop it.</div>
 <h3>Stop</h3>
-<p>Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal that runs the dashboard, or close that window. Claude Code keeps working. While the dashboard is off, Claude Code may show <code>PreToolUse:Bash hook error</code> with <code>connect ECONNREFUSED 127.0.0.1:4317</code>; that only means the plugin could not reach the dashboard. Permission policies and floor pausing do not apply while it is off.</p>
+<p>Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal that runs the dashboard, or close that window. Claude Code keeps working. While the dashboard is off, Claude Code asks in the terminal as usual. (A plugin from beta.13 or earlier may show <code>PreToolUse:Bash hook error</code> with <code>connect ECONNREFUSED 127.0.0.1:4317</code>; that only means it could not reach the dashboard.) Permission policies and floor pausing do not apply while it is off.</p>
+
+<h3 id="remote">View from another computer (SSH tunnel)</h3>
+<p>When you use Claude Code on another computer (for example, a Linux server at work), you can view that computer's dashboard in your own browser. The dashboard listens only inside that computer (<code>127.0.0.1</code>), so an SSH tunnel connects a port on your computer to its 4317.</p>
+<ol class="steps">
+  <li>Install this program on the remote computer (chapter 1) and start the dashboard there with <code>claude-office</code>. A message that the browser could not be opened is fine. Closing that window stops the dashboard, so start it in its own SSH session or inside <code>tmux</code>, and do step 3 in another window.</li>
+  <li>On your own computer, open a new terminal and open the tunnel. <code>&lt;host&gt;</code> is the address you normally use with <code>ssh</code>. Keep this window open while you view the dashboard.
+    <pre><code>ssh -L 14317:127.0.0.1:4317 &lt;host&gt;</code></pre></li>
+  <li>In that SSH window (on the remote computer), get the address with the key:
+    <pre><code>claude-office url</code></pre>
+    <p>It prints one address line and one notice line, and does not open a browser:</p>
+    <pre class="out">http://127.0.0.1:4317/?k=…
+이 주소는 열쇠입니다. 남에게 보내지 마세요.</pre>
+    <p>"This address is a key. Do not send it to anyone."</p></li>
+  <li>Copy the address, change only the port to <code>14317</code> (<code>http://127.0.0.1:14317/?k=…</code>), and open it in the browser on your own computer. The dashboard remembers a separate key for each port, so this does not interfere with a dashboard on your own computer.</li>
+</ol>
+<ul>
+  <li>Connect with SSH as the same account that runs the dashboard (on Linux the dashboard accepts only that account).</li>
+  <li>Closing the tunnel does not stop the remote dashboard or Claude Code.</li>
+</ul>
 
 <h2 id="trouble">3. Troubleshooting</h2>
 <h3>Run the setup check first</h3>
@@ -179,13 +199,9 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <h3>"포트 4317번이 이미 사용 중입니다"</h3>
 <p>"Port 4317 is already in use." Another program (or the old v1 viewer) is using port 4317. <code>claude-office doctor</code> tells you whether it is the old viewer or another program. Stopping that program is best; starting on another port with <code>--port</code> works, but then the plugin cannot reach the dashboard (no speech bubbles or answering). If you do not know the program, do not use another port: see <a href="#port-taken">the next section</a>.</p>
 
-<h3 id="port-taken">When the dashboard is off, another account can answer for it (shared computers)</h3>
-<p>The plugin always sends its hook events to <code>127.0.0.1:4317</code>. If the dashboard is not running and another account on the same computer (another person's, or a service running under its own account) starts its own program on that port first, that program receives your prompts, tool inputs and tool results (for example, commands and file contents). It can answer permission requests in your place (it can allow them without you being asked, or change the input), and add text to the conversation that Claude reads. If no program runs on this computer under an account other than yours (no other people, no services under their own accounts), this does not apply.</p>
-<p>What you can do:</p>
-<ul>
-  <li>When you are not using the dashboard, turn the plugin off: <code>claude plugin disable claude-office@claude-office --scope user</code> (turn it back on with <code>claude plugin enable claude-office@claude-office --scope user</code>). Already open Claude Code windows: run <code>/reload-plugins</code> or restart them.</li>
-  <li>Otherwise, keep the dashboard running whenever you use Claude Code — for example, as a service (such as a <code>systemd --user</code> service on Linux).</li>
-</ul>
+<h3 id="port-taken">Another account on port 4317</h3>
+<p><strong>Hook events are encrypted (from beta.14).</strong> The plugin passes each hook event to a small relay program, which encrypts it with a key file only your account can read (<code>~/.claude-office/hook.key</code>), and accepts only an answer encrypted with the same key. Another account that takes port 4317 while the dashboard is off cannot read your prompts, tool inputs or results, and cannot answer for you; Claude Code simply asks in the terminal as usual.</p>
+<p>If you installed an earlier version, its plugin still sends plain HTTP hooks, and the dashboard shows <code>옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요</code> ("An old plugin (http hook) is still installed — install again from the same archive"). Install again from the archive you downloaded; Claude Code windows that were already open keep the old hooks until you run <code>/reload-plugins</code> or restart them. Until then, the old risk remains: while the dashboard is off, another account on the same computer that takes port 4317 can receive your prompts, tool inputs and tool results, answer permission requests in your place, and add text to the conversation. beta.14 still accepts these old HTTP hooks, so this applies to anyone who has not installed again.</p>
 <p>If an unknown program holds port 4317, do not start the dashboard on another port; find out what it is and turn the plugin off until the port is free. <code>claude-office doctor</code> reports a program holding the port as:</p>
 <pre class="out">❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다</pre>
 <p>"Another program is using 4317."</p>
@@ -206,6 +222,25 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <pre class="out">⚠️ 실시간 이벤트: 최근 10분 4건. 다른 계정의 접속 3건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다.</pre>
 <p>"Blocked 3 connections from other accounts. Normal on a computer shared by several people." The part before it depends on the current event check.</p>
 
+<h3>doctor: "hook 실행" (running hooks)</h3>
+<pre class="out">❌ hook 실행: hook을 실행할 node가 없습니다(nvm 등으로 바뀜) — 다시 설치하세요
+  → 설치 스크립트로 다시 설치한 뒤, 열려 있는 Claude Code 창에서 /reload-plugins를 실행하거나 창을 다시 열어 주세요.</pre>
+<p>"There is no node to run the hooks (changed by nvm or similar) — install again." The installer writes the full path of the Node.js it ran with into the plugin's hooks. If that Node.js was removed or moved (for example, you switched versions with nvm), hooks stop reaching the dashboard and Claude Code asks in the terminal. Install again from the archive with the Node.js you use now, then run <code>/reload-plugins</code> in open Claude Code windows or restart them, as the second line says.</p>
+<p>The same fix applies to <code>❌ hook 실행: hook 설정에 Node.js·열쇠 경로가 적혀 있지 않습니다 — 다시 설치하세요</code> ("the hook settings do not contain the Node.js and key paths") and to <code>⚠️ hook 실행: 옛 플러그인(http hook)입니다</code> ("old plugin (http hook)"; install again from the same archive).</p>
+
+<h3>doctor: "hook 열쇠" (hook key)</h3>
+<pre class="out">❌ hook 열쇠: 다른 계정의 파일입니다(hook을 받지 않음)
+  → 설치 폴더의 hook.key를 지운 뒤 claude-office를 다시 켜 주세요. 지울 수 없으면 컴퓨터 관리자에게 문의해 주세요.</pre>
+<p>"The file belongs to another account (hooks are not accepted)." Delete <code>hook.key</code> in the install folder (<code>~/.claude-office</code>) and start <code>claude-office</code> again; it makes a new one. If you cannot delete it, ask the computer's administrator. If the key file is missing or others can read it, doctor shows ⚠️ and starting <code>claude-office</code> again fixes it.</p>
+
+<h3>doctor: another install's dashboard is running</h3>
+<pre class="out">⚠️ 실시간 이벤트: 다른 설치본의 대시보드가 켜져 있어 확인하지 못했습니다(열쇠가 다름)
+  → 켜져 있는 대시보드를 끄고 이 설치본의 claude-office로 다시 켜 주세요.</pre>
+<p>"A dashboard from another install is running, so this could not be checked (different key)." Hooks from this install cannot reach it either. Stop that dashboard and start this install's <code>claude-office</code>. doctor also counts recent relay failures as <code>⚠️ hook 전달: 최근 24시간 실패 {n}건</code> ("{n} failures in the last 24 hours"); a dashboard from another install is the usual cause.</p>
+
+<h3>The installer stops: "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다"</h3>
+<p>"Could not write the plugin's hook settings (node and key paths), so the installation stops." The installer could not write the Node.js and key paths into the plugin's hooks, and stopped before registering the plugin, so Claude Code is unchanged; if an earlier plugin is installed, it keeps running. Extract the archive again into a new folder and run the installer from there. If it stops again, send a diagnostics file (it includes the install log shown on the <code>자세한 기록:</code> line).</p>
+
 <h3>The installer finished with "no" without asking</h3>
 <pre class="out">입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.</pre>
 <p>"Could not read input, so treated as 'no'. Run again with --yes to install." It ran somewhere it could not ask you, such as <code>!</code> inside Claude Code. Run it again in a normal terminal, or answer yes to both questions with <code>sh install.sh --yes</code> (Windows: <code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes</code>).</p>
@@ -213,6 +248,21 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <h3>Uninstall</h3>
 <pre><code>claude-office uninstall</code></pre>
 <p>It asks two questions: whether to remove the Claude Code plugin, and whether to delete logs and diagnostics files (default: keep). Answer <kbd>n</kbd> to the second if you still need to send a diagnostics file. <code>claude-office uninstall --yes</code> answers yes to both.</p>
+
+<h2 id="checks">4. Appendix: checking an installed copy (beta.14)</h2>
+<p>These checks confirm, in a real Claude Code session, what the tests could not. Install beta.14 from the archive, start the dashboard, and open a new Claude Code session.</p>
+<ol>
+  <li><strong>Permission policy deny.</strong> Block a tool with a permission policy in the dashboard, then ask Claude to use it. It is blocked.</li>
+  <li><strong>Allow and deny from the dashboard.</strong> When a permission request appears, allow it in the dashboard, then deny another. Claude Code follows each answer, including an edited input.</li>
+  <li><strong>Answering in the terminal first.</strong> While a raised hand is showing, answer in the terminal (or press Esc). The raised hand closes in the dashboard.</li>
+  <li><strong>Dashboard off.</strong> Stop the dashboard and use a tool. The terminal asks as usual, with no hook error.</li>
+  <li><strong>Other hooks.</strong> With another plugin's hooks also installed, a deny from the dashboard still wins, and a deny rule in your settings is not overridden by an allow from the dashboard. Note which answer applies to a permission request when another hook also answers.</li>
+  <li><strong>Working folder.</strong> Hooks still work when you start Claude Code from a project folder (the relay does not depend on the current folder or shell settings).</li>
+  <li><strong>No added text.</strong> Sending a prompt or starting a session adds nothing to the conversation from the plugin.</li>
+  <li><strong>Remote Linux over SSH.</strong> On a remote Linux machine, open the dashboard through the <a href="#remote">SSH tunnel</a>. It opens, and is not refused with <code>같은 사용자 계정의 프로그램만 접속할 수 있습니다</code> (the same-account check passes for the tunnel).</li>
+  <li><strong>Cancelled hook.</strong> Start Claude Code with <code>claude --debug</code>, raise a permission request and answer it in the terminal first. The log shows the hook ended as <code>cancelled</code>, and the raised hand closes.</li>
+</ol>
+<p>If any check fails, send the diagnostics file from <code>claude-office diag</code> to whoever supports you.</p>
 </main>
 </body>
 </html>
