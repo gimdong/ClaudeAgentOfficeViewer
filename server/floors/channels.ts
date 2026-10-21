@@ -21,7 +21,8 @@ export interface ChannelView {
   held: number;
   last?: "sent" | "delivered";
 }
-export interface HeldItem { id: string; text: string; at: string }
+/** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
+export interface HeldItem { id: string; text: string; at: string; key?: string }
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "not-connected" | "held-full" };
 
 interface Pending { nonce: string; snonce: string; at: number }
@@ -190,12 +191,13 @@ export class ChannelHub {
     return true;
   }
 
-  instruct(sessionId: string, text: string, paused: boolean): InstructResult {
+  instruct(sessionId: string, text: string, paused: boolean, holdKey?: string): InstructResult {
     const f = this.floors.get(sessionId);
     if (!f) return { ok: false, error: "not-launched" };
     if (paused) {
+      if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey);
       if (f.held.length >= MAX_HELD) return { ok: false, error: "held-full" };
-      const item = { id: randomUUID(), text, at: new Date().toISOString() };
+      const item = { id: randomUUID(), text, at: new Date().toISOString(), ...(holdKey !== undefined ? { key: holdKey } : {}) };
       f.held.push(item);
       getLogger().info("floors", "held", { session: this.n(sessionId), len: text.length });
       this.changed();

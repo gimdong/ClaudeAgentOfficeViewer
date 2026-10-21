@@ -21,6 +21,7 @@ import { HOOK_V2, openRequest, sealResponse, type HookKeys, type ReplayWindow } 
 import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
+import { leadInstruct } from "./floors/lead";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -154,6 +155,7 @@ export function createApp(
   } = {},
 ): Express {
   const app = express();
+  const snapshotHub = hub; // 아래 channels 블록의 hub(ChannelHub)와 이름이 겹친다
 
   app.use((req, res, next) => {
     if (!isAllowedHost(req.headers.host)) {
@@ -629,6 +631,14 @@ export function createApp(
         const r = hub.instruct(id, text, floors.isPaused(id));
         if (!r.ok) return void res.status(r.error === "not-launched" ? 404 : 409).json({ error: r.error });
         res.status(200).json({ id: r.id, state: r.state });
+      });
+      // 팀리더 지시(Phase 6b 스펙 2장): kind별 정해진 틀로만 만든다(사용자 글은 틀의 칸에만, leadText.ts)
+      app.post("/api/floors/:id/lead", guard, on, express.json({ limit: "32kb", type: () => true }), (req, res) => {
+        const id = idOf(req);
+        if (!id) return void res.status(400).json({});
+        const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.map((m) => m.name) ?? [];
+        const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members);
+        res.status(r.status).json(r.body);
       });
       app.put("/api/experimental", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
         const v = (req.body as { channels?: unknown } | undefined)?.channels;
