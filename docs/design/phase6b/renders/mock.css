@@ -30,6 +30,7 @@
 .rf-stamp.ok { color: var(--green); }
 .rf-stamp.rev { color: var(--pink); }
 .rf-paper { position: relative; margin: 12px 0 4px; padding: 14px 16px; background: var(--paper); color: var(--wall); box-shadow: 0 4px 0 var(--slab); font-family: var(--font-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.rf-paper.sealed { padding-top: 44px; } /* 도장 자리를 위에 비워 둠 — 첫 줄이 길면 도장이 글을 덮었다(렌더 확인) */
 .rf-seal { position: absolute; top: 10px; right: 12px; border: 2px solid; padding: 2px 8px; font-family: var(--font-pixel); font-size: 13px; transform: rotate(-8deg); background: var(--paper); }
 .rf-seal.ok { color: #1b9e6e; border-color: #1b9e6e; }
 .rf-seal.rev { color: var(--pink-deep); border-color: var(--pink-deep); }
@@ -106,3 +107,4 @@
 .counter .label { grid-row: 1; line-height: 14px; white-space: nowrap; }
 .counter .value { grid-row: 2; line-height: 24px; font-variant-numeric: tabular-nums; }
 .counter .sub { grid-row: 3; line-height: 14px; white-space: nowrap; }
+.rf-archive-note { margin: 0 6px 6px; font-family: var(--font-text); font-size: 11px; color: var(--muted); word-break: keep-all; }
