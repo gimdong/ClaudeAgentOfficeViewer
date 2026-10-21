@@ -255,6 +255,13 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     expect(hub.held("s1")).toHaveLength(1);
   });
 
+  it("퇴근·퇴사 대상은 팀원만 — 리드 자신(team-lead)은 400 member(B321 M5)", async () => {
+    hub.register("s1", "co-1");
+    floors.pause("s1");
+    for (const kind of ["offduty", "retire"]) expect(JSON.parse((await post("/api/floors/s1/lead", { kind, member: "team-lead" })).body), kind).toEqual({ error: "member" });
+    expect((await post("/api/floors/s1/lead", { kind: "offduty", member: "a" })).status).toBe(200);
+  });
+
   it("지시 id는 요청마다 새로", async () => {
     hub.register("s1", "co-1");
     floors.pause("s1");

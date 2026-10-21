@@ -379,6 +379,21 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n2")).toBeNull();
   });
 
+  it("busy 로그는 리드 연결이 붙어 있는 동안 처음 한 번만(B321 M4)", async () => {
+    const logs = join(tmp, "busylogs");
+    setLogger(new Logger({ dir: logs }));
+    const key = hub.register("s1", "co-1")!;
+    const a = openStream(key);
+    await a.ready;
+    for (let i = 0; i < 3; i++) {
+      const b = openStream(key);
+      await b.ready;
+      expect(b.status()).toBe(409);
+    }
+    const text = readdirSync(logs).map((f) => readFileSync(join(logs, f), "utf8")).join("");
+    expect(text.split("channel-busy").length - 1).toBe(1);
+  });
+
   it("hello·stream·ack의 응답과 로그에 열쇠·proof 값이 나오지 않는다", async () => {
     const logs = join(tmp, "logs");
     setLogger(new Logger({ dir: logs }));

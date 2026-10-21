@@ -206,6 +206,29 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     lead.kill();
   });
 
+  it("stream이 409(같은 층에 리드 연결)면 멈추지 않고 2초에서 두 배씩 늘려 다시 시도한다(B321 M4)", async () => {
+    const times: number[] = [];
+    server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (d) => (body += d));
+      req.on("end", () => {
+        if (req.url === "/channel/hello") {
+          const { nonce } = JSON.parse(body);
+          const snonce = randomBytes(32).toString("hex");
+          return void res.end(JSON.stringify({ snonce, proof: mac(KEY, `server|${nonce}|${snonce}`) }));
+        }
+        if (req.url === "/channel/stream") times.push(Date.now());
+        res.writeHead(409).end();
+      });
+    });
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    start({ CLAUDE_OFFICE_PORT: String((server.address() as AddressInfo).port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
+    await new Promise((r) => setTimeout(r, 7_500));
+    // 고정 2초면 0·2·4·6초에 4번, 두 배씩이면 0·2·6초에 3번
+    expect(times.length).toBe(3);
+    expect(times[2] - times[1]).toBeGreaterThan(3_500);
+  }, 15_000);
+
   it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
     const src = readFileSync(SCRIPT, "utf8");
     const names = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);

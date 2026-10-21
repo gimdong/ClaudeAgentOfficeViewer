@@ -659,7 +659,8 @@ export function createApp(
       app.post("/api/floors/:id/lead", guard, on, express.json({ limit: "32kb", type: () => true }), (req, res) => {
         const id = idOf(req);
         if (!id) return void res.status(400).json({});
-        const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.map((m) => m.name) ?? [];
+        // 퇴근·퇴사 등의 대상은 팀원만(리드 자신은 아님, B321 M5). 서브에이전트는 팀원 목록에 없다(리드에 합쳐짐)
+        const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.filter((m) => m.role !== "lead" && m.name !== "team-lead").map((m) => m.name) ?? [];
         const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members, reports);
         // 답을 보냈으면 질문 표시를 지우고, 보관했으면 "보관됨"(B308·B309)
         const qid = (req.body as { kind?: unknown; questionId?: unknown } | undefined)?.kind === "reply" ? (req.body as { questionId?: unknown }).questionId : undefined;

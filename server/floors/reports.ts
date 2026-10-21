@@ -8,6 +8,8 @@ export const MAX_FLOOR_REPORTS = 50;
 export const MAX_FLOOR_FILE = 100;
 /** 보이지 않은 지 이만큼 지난 층은 정리(스펙 5장 — 층이 사라져도 7일 보관) */
 export const STALE_FLOOR_MS = 7 * 24 * 3_600_000;
+/** lastSeenAt은 메모리에서 고치고, 저장한 값보다 이만큼 지났을 때만 파일에 쓴다(B321 I1 — 스냅샷마다 동기 저장하지 않게) */
+export const SEEN_SAVE_MS = 3_600_000;
 /** 답을 기다리는 요청 id 상한(층 수와 무관하게 메모리가 늘지 않게) */
 const MAX_PENDING = 200;
 
@@ -34,6 +36,8 @@ export class ReportStore {
   private data: { floors: Record<string, FloorData> } = { floors: {} };
   private readonly pending = new Map<string, { floor: string; kind: ReportKind; member?: string; at: number }>();
   private broken = false;
+  /** 파일에 쓴 lastSeenAt(층마다) */
+  private readonly savedSeen = new Map<string, number>();
   constructor(private readonly o: { file?: string; now?: () => number } = {}) {
     if (!o.file || !existsSync(o.file)) return;
     narrow(o.file); // 읽기만 해도 넓은 권한을 남기지 않는다(security Minor-3)
@@ -41,6 +45,7 @@ export class ReportStore {
       const d = JSON.parse(readFileSync(o.file, "utf8"));
       if (d && typeof d === "object" && d.floors && typeof d.floors === "object") this.data = d;
       else throw new Error("shape");
+      for (const [id, f] of Object.entries(this.data.floors)) this.savedSeen.set(id, f.lastSeenAt);
     } catch (e) {
       this.broken = true; // 다음 쓰기 전에 .broken으로 남긴다(정책 파일과 같은 방식)
       getLogger().warn("reports", "load failed", { error: errInfo(e) });
@@ -65,6 +70,8 @@ export class ReportStore {
       narrow(tmp); // 남아 있던 임시 파일은 writeFileSync의 mode가 적용되지 않는다
       writeFileSync(tmp, JSON.stringify(this.data) + "\n", { mode: 0o600 });
       renameSync(tmp, file);
+      this.savedSeen.clear();
+      for (const [id, f] of Object.entries(this.data.floors)) this.savedSeen.set(id, f.lastSeenAt);
     } catch (e) {
       getLogger().warn("reports", "save failed", { error: errInfo(e) });
     }
@@ -124,7 +131,8 @@ export class ReportStore {
     let changed = false;
     for (const [id, f] of Object.entries(this.data.floors)) {
       if (alive.has(id)) {
-        if (f.lastSeenAt !== now) (f.lastSeenAt = now), (changed = true);
+        f.lastSeenAt = now;
+        if (now - (this.savedSeen.get(id) ?? 0) > SEEN_SAVE_MS) changed = true;
       } else if (now - f.lastSeenAt > STALE_FLOOR_MS) {
         delete this.data.floors[id];
         changed = true;

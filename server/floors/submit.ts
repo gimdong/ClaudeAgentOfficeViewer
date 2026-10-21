@@ -51,10 +51,11 @@ export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports
   if (!floor) return { status: 401, body: {} };
   const bad = argsError(kind, args);
   if (bad) return { status: 400, body: { error: bad } };
-  const owner = d.pairing.ownerOf(kind, args);
+  const conv = d.convOf?.(floor) ?? floor;
+  const owner = d.pairing.ownerOf(conv, kind, args);
   const isLead = owner.name === "team-lead" && !owner.sub;
   if (kind === "ask_user") {
-    const id = (d.questions ?? fallbackBoard).ask(d.convOf?.(floor) ?? floor, owner, args.question as string, (args.options as string[] | undefined) ?? []);
+    const id = (d.questions ?? fallbackBoard).ask(conv, owner, args.question as string, (args.options as string[] | undefined) ?? []);
     getLogger().info("reports", "question", { owner: isLead ? "lead" : owner.sub ? "sub" : "member" });
     return { status: 200, body: { questionId: id } };
   }

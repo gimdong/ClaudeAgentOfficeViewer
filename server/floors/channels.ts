@@ -28,7 +28,7 @@ export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -184,9 +184,12 @@ export class ChannelHub {
       return null;
     }
     if (f.conn && !f.conn.destroyed && !f.conn.writableEnded) {
-      getLogger().info("floors", "channel-busy", { session: this.n(id) });
+      // 같은 연결이 붙어 있는 동안 처음 한 번만 남긴다(B321 M4 — 다시 시도마다 로그가 늘지 않게)
+      if (!f.busyLogged) getLogger().info("floors", "channel-busy", { session: this.n(id) });
+      f.busyLogged = true;
       return "busy";
     }
+    f.busyLogged = false;
     f.conn = res;
     f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
     f.ackToken = randomBytes(32).toString("hex");

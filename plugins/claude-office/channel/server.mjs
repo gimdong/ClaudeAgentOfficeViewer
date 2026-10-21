@@ -186,6 +186,7 @@ const same = (a, b) => typeof a === "string" && a.length === b.length && timingS
 const KID = live ? mac(KEY, "kid") : "";
 
 async function connect(attempt) {
+  let busy = 0; // 409(같은 층에 리드 연결이 있음) 다시 시도 횟수 — 2초에서 두 배씩, 최대 60초(B321 M4)
   for (;;) {
     try {
       // 시도마다 새 nonce. 서버 proof가 없거나 틀리면(열쇠를 모르는 가짜 서버) 스트림을 열지 않고 다시 시도한다
@@ -198,6 +199,7 @@ async function connect(attempt) {
         const ack = res.headers.get("x-office-ack") ?? "";
         if (res.ok && res.body && HEX.test(ack)) {
           attempt = 0;
+          busy = 0;
           const sk = mac(KEY, `session|${nonce}|${snonce}`);
           session = { sk, ack };
           try {
@@ -206,8 +208,8 @@ async function connect(attempt) {
             session = null;
           }
         } else if (res.status === 409) {
-          // 같은 층에 다른 연결(리드)이 살아 있다(스펙 12장 g ②) — 멈추지 않고 짧게 기다렸다 다시(리드가 끝나면 이어받는다)
-          await sleep(2000);
+          // 같은 층에 다른 연결(리드)이 살아 있다(스펙 12장 g ②) — 멈추지 않고 기다렸다 다시(리드가 끝나면 이어받는다)
+          await sleep(Math.min(60_000, 2000 * 2 ** Math.min(busy++, 5)));
           continue;
         }
       }

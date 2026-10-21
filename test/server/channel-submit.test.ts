@@ -30,7 +30,7 @@ function ask(body: object, floor = "s1"): string {
   return (r.body as { requestId: string }).requestId;
 }
 const preToolUse = (tool: string, input: object, agent: object = {}) =>
-  pairing.onPreToolUse({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: `mcp__plugin_claude-office_office-channel__${tool}`, tool_input: input, ...agent });
+  pairing.onPreToolUse({ hook_event_name: "PreToolUse", session_id: "conv-s1", tool_name: `mcp__plugin_claude-office_office-channel__${tool}`, tool_input: input, ...agent });
 const TESTER = { agent_id: "atester-1a2b3c", agent_type: "tester" };
 
 describe("handleSubmit — 인증·형식", () => {

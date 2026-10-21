@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PairingBook } from "../../server/floors/pairing";
-import { MAX_FLOOR_FILE, MAX_FLOOR_REPORTS, ReportStore, STALE_FLOOR_MS } from "../../server/floors/reports";
+import { MAX_FLOOR_FILE, MAX_FLOOR_REPORTS, ReportStore, SEEN_SAVE_MS, STALE_FLOOR_MS } from "../../server/floors/reports";
 import { Logger, setLogger } from "../../server/log";
 
 // Phase 6b Task 2: 보고서 저장소(스펙 5장·11장 g)와 PreToolUse·제출 짝짓기(B311)
@@ -107,29 +107,53 @@ describe(`ReportStore — 상한(층마다 ${MAX_FLOOR_REPORTS}개, 파일 ${MAX
   });
 });
 
+describe("ReportStore — sweep은 스냅샷마다 파일을 쓰지 않는다(B321 I1)", () => {
+  it("lastSeenAt은 메모리에서 고치고, 저장한 값보다 1시간 넘게 지났을 때만 쓴다", () => {
+    const s = store();
+    s.add("live", { id: rid(1), kind: "report", title: "t", body: "b" });
+    const saved = () => JSON.parse(readFileSync(file, "utf8")).floors.live.lastSeenAt as number;
+    const first = saved();
+    clock += 60_000;
+    s.sweep(new Set(["live"]));
+    clock += 60_000;
+    s.sweep(new Set(["live"]));
+    expect(saved()).toBe(first); // 2분 동안 두 번 빌드해도 그대로
+    clock += SEEN_SAVE_MS;
+    s.sweep(new Set(["live"]));
+    expect(saved()).toBe(clock);
+  });
+});
+
 describe("PairingBook — PreToolUse와 제출 짝짓기(B311)", () => {
   const pre = (agent: object, input: object) => ({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "mcp__plugin_claude-office_office-channel__ask_user", tool_input: input, ...agent });
   it("같은 입력의 PreToolUse를 찾아 그 주인을 돌려주고, 한 번만 쓴다. 키 순서는 상관없다", () => {
     const b = new PairingBook({ now: () => clock });
     b.onPreToolUse(pre({ agent_id: "atester-1a2b", agent_type: "tester" }, { question: "q", options: ["a"] }));
-    expect(b.ownerOf("ask_user", { options: ["a"], question: "q" })).toEqual({ name: "tester", sub: false });
-    expect(b.ownerOf("ask_user", { options: ["a"], question: "q" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { options: ["a"], question: "q" })).toEqual({ name: "tester", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { options: ["a"], question: "q" })).toEqual({ name: "team-lead", sub: false });
   });
 
   it("짝이 없거나, 창(10초)이 지났거나, 같은 입력이 다른 주인으로 둘 이상이면(모호) 팀리더", () => {
     const b = new PairingBook({ now: () => clock });
-    expect(b.ownerOf("ask_user", { question: "x" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { question: "x" })).toEqual({ name: "team-lead", sub: false });
     b.onPreToolUse(pre({ agent_id: "atester-1a2b", agent_type: "tester" }, { question: "late" }));
     clock += 10_001;
-    expect(b.ownerOf("ask_user", { question: "late" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { question: "late" })).toEqual({ name: "team-lead", sub: false });
     b.onPreToolUse(pre({ agent_id: "atester-1a2b", agent_type: "tester" }, { question: "same" }));
     b.onPreToolUse(pre({ agent_id: "areviewer-9f9f", agent_type: "reviewer" }, { question: "same" }));
-    expect(b.ownerOf("ask_user", { question: "same" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { question: "same" })).toEqual({ name: "team-lead", sub: false });
+  });
+
+  it("다른 층(대화 키)의 PreToolUse와는 짝이 맞지 않는다(B321 M2)", () => {
+    const b = new PairingBook({ now: () => clock });
+    b.onPreToolUse(pre({ agent_id: "atester-1a2b", agent_type: "tester" }, { question: "q" }));
+    expect(b.ownerOf("s2", "ask_user", { question: "q" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { question: "q" })).toEqual({ name: "tester", sub: false });
   });
 
   it("이 플러그인의 세 도구가 아닌 PreToolUse는 적지 않는다", () => {
     const b = new PairingBook({ now: () => clock });
     b.onPreToolUse({ ...pre({ agent_id: "atester-1a2b", agent_type: "tester" }, { question: "q" }), tool_name: "mcp__other__ask_user" });
-    expect(b.ownerOf("ask_user", { question: "q" })).toEqual({ name: "team-lead", sub: false });
+    expect(b.ownerOf("s1", "ask_user", { question: "q" })).toEqual({ name: "team-lead", sub: false });
   });
 });
