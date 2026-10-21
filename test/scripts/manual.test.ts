@@ -15,6 +15,7 @@ import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
 import { PLUGIN_TEXT } from "../../web/hud/PluginChip";
 import { DOCTOR_TEXT } from "../../server/diag/doctor";
+import { cookieName } from "../../server/auth";
 // Phase 6a 칩 문구(계획 Global Constraints)와 HUD 상수가 같아야 설명서가 화면과 맞는다
 const LEGACY_CHIP: string = PLUGIN_TEXT.legacy;
 
@@ -1017,8 +1018,17 @@ describe("사용설명서(docs/manual/index.html)", () => {
       "<code>127.0.0.1:14317</code>",
       "<strong>이 주소는 열쇠입니다. 남에게 보내지 마세요.</strong>",
     ]) expect(sec, s).toContain(s);
-    // 런처 url 명령·번호별 쿠키(B297)는 Task 4 커밋 뒤에 대조한다
-    expect(read).toBeTypeOf("function");
+    // 런처 url 명령(sh·ps1)과 stderr 경고 줄(Task 4)
+    const warn = "이 주소는 열쇠입니다. 남에게 보내지 마세요.";
+    expect(sec).toContain(`<pre class="out">http://127.0.0.1:4317/?k=…\n${warn}</pre>`);
+    const sh = read("packaging/claude-office.sh");
+    expect(sh).toContain("  url)");
+    expect(sh.indexOf(`echo "${warn}" >&2`)).toBeGreaterThan(sh.indexOf("  url)"));
+    expect(read("packaging/claude-office.ps1")).toContain('"url" {');
+    expect(read("packaging/claude-office.ps1")).toContain(warn);
+    // 번호마다 열쇠를 따로 기억(B297): 터널 14317과 로컬 4317의 쿠키 이름이 다르다
+    expect(cookieName("127.0.0.1:14317", 4317)).toBe("co_14317");
+    expect(cookieName("127.0.0.1:4317", 4317)).toBe("co_4317");
   });
 
   it("Phase 6a: 부록 C 설치본 확인 8항목(스펙 9장) + 원격 Linux 터널(B296)", () => {
