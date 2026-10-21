@@ -51,6 +51,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
       "8. 부록 A: 회사 관리자에게 전달할 설정",
       "9. 부록 B: 베타에서 알려진 제한",
       "10. 부록 C: beta.14 설치본 확인",
+      "11. 부록 D: 리드 기능 실제 세션 확인",
     ]);
   });
 
@@ -73,7 +74,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
   });
 
   it("알려진 제한과 B9 안내를 빠뜨리지 않는다", () => {
-    for (const s of ["확인되지 않은 개발자", "데이터 없음", "검증하지 못했습니다", "allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"]) expect(html).toContain(s);
+    for (const s of ["확인되지 않은 개발자", "-- 요금제가 알려 주지 않음", "검증하지 못했습니다", "allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"]) expect(html).toContain(s);
     expect(html).toContain("doctor가 모두 정상인데도 말풍선이 안 보이면, 회사 정책 때문일 수 있습니다");
     // Windows 실행 정책·내려받은 파일 차단(T8 리뷰, Ruling B16): 두 명령 모두 복사 상자로
     expect(html).toContain(`<code>Get-ChildItem -Recurse $HOME\\Downloads\\claude-office-${version} | Unblock-File</code></pre><button class="copy"`);
@@ -1051,6 +1052,62 @@ describe("사용설명서(docs/manual/index.html)", () => {
 });
 
 import { CH_TEXT } from "../../web/floors/ChannelDialogs";
+import { LEAD_MAX, LEAD_TEXT } from "../../web/office/leadText";
+import { BUILDING_TEXT } from "../../web/building/BuildingInfo";
+import { BAR_EMPTY } from "../../web/hud/remaining";
+import { CMD_TEXT } from "../../web/office/leadCmdText";
+describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
+  const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
+  const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+  const sec = (from: string, to: string) => prose.slice(prose.indexOf(from), prose.indexOf(to, prose.indexOf(from) + 1));
+  it("리드 절이 LEAD_TEXT 글자를 그대로 싣는다", () => {
+    const lead = sec('<h3 id="lead">', '<h3 id="building-info">');
+    expect(lead.length).toBeGreaterThan(100);
+    for (const t of [
+      LEAD_TEXT.notLaunched, LEAD_TEXT.failed, CH_TEXT.instructPaused, CH_TEXT.briefMemory, LEAD_TEXT.archiveNote, LEAD_TEXT.optionsHelp, LEAD_TEXT.memberNote("developer"),
+      LEAD_TEXT.held, LEAD_TEXT.answeredTerminal, LEAD_TEXT.replyOff, LEAD_TEXT.retireBody("designer"), LEAD_TEXT.chipAwait,
+      LEAD_TEXT.stamp.pending, LEAD_TEXT.stamp.approved, LEAD_TEXT.stamp.revise, LEAD_TEXT.stampHandoverPending,
+    ]) expect(lead, t).toContain(`<code>${t}</code>`);
+    for (const t of [LEAD_TEXT.reviseOpen, LEAD_TEXT.reviseSend, LEAD_TEXT.approve, LEAD_TEXT.rehire, LEAD_TEXT.options, LEAD_TEXT.free, LEAD_TEXT.send, LEAD_TEXT.retireGo]) expect(lead, t).toContain(`<strong>${t}</strong>`);
+    expect(lead).toContain(`${LEAD_MAX.toLocaleString("en-US")}자까지`);
+    // Task 4 화면 상수(web/office/leadCmdText.ts)
+    for (const c of [CMD_TEXT.sent, CMD_TEXT.overdue, CMD_TEXT.deskFolder(2), CMD_TEXT.folderPending(2), CMD_TEXT.statusOffRequested, CMD_TEXT.offSign, CMD_TEXT.statusLongIdle, CMD_TEXT.statusRetiring, CMD_TEXT.awaiting]) expect(lead, c).toContain(`<code>${c}</code>`);
+    for (const c of [CMD_TEXT.title, CMD_TEXT.report, CMD_TEXT.offduty, CMD_TEXT.onduty, CMD_TEXT.retire]) expect(lead, c).toContain(`<strong>${c}</strong>`);
+    for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(lead, w).not.toContain(w);
+  });
+  it("퇴근·오래 쉼·퇴사 숫자가 duty.ts와 같다(Task 5)", () => {
+    const duty = readFileSync(join(__dirname, "../../server/floors/duty.ts"), "utf8");
+    const n = (re: RegExp) => Number(re.exec(duty)![1].replace(/_/g, ""));
+    const lead = sec('<h3 id="lead">', '<h3 id="building-info">');
+    expect(n(/OFF_IDLE_MS = (\d+) \* 60_000/)).toBe(10);
+    expect(lead).toContain("요청 뒤 10분 동안 활동이 없으면");
+    expect(n(/LONG_IDLE_MS = ([\d_]+);/)).toBe(3_600_000);
+    expect(lead).toContain("마지막 활동이 1시간 넘은 팀원");
+    expect(n(/RETIRE_NUDGE_MS = (\d+) \* 60_000/)).toBe(5);
+    expect(lead).toContain("5분이 지나도 메모가 없으면");
+  });
+  it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
+    const b = sec('<h3 id="building-info">', "<h3>위쪽 막대의 숫자</h3>");
+    expect(b).toContain(`<code>${BUILDING_TEXT.sign("User")}</code>`);
+    expect(b).toContain(`<code>${BUILDING_TEXT.sign("Acme")}</code>`);
+    expect(b).toContain(`<strong>${BUILDING_TEXT.title}</strong>`);
+    // HUD PLAN 빈 글(Task 10 B322)이 설명서 5장·부록 B와 같다
+    expect(BAR_EMPTY.planNone).toBe(BUILDING_TEXT.planNone);
+    expect(prose.split(`"${BAR_EMPTY.planNone}"으로 보입니다`).length - 1).toBe(2);
+    expect(prose).not.toContain("데이터 없음");
+    for (const t of ["오늘 토큰", "캐시 읽기", "최근 5시간", "최근 7일"]) expect(Object.values(BUILDING_TEXT).some((v) => typeof v === "string" ? v.includes(t) : v.toString().includes(t)), t).toBe(true);
+  });
+  it("부록 D 실제 세션 확인 9항목(스펙 11장 f·12장 g)", () => {
+    const d = html.slice(html.indexOf('<h2 id="s11">'), html.indexOf("</main>"));
+    expect((d.slice(d.indexOf('<ol class="lead-checks">'), d.indexOf("</ol>")).match(/<li>/g) ?? []).length).toBe(9);
+    for (const s of ["새 팀원이 옛 기억을 모르는지", "팀원이 channel에 따로 연결하지 않는지", "Claude Code 2.1.304에서 확인했습니다"]) expect(d, s).toContain(s);
+    // 판별 인자 세 개가 channel 서버의 TEAMMATE_FLAGS와 같다(f02a6d0)
+    const flags = /const TEAMMATE_FLAGS = \[([^\]]*)\]/.exec(readFileSync(join(__dirname, "../../plugins/claude-office/channel/server.mjs"), "utf8"))![1].match(/"([^"]+)"/g)!.map((x) => x.slice(1, -1));
+    expect(flags).toEqual(["--agent-id", "--agent-name", "--team-name"]);
+    for (const f of flags) expect(d, f).toContain(`<code>${f}</code>`);
+    expect(html).toContain('<li><a href="#s11">부록 D: 리드 기능 실제 세션 확인</a></li>');
+  });
+});
 describe("Phase 4b 설명서(작업 지시와 새 층)", () => {
   it("화면 문구를 글자 그대로 싣는다", () => {
     const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
