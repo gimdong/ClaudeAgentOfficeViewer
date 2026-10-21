@@ -281,7 +281,8 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 
 <h3 id="lead-offduty">Off duty, back on duty, long rest</h3>
 <ul>
-  <li><strong>퇴근</strong> (off duty) in a teammate's panel asks the lead to end that teammate. Until it ends, <code>퇴근 요청함</code> ("off duty requested") shows under the name tag; when it ends, an empty chair with a <code>퇴근</code> sign is left. Unlike a desk that simply went off (an empty chair without a sign), the sign is placed only where you sent someone off duty.</li>
+  <li><strong>퇴근</strong> (off duty) in a teammate's panel asks the lead to end that teammate. Until then, <code>퇴근 요청함</code> ("off duty requested") shows under the name tag. When the teammate ends, or shows no activity for 10 minutes after the request, an empty chair with a <code>퇴근</code> sign is left. Unlike a desk that simply went off (an empty chair without a sign), the sign is placed only where you sent someone off duty.</li>
+  <li>The off-duty mark is remembered only while the dashboard is running. After the dashboard restarts, the desk shows an empty chair without a sign.</li>
   <li><strong>출근</strong> (back on duty) in an off-duty teammate's panel asks the lead to put the teammate with the same name back to work. If the conversation history remains, it carries on.</li>
   <li>A teammate whose last activity was more than an hour ago shows <code>오래 쉬는 중</code> ("resting for a long time"). This is only a mark; nobody is sent off duty automatically. Paused floors and teammates waiting on a decision are left out of this mark and of the off-duty check.</li>
   <li>The lead has no off-duty or let-go buttons (it is the floor's contact point).</li>
@@ -290,7 +291,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <h3 id="lead-retire">Letting a teammate go, and a new teammate</h3>
 <ol>
   <li><strong>퇴사</strong> (let go) in a teammate's panel opens a confirmation: <code>designer의 기억은 새 팀원에게 이어지지 않고, 인수인계 메모만 넘어갑니다. 대화 기록은 지우지 않습니다.</code> ("designer's memory does not carry over to the new teammate; only the handover note does. The conversation history is not deleted.") <strong>퇴사 진행</strong> (proceed) starts it.</li>
-  <li>The leaving teammate writes a handover note and sends it. Meanwhile the desk shows <code>인수인계 쓰는 중</code> ("writing the handover"). If no note arrives within 5 minutes, the dashboard asks the lead once to write it instead.</li>
+  <li>The leaving teammate writes a handover note and sends it. Meanwhile the desk shows <code>인수인계 쓰는 중</code> ("writing the handover"). If no note arrives within 5 minutes, the dashboard asks the lead once to write it instead. That request goes only while instructions are connected; on a paused floor it is kept and sent when you resume. The time the letting-go started is saved and survives a dashboard restart, but if there is no connection after the restart, the request is not sent. In that case, tell the lead yourself to write the handover instead.<!-- M1 (letting go across a restart) waits for team-lead's ruling; change together with the Korean manual --></li>
   <li>When the note arrives in the folder as <code>인수인계</code> (handover, stamp <code>시작 전</code>, "not started"), open it and press <strong>새 팀원 시작</strong> (start a new teammate). The lead ends the old teammate, then starts a new one with <strong>the same name</strong> and gives it the note as its first instruction. The new teammate has none of the old one's memory.</li>
   <li>The old teammate stays in the <strong>전임자</strong> (predecessors) drawer at the lower right of the floor (folded), with only its name and when it left (and when it started, if known). The conversation history is not deleted.</li>
 </ol>
