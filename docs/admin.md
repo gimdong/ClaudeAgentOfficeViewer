@@ -24,16 +24,23 @@ Without these settings the dashboard still shows sessions and token counts, but 
 
 On a computer shared by several accounts (any OS), make sure every user installs beta.14 or later from the archive: plugins from earlier versions send plain HTTP hooks that another account can read and answer while the user's dashboard is off (see the [README security model](../README.md#security-model)).
 
+### Lead features (experimental)
+
+Reports, approvals, chat questions and sending teammates off duty use the same channels feature as sending instructions, so they need `channelsEnabled` above. They work only on floors started from the dashboard.
+
+- While a floor is paused, the plugin's three channel tools are not blocked, because they only submit to the dashboard and do not move the session's work forward: `mcp__plugin_claude-office_office-channel__ask_user`, `mcp__plugin_claude-office_office-channel__submit_report`, `mcp__plugin_claude-office_office-channel__submit_handover`.
+- Reports and handover notes are stored in `~/.claude-office/reports.json`, and the building name in `~/.claude-office/building.json` (both readable only by the user's account). Nothing is written to `~/.claude`.
+
 ### What the PLAN bar shows
 
-The PLAN bar in the top bar uses the rate limits that Claude Code passes to the status line. The release does not install the status-line tap yet, so every account currently shows `-- 데이터 없음` (no data); the table shows what each account can provide once it is supported.
+The PLAN bar in the top bar uses the rate limits that Claude Code passes to the status line. The release does not install the status-line tap, so every account shows `-- 요금제가 알려 주지 않음` ("the plan does not report it"). The table shows what each account can provide when the tap is installed (for example, in a source build with `npm run setup:statusline`).
 
 | Account | 5-hour / weekly bar | Spend-limit bar | Budget |
 |---|---|---|---|
 | Pro / Max | Shown | — | Works |
 | Organization with a gateway spend limit | — | Shown | Works |
-| Enterprise seat | `-- 데이터 없음` (no data) | — | Works |
-| API key | `-- 데이터 없음` (no data) | — | Works |
+| Enterprise seat | `-- 요금제가 알려 주지 않음` ("the plan does not report it") | — | Works |
+| API key | `-- 요금제가 알려 주지 않음` ("the plan does not report it") | — | Works |
 
 Per-floor token budgets work on every account because they are counted from local transcripts.
 
@@ -59,15 +66,22 @@ Claude Agent Office는 그 컴퓨터 안에서만 도는 대시보드입니다. 
 
 여러 계정이 쓰는 컴퓨터(운영체제와 무관)에서는 모든 사용자가 압축 파일로 beta.14 이상을 설치했는지 확인하세요. 이전 버전의 플러그인은 암호화하지 않은 http hook을 보내, 사용자의 대시보드가 꺼진 동안 다른 계정이 읽고 대신 답할 수 있습니다([README 보안](../README.ko.md#보안) 참고).
 
+### 리드 기능(실험 기능)
+
+보고서·결재·대화 질문·팀원 퇴근은 작업 지시와 같은 channel 기능을 쓰므로 위의 `channelsEnabled`가 필요합니다. 대시보드가 띄운 층에서만 동작합니다.
+
+- 층이 멈춘(휴업) 동안에도 플러그인의 channel 도구 세 개는 막지 않습니다. 대시보드로 제출만 하고 세션의 일을 진행시키지 않기 때문입니다: `mcp__plugin_claude-office_office-channel__ask_user`, `mcp__plugin_claude-office_office-channel__submit_report`, `mcp__plugin_claude-office_office-channel__submit_handover`.
+- 보고서와 인수인계 메모는 `~/.claude-office/reports.json`, 빌딩 이름은 `~/.claude-office/building.json`에 저장합니다(둘 다 그 사용자 계정만 읽을 수 있음). `~/.claude`에는 쓰지 않습니다.
+
 ### PLAN 바에 보이는 것
 
-위쪽 막대의 PLAN 바는 Claude Code가 상태줄에 넘겨 주는 사용 한도를 씁니다. 배포판은 아직 상태줄 탭을 설치하지 않으므로 지금은 모든 계정에서 `-- 데이터 없음`으로 보입니다. 아래 표는 지원된 뒤 계정마다 보여 줄 수 있는 것입니다.
+위쪽 막대의 PLAN 바는 Claude Code가 상태줄에 넘겨 주는 사용 한도를 씁니다. 배포판은 상태줄 탭을 설치하지 않으므로 모든 계정에서 `-- 요금제가 알려 주지 않음`으로 보입니다. 아래 표는 상태줄 탭을 설치했을 때(예: 저장소에서 `npm run setup:statusline`) 계정마다 보여 줄 수 있는 것입니다.
 
 | 계정 | 5시간·주간 바 | 지출 한도 바 | 예산 |
 |---|---|---|---|
 | Pro / Max | 보임 | — | 동작 |
 | gateway 지출 한도 조직 | — | 보임 | 동작 |
-| 엔터프라이즈 좌석 | -- 데이터 없음 | — | 동작 |
-| API 키 | -- 데이터 없음 | — | 동작 |
+| 엔터프라이즈 좌석 | -- 요금제가 알려 주지 않음 | — | 동작 |
+| API 키 | -- 요금제가 알려 주지 않음 | — | 동작 |
 
 층별 토큰 예산은 이 컴퓨터의 대화 기록으로 세므로 모든 계정에서 동작합니다.

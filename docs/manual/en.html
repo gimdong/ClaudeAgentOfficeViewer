@@ -73,7 +73,9 @@
     <li><a href="#install">Install</a></li>
     <li><a href="#start">Start and stop</a></li>
     <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#lead">Working with the lead (experimental)</a></li>
     <li><a href="#checks">Appendix: checking an installed copy</a></li>
+    <li><a href="#lead-checks">Appendix: checking lead features in a real session</a></li>
   </ol>
 </nav>
 
@@ -249,7 +251,59 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <pre><code>claude-office uninstall</code></pre>
 <p>It asks two questions: whether to remove the Claude Code plugin, and whether to delete logs and diagnostics files (default: keep). Answer <kbd>n</kbd> to the second if you still need to send a diagnostics file. <code>claude-office uninstall --yes</code> answers yes to both.</p>
 
-<h2 id="checks">4. Appendix: checking an installed copy (beta.14)</h2>
+<h2 id="lead">4. Working with the lead (experimental)</h2>
+<div class="box caution"><strong>Only on floors where "작업 지시" (sending instructions) is on, that is, floors with a channel connection.</strong> These features use the same experimental channels feature as sending instructions and starting a new floor. On a floor you opened yourself in a terminal the buttons are dimmed, with <code>작업 지시 켜기(옮겨 열기)로 연결하면 쓸 수 있습니다</code> ("Available after you connect it with 작업 지시 켜기 (reopen)") below them.</div>
+<p>Every floor has one <strong>lead</strong> (리드, the team lead), the contact point between you and that floor's session. Reports, approvals, answers to chat questions, and sending a teammate off duty or letting one go all go through the lead. The dashboard sends the lead instructions in fixed templates; what you type (revision notes, answers) goes only into a fixed place in that template. Text the lead sends back (reports, questions) is never reused as an instruction. The buttons are in the <strong>지시</strong> (instructions) section at the top of the agent panel, which opens when you click a desk.</p>
+<ul>
+  <li>After sending, <code>리드에게 보냈습니다</code> ("Sent to the lead") shows below the button for a moment. On a paused floor it is not sent right away but kept (<code>휴업 중이라 보관했다가, 재개할 때 확인하고 보냅니다.</code>, "Kept while paused; you confirm and send it when you resume"). Kept instructions appear in the check window before resuming and are sent only when you press <strong>보내고 재개</strong> (send and resume). If sending fails: <code>처리하지 못했습니다. 서버 연결을 확인하고 다시 시도해 주세요.</code> ("Could not process it. Check the server connection and try again.")</li>
+</ul>
+
+<h3 id="lead-report">Reports and approval (the folder)</h3>
+<ul>
+  <li><strong>보고 요청</strong> (request a report) in the lead's panel asks the lead to write a report and send it to the dashboard. When reports arrive, a small folder appears on the lead's desk, and if any wait for your decision, a count such as <code>결재 2</code> ("2 to approve") shows under the name tag.</li>
+  <li><strong>서류철</strong> (folder; in the lead's panel as <code>서류철 · 대기 2</code>, "2 waiting") lists received reports, newest first. Click one to open it on a sheet of paper. Report text is shown exactly as written, never formatted as Markdown or HTML (symbols such as <code>##</code> and <code>**</code> appear as they are).</li>
+  <li>A waiting report has <strong>승인</strong> (approve) and <strong>수정 사항 적기</strong> (write revisions). Write up to 4,000 characters and send them with <strong>수정 요청 보내기</strong> (send revision request). The stamps are <code>대기</code> (waiting), <code>승인됨</code> (approved) and <code>수정 요청</code> (revision requested).</li>
+  <li>If no report arrives more than 10 minutes after a request, the lead's panel shows <code>보고 요청 뒤 10분 넘게 답이 없습니다</code> ("No answer for more than 10 minutes after the request"). The lead may not have answered in the expected way; check the lead in its terminal.</li>
+  <li>If waiting reports pile up, <code>오래된 대기 보고서는 보관함으로 옮겨집니다</code> ("Old waiting reports are moved to the archive"). Open <strong>보관함</strong> (archive) at the bottom of the list to see them; you can approve them there too.</li>
+  <li>On a floor without instructions turned on, you can still open and read the folder; only the approval buttons are dimmed.</li>
+  <li>Reports are kept only in <code>reports.json</code> in the install folder (readable only by your account). Nothing is written to <code>~/.claude</code>.</li>
+</ul>
+
+<h3 id="lead-question">Answering chat questions</h3>
+<ul>
+  <li><strong>대화 질문</strong> (chat question): when the lead or a teammate needs your decision and sends a question to the dashboard (<code>ask_user</code>), the character at that desk raises a hand with a yellow ?, and it counts in <strong>결정 대기</strong> (decisions waiting) in the top bar. Click it to see the question, <strong>제안된 선택지</strong> (suggested choices) and a <strong>직접 답하기</strong> (answer in your own words) box. Clicking a choice does not send it; pick one, then press <strong>보내기</strong> (send). Only the number you picked and the words you typed are sent (<code>질문한 쪽이 쓴 선택지입니다. 고르면 번호만 보냅니다</code>, "These choices were written by the one asking. Picking one sends only its number").</li>
+  <li>A teammate's question appears at that teammate's desk, and the answer goes to the teammate through the lead (<code>developer의 질문입니다. 답은 리드를 거쳐 보냅니다</code>, "A question from developer. The answer goes through the lead").</li>
+  <li><strong>답을 기다립니다</strong> (waiting for your answer): if the lead asks in plain conversation text instead of the question tool and stops, the lead's desk shows a light-blue bubble (<code>· · ·</code>) and <code>답을 기다립니다</code>. No hand is raised and it does not count as a decision. Click it to see the lead's last message and the choices taken from its numbered list, and answer the same way. A long message is shortened at the front and starts with <code>…</code>. This mark is a guess from the shape of the text: it can appear when nothing was asked, or miss a question.</li>
+  <li>If you answer in the terminal first, the mark disappears and an open answer window shows <code>이미 터미널에서 답했습니다</code> ("Already answered in the terminal"). The mark clears only when the lead itself starts its next step or you answer from the dashboard; teammates or subagents moving does not clear it.</li>
+  <li>An answer given on a paused floor is kept (<code>보관한 답이 있습니다. 재개할 때 확인하고 보냅니다</code>, "An answer is kept. It is sent after you confirm when the floor resumes"). It is sent only when you press <strong>보내고 재개</strong> (send and resume) in the check window before resuming; then the mark disappears. If you delete that answer in the check window, the question can be answered again. <code>보관한 지시는 대시보드가 켜져 있는 동안만 남습니다.</code> ("Kept instructions remain only while the dashboard is running.") If the dashboard restarts, kept answers and their question marks disappear too.</li>
+  <li>On a floor without instructions turned on, you can only read the question (<code>터미널에서 답하거나, 작업 지시 켜기(옮겨 열기)로 연결하세요</code>, "Answer in the terminal, or connect it with 작업 지시 켜기 (reopen)").</li>
+</ul>
+
+<h3 id="lead-offduty">Off duty, back on duty, long rest</h3>
+<ul>
+  <li><strong>퇴근</strong> (off duty) in a teammate's panel asks the lead to end that teammate. Until it ends, <code>퇴근 요청함</code> ("off duty requested") shows under the name tag; when it ends, an empty chair with a <code>퇴근</code> sign is left. Unlike a desk that simply went off (an empty chair without a sign), the sign is placed only where you sent someone off duty.</li>
+  <li><strong>출근</strong> (back on duty) in an off-duty teammate's panel asks the lead to put the teammate with the same name back to work. If the conversation history remains, it carries on.</li>
+  <li>A teammate whose last activity was more than an hour ago shows <code>오래 쉬는 중</code> ("resting for a long time"). This is only a mark; nobody is sent off duty automatically. Paused floors and teammates waiting on a decision are left out of this mark and of the off-duty check.</li>
+  <li>The lead has no off-duty or let-go buttons (it is the floor's contact point).</li>
+</ul>
+
+<h3 id="lead-retire">Letting a teammate go, and a new teammate</h3>
+<ol>
+  <li><strong>퇴사</strong> (let go) in a teammate's panel opens a confirmation: <code>designer의 기억은 새 팀원에게 이어지지 않고, 인수인계 메모만 넘어갑니다. 대화 기록은 지우지 않습니다.</code> ("designer's memory does not carry over to the new teammate; only the handover note does. The conversation history is not deleted.") <strong>퇴사 진행</strong> (proceed) starts it.</li>
+  <li>The leaving teammate writes a handover note and sends it. Meanwhile the desk shows <code>인수인계 쓰는 중</code> ("writing the handover"). If no note arrives within 5 minutes, the dashboard asks the lead once to write it instead.</li>
+  <li>When the note arrives in the folder as <code>인수인계</code> (handover, stamp <code>시작 전</code>, "not started"), open it and press <strong>새 팀원 시작</strong> (start a new teammate). The lead ends the old teammate, then starts a new one with <strong>the same name</strong> and gives it the note as its first instruction. The new teammate has none of the old one's memory.</li>
+  <li>The old teammate stays in the <strong>전임자</strong> (predecessors) drawer at the lower right of the floor (folded), with only its name and when it left (and when it started, if known). The conversation history is not deleted.</li>
+</ol>
+
+<h3 id="building-info">Building name and building info</h3>
+<p>The sign on the roof starts as <code>User의 회사</code> ("User's company"). Click it to open <strong>빌딩 정보</strong> (building info).</p>
+<ul>
+  <li><strong>이름</strong> (name): change it (1–40 characters) and press <strong>저장</strong> (save) to change the sign (for example, saving <code>Acme</code> shows <code>Acme의 회사</code>). This name is a dashboard setting, unrelated to your computer account name. It is saved in <code>building.json</code> in the install folder (readable only by your account).</li>
+  <li><strong>Information</strong>: the same numbers as the top bar (today's tokens and cache reads, tokens in the last 5 hours and 7 days, 5H · WEEK · PLAN remaining), the number of floors and teammates, and the server and screen versions, in one place.</li>
+  <!-- W33 (the reason line when PLAN remaining is missing) waits for the user's decision -->
+</ul>
+
+<h2 id="checks">5. Appendix: checking an installed copy (beta.14)</h2>
 <p>These checks confirm, in a real Claude Code session, what the tests could not. Install beta.14 from the archive, start the dashboard, and open a new Claude Code session.</p>
 <ol>
   <li><strong>Permission policy deny.</strong> Block a tool with a permission policy in the dashboard, then ask Claude to use it. It is blocked.</li>
@@ -263,6 +317,21 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
   <li><strong>Cancelled hook.</strong> Start Claude Code with <code>claude --debug</code>, raise a permission request and answer it in the terminal first. The log shows the hook ended as <code>cancelled</code>, and the raised hand closes.</li>
 </ol>
 <p>If any check fails, send the diagnostics file from <code>claude-office diag</code> to whoever supports you.</p>
+
+<h2 id="lead-checks">6. Appendix: checking lead features in a real session</h2>
+<p>The lead features (<a href="#lead">chapter 4</a>) depend on the lead following the expected steps, so they can be checked only in a real Claude Code session. Turn on the experimental features, start an agent-team floor from the dashboard, and go through these in order. If something differs, send a diagnostics file (<code>claude-office diag</code>) with what you saw.</p>
+<ol>
+  <li><strong>Reports arrive.</strong> Press <strong>보고 요청</strong>. Within a few minutes a report arrives in the folder, and the folder appears on the lead's desk.</li>
+  <li><strong>Approvals reach the lead.</strong> Approve one report and send revisions for another. The lead receives the approval and the revisions and acts on them.</li>
+  <li><strong>The lead uses the question tool.</strong> Give the lead work that needs your decision. The lead's desk raises a hand with a yellow ?, and the lead continues as you answered on the dashboard.</li>
+  <li><strong>Asking in plain text.</strong> If the lead asks only in conversation text and stops, <code>답을 기다립니다</code> appears. Answering in the terminal clears it; teammates moving does not.</li>
+  <li><strong>A teammate's question.</strong> Have a teammate send a question. Its desk raises a hand, and the answer reaches the teammate through the lead.</li>
+  <li><strong>Answering on a paused floor.</strong> Pause a floor with a question showing and answer it. The answer is kept and reaches the lead when you press <strong>보내고 재개</strong>.</li>
+  <li><strong>Off duty and back.</strong> Send a teammate off duty, then back on duty. Off duty leaves a <code>퇴근</code> sign; back on duty, the same teammate carries on.</li>
+  <li><strong>The new teammate does not remember.</strong> Let a teammate go and start a new one. A new teammate with the same name sits down and knows nothing of the old conversation beyond the handover note.</li>
+  <li><strong>Teammates do not connect to the channel themselves.</strong> While several teammates work, send the lead instructions and a report request. Instructions always reach the lead, and the lead's connection stays up ("작업 지시" stays on in the floor header).
+    <p>A teammate is recognized by three internal arguments Claude Code adds when it starts a teammate process (<code>--agent-id</code>, <code>--agent-name</code>, <code>--team-name</code>, not in the official documentation): all three must be present. This was checked with Claude Code 2.1.304. Check this item again after updating Claude Code. If the argument names change, this check turns off and only the rule that the dashboard refuses a second connection on the same floor remains. Then, after the dashboard restarts, the lead must connect first for instructions to reach it.</p></li>
+</ol>
 </main>
 </body>
 </html>

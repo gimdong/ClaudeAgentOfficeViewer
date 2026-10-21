@@ -33,7 +33,7 @@ Claude 데이터 폴더는 `--claude-home` > `CLAUDE_HOME` 환경변수 > `CLAUD
 
 `npm run setup:statusline`을 실행하면 statusline 입력을 `~/.claude/claude-office/limits.json`에 복사하도록 설정합니다(설정은 백업).
 기존에 직접 만든 `command` 타입 statusline이 있었다면 그 모양이 그대로 유지됩니다. statusline을 따로 설정한 적이 없어 Claude Code 기본 상태줄을 쓰고 있었다면, 설치 후에는 상태줄이 빈 줄로 보일 수 있습니다(한도 수집 자체에는 영향 없음) — 원래 statusline 설정이 없어 다시 실행할 명령이 없기 때문입니다.
-되돌리기: `npm run remove:statusline`. Claude Code가 한도 정보를 넘겨주지 않는 버전에서는 PLAN 바가 `-- 데이터 없음`으로 표시됩니다.
+되돌리기: `npm run remove:statusline`. Claude Code가 한도 정보를 넘겨주지 않는 버전에서는 PLAN 바가 `-- 요금제가 알려 주지 않음`으로 표시됩니다.
 
 ## 실시간 활동 표시 (플러그인, 선택)
 
@@ -51,6 +51,8 @@ Claude 데이터 폴더는 `--claude-home` > `CLAUDE_HOME` 환경변수 > `CLAUD
 
 조직이 `allowedHttpHookUrls`를 설정했다면 `http://127.0.0.1:4317/*`은 사용자가 이전 버전의 플러그인(http hook)을 쓰는 동안만 넣으면 됩니다. beta.14 플러그인은 command hook을 써서 필요 없습니다. `allowManagedHooksOnly`가 켜져 있으면 관리자가 플러그인을 강제 활성화해야 합니다.
 
+**리드와 일하기(실험 기능, channel이 연결된 층에서만).** 층의 리드에게 보고를 요청해 승인하거나 수정 사항을 보내고, 리드·팀원의 질문에 대시보드에서 답하고, 팀원을 퇴근시키거나 인수인계 메모와 함께 퇴사시킬 수 있습니다. 터미널에서 직접 연 층에서는 이 버튼이 흐리게 보입니다. 자세한 것은 [설명서 5장 "리드와 일하기"](docs/manual/index.html#lead)에 있습니다.
+
 ### 개발용 플러그인
 
 사용자의 대시보드(4317)와 겹치지 않게 개발 서버는 다른 포트에서 띄우고, 포트만 바꾼 플러그인 복사본을 실험 세션에 로드합니다. 사용자 설정(`enabledPlugins`)은 바꾸지 않습니다.
@@ -63,7 +65,7 @@ claude --plugin-dir /tmp/claude-office-dev-plugin
 
 ### PLAN 바와 요금제
 
-PLAN 바는 statusline이 넘겨 주는 `rate_limits`의 5시간·주간·지출 한도(`spend_limit`) 가운데 가장 많이 쓴 창을 보여줍니다. Pro/Max 구독이나 지출 한도가 있는 gateway 뒤에서만 값이 오고, 그 밖에는 `-- 데이터 없음`입니다.
+PLAN 바는 statusline이 넘겨 주는 `rate_limits`의 5시간·주간·지출 한도(`spend_limit`) 가운데 가장 많이 쓴 창을 보여줍니다. Pro/Max 구독이나 지출 한도가 있는 gateway 뒤에서만 값이 오고, 그 밖에는 `-- 요금제가 알려 주지 않음`입니다.
 PLAN 바 값은 `npm run setup:statusline`으로 statusline tap을 설치해야 들어옵니다(설치는 사용자가 직접 결정합니다).
 
 ## 보안
