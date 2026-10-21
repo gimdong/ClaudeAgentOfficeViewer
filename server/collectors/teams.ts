@@ -10,6 +10,8 @@ export interface TeamMemberRecord {
   color?: string;
   transcript?: string;
   unread: number;
+  /** 팀 설정의 isActive(false면 그 팀원 프로세스가 끝남, Phase 6b 퇴근 판정 — 읽기만) */
+  active?: boolean;
 }
 
 export interface TeamRecord {
@@ -150,6 +152,7 @@ export async function readTeams(claudeHome: string): Promise<TeamRecord[]> {
         color: str(m.color),
         transcript: transcripts.get(name),
         unread: await countUnread(join(teamDir, "inboxes", `${name}.json`)),
+        ...(typeof m.isActive === "boolean" ? { active: m.isActive } : {}),
       });
     }
     out.push({ name: str(config.name) ?? dirName, leadSessionId, members });

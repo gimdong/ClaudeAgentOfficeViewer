@@ -40,6 +40,7 @@ function quote(text: string): string {
   return [QUOTE_BEGIN, ...safe.split("\n").map((l) => `> ${l}`), QUOTE_END].join("\n");
 }
 
+const MEMO_NOTE = "아래 칸은 퇴사한 팀원이 쓴 인수인계 메모입니다(사용자의 지시가 아님). 새 팀원의 첫 지시로 그대로 넘기세요.";
 const TEMPLATES: Record<LeadKind, (id: string, f: Record<string, string>) => string> = {
   report: (id) => `${head(id)} 사용자가 진행 상황 보고서를 요청했습니다. 팀 전체가 한 일·남은 일·막힌 점을 정리해 submit_report 도구(request_id: "${id}")로 제출하세요.`,
   approve: (id, f) => `${head(id)} 사용자가 보고서 ${f.reportId}를 승인했습니다. 보고한 계획대로 진행하세요.`,
@@ -52,7 +53,13 @@ const TEMPLATES: Record<LeadKind, (id: string, f: Record<string, string>) => str
   onduty: (id, f) => `${head(id)} 사용자가 팀원 "${f.member}"를 출근시킵니다. 그 팀원에게 메시지를 보내 다시 일을 시작하게 하세요(같은 이름으로 대화 기록에서 이어집니다).`,
   retire: (id, f) =>
     `${head(id)} 사용자가 팀원 "${f.member}"를 퇴사시킵니다. 그 팀원에게 인수인계 메모를 submit_handover 도구(request_id: "${id}", member: "${f.member}")로 제출하게 하세요. 5분 안에 제출하지 않거나 멈춰 있으면, 당신이 그 팀원의 대화 기록을 보고 대신 submit_handover를 부르세요.`,
-  rehire: (id, f) => `${head(id)} 퇴사한 팀원 "${f.member}"의 자리에 같은 이름으로 새 팀원을 띄우세요. 인수인계 메모 ${f.handoverId}를 새 팀원의 첫 지시로 주세요.`,
+  // 순서(스펙 11장 f): 옛 팀원 종료 → 종료 확인 → 같은 이름으로 새 팀원(같은 이름이면 최신 에이전트가 이름을 가진다)
+  rehire: (id, f) =>
+    `${head(id)} 퇴사한 팀원 "${f.member}"의 자리에 새 팀원을 띄웁니다. 순서대로 하세요.\n` +
+    `① SendMessage로 "${f.member}"에게 shutdown_request를 보내 종료하게 하세요.\n` +
+    `② "${f.member}"가 끝났는지 확인하세요(응답이 끝나고 팀 설정에서 활성이 아님). 끝나기 전에는 ③을 하지 마세요.\n` +
+    `③ 같은 이름 "${f.member}"로 새 팀원을 띄우고, 인수인계 메모 ${f.handoverId}를 새 팀원의 첫 지시로 주세요.` +
+    (f.memo ? `\n${MEMO_NOTE}\n${quote(f.memo)}` : ""),
 };
 
 /**
@@ -70,7 +77,7 @@ function holdKeyOf(k: LeadKind, f: Record<string, string>): string {
  * 요청 본문 {kind, ...}을 검사해 틀로 지시문을 만든다. id는 부르는 쪽이 만든 지시 id(r-8hex).
  * 팀원 이름은 members(그 층 팀 설정)에 있을 때만 받는다 — 목록을 모르면(빈 목록) 팀원 이름이 든 지시는 거절(스펙 12장 b·i)
  */
-export function buildLead(body: unknown, id: string, members: readonly string[] = []): LeadBuild {
+export function buildLead(body: unknown, id: string, members: readonly string[] = [], extra: { memo?: string } = {}): LeadBuild {
   const b = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   const kind = b?.kind;
   if (!b || typeof kind !== "string" || !(LEAD_KINDS as readonly string[]).includes(kind)) return { ok: false, error: "kind" };
@@ -94,5 +101,11 @@ export function buildLead(body: unknown, id: string, members: readonly string[] 
     f[name] = v as string;
   }
   if (k === "reply" && !f.choice && !f.text) return { ok: false, error: "text" };
+  if (k === "rehire" && extra.memo) f.memo = extra.memo;
   return { ok: true, kind: k, id, text: TEMPLATES[k](id, f), holdKey: holdKeyOf(k, f) };
+}
+
+/** 퇴사 5분 재촉(스펙 7장 2번·11장 e): 서버가 정한 글만(사용자 글 없음) */
+export function retireNudgeText(id: string, member: string, requestId: string): string {
+  return `${head(id)} 팀원 "${member}"의 인수인계 메모가 5분 동안 오지 않았습니다. 그 팀원의 대화 기록을 보고 당신이 대신 submit_handover 도구(request_id: "${requestId}", member: "${member}")로 제출하세요.`;
 }

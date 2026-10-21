@@ -121,6 +121,12 @@ export interface Member {
   decision?: Decision;
   /** 이 책상의 대화 질문(Phase 6b) — 답을 기다립니다 / ask_user */
   awaitingReply?: ChatQuestionView;
+  /** 퇴근(Phase 6b 스펙 6장): requested = 퇴근 요청을 보냄, off = 퇴근함(빈 의자 + 팻말). 팀원만 */
+  duty?: "requested" | "off";
+  /** 마지막 활동이 1시간 넘음(표시만, 휴업 층·손든 팀원 제외) */
+  longIdle?: true;
+  /** 퇴사 진행 중(스펙 7장) — 인수인계를 기다림 */
+  retiring?: { since: string };
   /** 이 구성원에게 걸린 권한 정책(Phase 3 스펙 7.4). 규칙이 없으면 싣지 않는다 */
   policy?: MemberPolicy;
   /** 30초 안의 마지막 정책 deny(Ruling B85) */
@@ -155,6 +161,8 @@ export interface SessionView {
   endedAt?: string;
   context: ContextInfo | null;
   members: Member[];
+  /** 퇴사한 팀원(스펙 7장 4번) — 이름·퇴사 시각만 */
+  predecessors?: Array<{ name: string; retiredAt: string }>;
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
   budget?: BudgetView;
   /** 일하는 동안의 일반 서브에이전트(임시 책상). 살아 있는 층에서 하나 이상일 때만 */

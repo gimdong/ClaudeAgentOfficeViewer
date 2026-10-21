@@ -23,9 +23,13 @@ function narrow(file: string): void {
 }
 
 export type ReportKind = "report" | "handover";
-export type ReportState = "pending" | "approved" | "revise";
+/** started: 인수인계 메모로 새 팀원을 시작함(rehire) */
+export type ReportState = "pending" | "approved" | "revise" | "started";
 export interface Report { id: string; kind: ReportKind; title?: string; member?: string; body: string; at: number; state: ReportState }
-interface FloorData { lastSeenAt: number; reports: Report[]; archived: Report[] }
+/** 퇴사 진행(스펙 7장·11장 e): 시작 시각을 남겨 다시 켜도 이어 간다. nudged: 5분 뒤 "대신 써 달라"를 보냈음 */
+export interface Retire { member: string; requestId: string; startedAt: number; nudged?: boolean }
+export interface Predecessor { name: string; retiredAt: number }
+interface FloorData { lastSeenAt: number; reports: Report[]; archived: Report[]; retires?: Retire[]; predecessors?: Predecessor[] }
 
 /**
  * 보고서·인수인계 저장소(Phase 6b 스펙 5장·11장 g). `<PREFIX>/reports.json`(0600, 임시 파일 뒤 rename으로 원자 쓰기)에만 둔다.
@@ -114,6 +118,36 @@ export class ReportStore {
   }
   archived(floor: string): Report[] {
     return [...(this.data.floors[floor]?.archived ?? [])].reverse();
+  }
+  find(floor: string, id: string): Report | undefined {
+    return this.data.floors[floor]?.reports.find((x) => x.id === id) ?? this.data.floors[floor]?.archived.find((x) => x.id === id);
+  }
+  /** 퇴사 시작(그 팀원의 진행 중인 것은 새것으로) */
+  startRetire(floor: string, member: string, requestId: string): void {
+    const f = this.floor(floor);
+    f.retires = [...(f.retires ?? []).filter((r) => r.member !== member), { member, requestId, startedAt: this.now() }];
+    this.save();
+  }
+  retires(floor?: string): Array<Retire & { floor: string }> {
+    return Object.entries(this.data.floors)
+      .filter(([id]) => floor === undefined || id === floor)
+      .flatMap(([id, f]) => (f.retires ?? []).map((r) => ({ ...r, floor: id })));
+  }
+  markNudged(floor: string, member: string): void {
+    const r = this.data.floors[floor]?.retires?.find((x) => x.member === member);
+    if (!r) return;
+    r.nudged = true;
+    this.save();
+  }
+  /** 새 팀원 시작(rehire를 보냄): 퇴사를 끝내고 전임자로 남긴다(이름·퇴사 시각만) */
+  finishRetire(floor: string, member: string): void {
+    const f = this.floor(floor);
+    f.retires = (f.retires ?? []).filter((r) => r.member !== member);
+    f.predecessors = [...(f.predecessors ?? []), { name: member, retiredAt: this.now() }].slice(-20);
+    this.save();
+  }
+  predecessors(floor: string): Predecessor[] {
+    return [...(this.data.floors[floor]?.predecessors ?? [])];
   }
   setState(floor: string, id: string, state: ReportState): boolean {
     const r = this.data.floors[floor]?.reports.find((x) => x.id === id);

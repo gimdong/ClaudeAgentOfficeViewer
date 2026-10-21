@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 퇴근·오래 쉼·퇴사(Phase 6b) — 층 id로 */
+  duty?: { view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string }): import("./floors/duty").DutyView; predecessors(floor: string): Array<{ name: string; retiredAt: number }> };
   /** 대화 질문 판(Phase 6b) — 대화 키로 */
   questions?: { list(conv: string): import("../src/shared/types").ChatQuestionView[] };
   /** 마지막 hook이 보낸 플러그인 버전(Phase 5 §3). null이면 아직 받지 않음 */
@@ -359,6 +361,17 @@ export class SnapshotBuilder {
       const raise = q.source === "ask" && q.state === "open" && s.alive && !m.decision;
       members[i] = { ...m, awaitingReply: q, ...(raise ? { decision: { kind: "chat" as const, since: q.since ?? iso(now), summary: q.text.slice(0, 200), id: q.id }, state: "decision" as const } : {}) };
     }
+    // 퇴근·오래 쉼·퇴사(Phase 6b 스펙 6·7장): 팀원만, 휴업 층·손든 팀원은 판정에서 뺀다(11장 d)
+    const duty = this.opts.duty;
+    const paused = this.opts.floors?.view(s.sessionId)?.paused ?? false;
+    if (duty && s.alive) {
+      for (let i = 1; i < members.length; i++) {
+        const m = members[i];
+        const v = duty.view(s.sessionId, m.name, { paused, decision: !!m.decision, active: team?.members.find((x) => x.name === m.name)?.active, lastActivityAt: m.lastActivityAt });
+        if (v.duty || v.longIdle || v.retiring) members[i] = { ...m, ...v };
+      }
+    }
+    const predecessors = duty?.predecessors(s.sessionId).map((p) => ({ name: p.name, retiredAt: iso(p.retiredAt) })) ?? [];
 
     return {
       id: s.sessionId,
@@ -374,6 +387,7 @@ export class SnapshotBuilder {
       ...(stale ? { stale: true } : {}),
       context: contextInfo(last, this.opts.config.contextWindows),
       members,
+      ...(predecessors.length ? { predecessors } : {}),
       ...(await this.subagentField(s, leadFile, now)),
       ...this.channelField(s),
       ...this.reopenField(s),

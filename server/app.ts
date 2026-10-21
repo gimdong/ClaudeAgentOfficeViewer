@@ -21,7 +21,8 @@ import { HOOK_V2, openRequest, sealResponse, type HookKeys, type ReplayWindow } 
 import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
-import { leadInstruct } from "./floors/lead";
+import { leadInstruct, type LeadSent } from "./floors/lead";
+import { DutyBoard } from "./floors/duty";
 import { PairingBook } from "./floors/pairing";
 import { ReportStore } from "./floors/reports";
 import { handleSubmit } from "./floors/submit";
@@ -147,6 +148,8 @@ export function createApp(
       pairing?: PairingBook;
       /** 대화 질문 판(Phase 6b 스펙 4장). 없으면 새로(Stop 대체 경로는 꺼짐) */
       questions?: QuestionBoard;
+      /** 퇴근·퇴사(Phase 6b 스펙 6·7장). 없으면 새로 */
+      duty?: DutyBoard;
     };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
@@ -169,7 +172,12 @@ export function createApp(
   const reports = opts.channels?.reports ?? new ReportStore();
   const pairing = opts.channels?.pairing ?? new PairingBook();
   const questions = opts.channels?.questions ?? new QuestionBoard();
-  opts.channels?.hub.onHeldGone((key, sent) => questions.heldGone(key, sent));
+  const duty = opts.channels?.duty ?? new DutyBoard({ reports });
+  opts.channels?.hub.onHeldGone((key, sent, meta) => {
+    questions.heldGone(key, sent);
+    // 보관한 팀리더 지시가 실제로 나갔을 때 퇴근·퇴사를 기록한다(11장 a)
+    if (sent && meta && typeof meta === "object" && "kind" in meta) duty.onSent(meta as LeadSent);
+  });
 
   app.use((req, res, next) => {
     if (!isAllowedHost(req.headers.host)) {
@@ -661,7 +669,7 @@ export function createApp(
         if (!id) return void res.status(400).json({});
         // 퇴근·퇴사 등의 대상은 팀원만(리드 자신은 아님, B321 M5). 서브에이전트는 팀원 목록에 없다(리드에 합쳐짐)
         const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.filter((m) => m.role !== "lead" && m.name !== "team-lead").map((m) => m.name) ?? [];
-        const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members, reports);
+        const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members, reports, (sent) => duty.onSent(sent));
         // 답을 보냈으면 질문 표시를 지우고, 보관했으면 "보관됨"(B308·B309)
         const qid = (req.body as { kind?: unknown; questionId?: unknown } | undefined)?.kind === "reply" ? (req.body as { questionId?: unknown }).questionId : undefined;
         if (r.status === 200 && typeof qid === "string") questions.onReply(qid, (r.body as { state: "sent" | "held" }).state);

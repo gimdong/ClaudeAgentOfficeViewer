@@ -379,6 +379,19 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n2")).toBeNull();
   });
 
+  it("보관한 팀리더 지시는 실제로 나갈 때 meta와 함께 알린다(Phase 6b 11장 a) — 화면용 held 목록에는 meta가 없다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const gone: Array<[string, boolean, unknown]> = [];
+    hub.onHeldGone((k, sent, meta) => void gone.push([k, sent, meta]));
+    hub.instruct("s1", "퇴근 지시", true, "lead:duty:tester", { floor: "s1", kind: "offduty", member: "tester" });
+    hub.instruct("s1", "보통 지시", true);
+    expect(hub.held("s1").map((h) => Object.keys(h).sort())).toEqual([["at", "id", "key", "text"], ["at", "id", "text"]]);
+    const s = openStream(key);
+    await s.ready;
+    expect(hub.flushHeld("s1")).toBe(2);
+    expect(gone).toEqual([["lead:duty:tester", true, { floor: "s1", kind: "offduty", member: "tester" }]]);
+  });
+
   it("busy 로그는 리드 연결이 붙어 있는 동안 처음 한 번만(B321 M4)", async () => {
     const logs = join(tmp, "busylogs");
     setLogger(new Logger({ dir: logs }));

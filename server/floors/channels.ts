@@ -22,7 +22,8 @@ export interface ChannelView {
   last?: "sent" | "delivered";
 }
 /** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
-export interface HeldItem { id: string; text: string; at: string; key?: string }
+/** meta: 보관한 팀리더 지시가 실제로 나갈 때 쓰는 값(퇴근 기록 등, Phase 6b 11장 a). 화면에는 쓰지 않는다 */
+export interface HeldItem { id: string; text: string; at: string; key?: string; meta?: unknown }
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "not-connected" | "held-full" };
 
 interface Pending { nonce: string; snonce: string; at: number }
@@ -45,14 +46,14 @@ export class ChannelHub {
   private enabledFlag = false;
   private readonly no = new Map<string, number>();
   /** 키가 있는 보관 지시가 나가거나(sent) 지워졌을 때(Phase 6b — 보관한 답의 질문 표시를 지우거나 다시 열려고) */
-  private heldListener?: (key: string, sent: boolean) => void;
-  onHeldGone(fn: (key: string, sent: boolean) => void): void {
+  private heldListener?: (key: string, sent: boolean, meta?: unknown) => void;
+  onHeldGone(fn: (key: string, sent: boolean, meta?: unknown) => void): void {
     this.heldListener = fn;
   }
   private heldGone(items: readonly HeldItem[], sent: boolean): void {
     for (const h of items) if (h.key) {
       try {
-        this.heldListener?.(h.key, sent);
+        this.heldListener?.(h.key, sent, h.meta);
       } catch (e) {
         getLogger().error("floors", "held listener failed", { error: errInfo(e) });
       }
@@ -232,13 +233,13 @@ export class ChannelHub {
     return id;
   }
 
-  instruct(sessionId: string, text: string, paused: boolean, holdKey?: string): InstructResult {
+  instruct(sessionId: string, text: string, paused: boolean, holdKey?: string, meta?: unknown): InstructResult {
     const f = this.floors.get(sessionId);
     if (!f) return { ok: false, error: "not-launched" };
     if (paused) {
       if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey); // 대체(같은 키 — 질문 표시는 새 보관으로 그대로 held)
       if (f.held.length >= MAX_HELD) return { ok: false, error: "held-full" };
-      const item = { id: randomUUID(), text, at: new Date().toISOString(), ...(holdKey !== undefined ? { key: holdKey } : {}) };
+      const item = { id: randomUUID(), text, at: new Date().toISOString(), ...(holdKey !== undefined ? { key: holdKey } : {}), ...(meta !== undefined ? { meta } : {}) };
       f.held.push(item);
       getLogger().info("floors", "held", { session: this.n(sessionId), len: text.length });
       this.changed();
@@ -253,7 +254,7 @@ export class ChannelHub {
   }
 
   held(sessionId: string): HeldItem[] {
-    return [...(this.floors.get(sessionId)?.held ?? [])];
+    return (this.floors.get(sessionId)?.held ?? []).map(({ meta: _m, ...h }) => h);
   }
   editHeld(sessionId: string, hid: string, text: string): boolean {
     const item = this.floors.get(sessionId)?.held.find((h) => h.id === hid);

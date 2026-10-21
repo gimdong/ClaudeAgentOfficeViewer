@@ -32,6 +32,7 @@ import { LegacySessions, ReplayWindow, deriveKeys, loadOrCreateHookKey } from ".
 import { PairingBook } from "./floors/pairing";
 import { ReportStore } from "./floors/reports";
 import { QuestionBoard } from "./floors/questions";
+import { DutyBoard } from "./floors/duty";
 import { readLastAssistantText } from "./lib/jsonlTail";
 import type { Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
@@ -361,8 +362,19 @@ async function main(): Promise<void> {
     },
     onChange: () => hub.poke(),
   });
-  const channelsView = { view: channels.view.bind(channels), enabled: channels.enabled.bind(channels), available: channels.available.bind(channels), sweep: (alive: ReadonlySet<string>) => (channels.sweep(alive), reports.sweep(alive)) };
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, questions, matchProcStart: defaultProcStartMatcher });
+  // 퇴근·퇴사(Phase 6b 스펙 6·7장). 빌드마다 보이는 층(끝나지 않고 숨기지 않은 것)으로 정리하고 퇴사 5분 재촉을 본다
+  const duty = new DutyBoard({ reports });
+  const channelsView = {
+    view: channels.view.bind(channels),
+    enabled: channels.enabled.bind(channels),
+    available: channels.available.bind(channels),
+    sweep: (alive: ReadonlySet<string>) => {
+      channels.sweep(alive);
+      reports.sweep(alive);
+      duty.sweep(new Set([...alive].filter((id) => !floors.isHidden(id))), channels, (id) => floors.isPaused(id));
+    },
+  };
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, questions, duty, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -430,7 +442,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook(), questions } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook(), questions, duty } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);
