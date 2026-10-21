@@ -86,6 +86,25 @@ exit 0
       for (const f of ["argv", "mode", "content"]) rmSync(join(logs, f), { force: true });
     }
   });
+
+  it("url 하위 명령(Phase 6a §6): stdout은 열쇠 주소 한 줄뿐, 어떤 자식 프로세스 인자에도 토큰이 없고 브라우저도 열지 않는다", () => {
+    // PATH 앞의 스텁 폴더에 printf·tr·cat도 둔다: 셸 내장이 아니라 바깥 명령으로 토큰을 넘기면 그 인자가 기록된다
+    const stub = env.PATH!.split(":")[0];
+    for (const n of ["printf", "tr", "cat"]) {
+      writeFileSync(join(stub, n), `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a" >> "${logs}/argv"; done\nexec /usr/bin/${n} "$@"\n`);
+      chmodSync(join(stub, n), 0o755);
+    }
+    try {
+      const r = spawnSync(join(prefix, "bin/claude-office"), ["url", "--port", String(PORT)], { env, encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe(`http://127.0.0.1:${PORT}/?k=${TOKEN}\n`);
+      expect(r.stderr).not.toContain(TOKEN);
+      expect(read("argv")).not.toContain(TOKEN);
+      expect(read("content")).toBe(""); // open·xdg-open 스텁이 불리지 않았다
+    } finally {
+      for (const n of ["printf", "tr", "cat"]) rmSync(join(stub, n), { force: true });
+    }
+  });
 });
 
 describe("층 열쇠는 tmux 인자에 싣지 않는다", () => {
