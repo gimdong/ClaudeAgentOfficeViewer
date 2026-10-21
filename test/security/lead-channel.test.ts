@@ -200,3 +200,25 @@ describe("Review Focus 2: MCP 제출 도구와 /channel/submit", () => {
     expect((await post('{"x":1}', { Origin: "http://evil.example" })).status).toBe(403);
   });
 });
+
+describe("스펙 11장: ask_user 질문 id와 휴업 중 도구 예외", () => {
+  it("(b) ask_user 결과는 q-<8hex> 질문 id를 돌려준다", async () => {
+    const d = await dashboard();
+    const a = await connected(d, "s1");
+    const r = await a.call("ask_user", { question: "어느 쪽으로 할까요?", options: ["A", "B"] });
+    expect(r.isError).toBe(false);
+    expect(r.text).toMatch(/\bq-[0-9a-f]{8}\b/);
+  });
+
+  it("휴업 중 예외는 이 플러그인의 세 도구 이름과 정확히 같을 때만: 비슷한 이름(접두·접미·다른 서버 이름)은 그대로 막는다", async () => {
+    const { FloorControl } = await import("../../server/floors/control");
+    const fc = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 1 });
+    fc.pause("s1");
+    const pre = (tool: string) => fc.preToolUse({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: tool, tool_input: {} });
+    const P = "mcp__plugin_claude-office_office-channel__";
+    for (const t of ["ask_user", "submit_report", "submit_handover"]) expect(pre(P + t), t).toBeNull();
+    for (const t of [`${P}ask_user_and_run`, `${P}Ask_User`, `${P}run_shell`, `mcp__plugin_claude-office_office-channelx__ask_user`, `mcp__plugin_claude-office_office__ask_user`, `mcp__office-channel__ask_user`, `x${P}ask_user`, "ask_user"]) {
+      expect(pre(t), t).not.toBeNull();
+    }
+  });
+});
