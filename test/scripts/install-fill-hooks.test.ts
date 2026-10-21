@@ -25,8 +25,9 @@ describe("fill-hooks.cjs", () => {
     for (const h of hooks) expect([h.command, h.args]).toEqual([process.execPath, ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", key]]);
   });
 
-  // review M2(B304): process.execPath는 링크를 푼 실제 경로(예: Homebrew Cellar 버전 폴더)라 업그레이드 뒤 사라진다 —
-  // 설치 스크립트가 넘긴 PATH 위의 node 경로(링크 그대로)를 쓰되, 절대 경로·일반 파일·실행 가능일 때만
+  // review M2(B304·B305): process.execPath는 링크를 푼 실제 경로(예: Homebrew Cellar 버전 폴더)라 업그레이드 뒤 사라진다 —
+  // 설치 스크립트가 넘긴 PATH 위의 node 경로(링크 그대로)를 쓰되, 절대 경로이고 realpath가 지금 node와 같을 때만.
+  // volta·asdf·mise·nodenv의 shim은 cwd 설정으로 바이너리를 고르므로(스펙 13번 위반) execPath로 간다
   const commandsOf = (f: string) => [...new Set(Object.values(JSON.parse(readFileSync(f, "utf8")).hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>).flatMap((g) => g.flatMap((x) => x.hooks.map((h) => h.command))))];
   it.skipIf(process.platform === "win32")("셋째 인자(설치 스크립트가 찾은 node)가 링크면 링크 경로 그대로 적는다(realpath로 풀지 않음)", () => {
     const f = join(dir, "hooks.json");
@@ -37,11 +38,13 @@ describe("fill-hooks.cjs", () => {
     expect(commandsOf(f)).toEqual([link]);
   });
 
-  it("셋째 인자가 상대 경로·없는 파일·실행 불가·폴더이거나 없으면 process.execPath", () => {
+  it("셋째 인자가 다른 실행 파일(가짜 shim)·상대 경로·없는 파일·실행 불가·폴더이거나 없으면 process.execPath", () => {
     const plain = join(dir, "plain");
     writeFileSync(plain, "x");
     chmodSync(plain, 0o644);
-    for (const arg of ["node", "./node", join(dir, "gone"), ...(process.platform === "win32" ? [] : [plain]), dir, undefined]) {
+    const shim = join(dir, "shim-node");
+    writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 }); // 실행되고 같은 node를 부르지만 다른 파일
+    for (const arg of [shim, "node", "./node", join(dir, "gone"), ...(process.platform === "win32" ? [] : [plain]), dir, undefined]) {
       const f = join(dir, "hooks.json");
       writeFileSync(f, ORIGINAL);
       expect(run(...[f, "/k", ...(arg === undefined ? [] : [arg])]).status, String(arg)).toBe(0);

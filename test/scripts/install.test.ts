@@ -1304,7 +1304,7 @@ describe("Phase 6a 설치: hook 자리 표시자를 절대 경로로", () => {
       for (const h of hooks) {
         expect(h.type).toBe("command");
         expect(h.command.startsWith("/")).toBe(true);
-        expect(h.command).toBe(join(rig.stubBin, "node")); // PATH에서 찾은 node 그대로(링크·래퍼를 풀지 않음, review M2)
+        expect(h.command).toBe(process.execPath); // rig의 PATH node는 래퍼 스크립트(shim과 같음) → 지금 node의 실제 경로(B305)
         expect(statSync(h.command).mode & 0o111).not.toBe(0);
         expect(h.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", `${real}/hook.key`]);
       }
@@ -1313,6 +1313,22 @@ describe("Phase 6a 설치: hook 자리 표시자를 절대 경로로", () => {
       expect(statSync(join(prefix, "hook.key")).mode & 0o777).toBe(0o600);
       expect(readFileSync(join(ROOT, "plugins/claude-office/hooks/hooks.json"), "utf8")).toContain("__NODE__");
       expect(installLogLines(prefix).map((l) => l.split(" ").slice(1, 3).join(" "))).toEqual(expect.arrayContaining(["hookkey ok", "hooks ok"]));
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("PATH의 node가 지금 node로 가는 링크면 그 링크 경로를 그대로 적는다(업그레이드 뒤에도 살아남게, review M2·B305)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      // 래퍼 대신 진짜 node로 가는 링크(brew의 /opt/homebrew/bin/node와 같은 모양). 래퍼가 없으니 doctor 포트는 --port로 직접 준다(B279)
+      rmSync(join(rig.stubBin, "node"));
+      symlinkSync(process.execPath, join(rig.stubBin, "node"));
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open", "--port", String(rig.doctorPort)], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }));
+      expect(r.status, r.stderr).toBe(0);
+      expect(new Set(allOf(hooksOf(prefix)).map((h) => h.command))).toEqual(new Set([join(rig.stubBin, "node")]));
     } finally {
       rig.cleanup();
     }
