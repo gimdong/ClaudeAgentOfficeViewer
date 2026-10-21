@@ -129,6 +129,26 @@ describe("퇴사(스펙 7장·11장 e f)", () => {
   });
 });
 
+describe("전임자 일한 기간(B323)", () => {
+  it("퇴사 중 view가 받은 팀 설정 joinedAt을 남기고 rehire 뒤 전임자 startedAt으로. 퇴사 시작 뒤에 합류한 값(새 팀원)·없는 값은 쓰지 않는다", () => {
+    const joined = clock - 3_600_000;
+    sent("retire");
+    duty.view("s1", "tester", { ...ctx(), joinedAt: clock + 1 });
+    duty.view("s1", "tester", { ...ctx(), joinedAt: joined });
+    duty.view("s1", "tester", { ...ctx(), joinedAt: clock + 1 });
+    clock += 60_000;
+    sent("rehire");
+    sent("retire", "builder");
+    sent("rehire", "builder");
+    expect(duty.predecessors("s1")).toEqual([
+      { name: "tester", retiredAt: clock, startedAt: joined },
+      { name: "builder", retiredAt: clock },
+    ]);
+    // 다시 켜도(reports.json) 남는다
+    expect(new DutyBoard({ reports: new ReportStore({ file: join(dir, "reports.json"), now: () => clock }) }).predecessors("s1")[0].startedAt).toBe(joined);
+  });
+});
+
 describe("지시가 실제로 나갔을 때만 기록(11장 a)", () => {
   it("휴업 중 보관(held)이면 onSent를 부르지 않고 보관 지시의 meta로 넘긴다", () => {
     const calls: unknown[] = [];

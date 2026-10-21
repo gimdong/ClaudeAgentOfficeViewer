@@ -13,6 +13,7 @@ import { AgentPanel } from "./policy/AgentPanel";
 import { PolicyList } from "./policy/PolicyList";
 import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 import { LeadDrawers, OpenLeadContext, useLead } from "./office/LeadUi";
+import { chApi } from "./floors/ChannelDialogs";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
 /** FB-7: 설치 뒤 옛 서버(메모리)가 새 화면(디스크)을 내보내면 저장 API가 없어 "저장하지 못했습니다"가 난다. 서버 버전이 없거나 다르면 알린다 */
@@ -70,6 +71,15 @@ export function App() {
   const lead = useLead();
   const openAgentAt = useCallback((t: string, el?: HTMLElement | null, floor?: string) => policy.openAgent(t, el, undefined, floor), [policy.openAgent]);
   useBudgetAlarm(snapshot, announce);
+  // 간판 이름(Task 10): 저장 직후 그 이름을 보이고, 서버 스냅샷 값이 바뀌면 그 값을 따른다
+  const serverName = snapshot?.building?.userName;
+  const [savedName, setSavedName] = useState<string | null>(null);
+  useEffect(() => setSavedName(null), [serverName]);
+  const saveName = useCallback(async (name: string) => {
+    const r = await chApi.setUserName(name);
+    if (r.ok) setSavedName(r.body.userName);
+    return r.ok;
+  }, []);
   // 서랍은 한 번에 하나(디자인 phase3 §7.1): 새로 연 쪽이 다른 쪽을 포커스 되돌림 없이 닫는다
   const policyOpen = policy.open !== null;
   // 레이아웃 단계에서 닫아 두 서랍이 한 프레임도 함께 그려지지 않게 한다(B105)
@@ -126,7 +136,7 @@ export function App() {
           policyUnreadable={snapshot.policy?.unreadable === true}
           onPolicyToggle={(el) => (policy.open?.view === "list" ? policy.close() : policy.openList(el))}
         />
-        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} experimental={snapshot.experimental} />
+        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} experimental={snapshot.experimental} snapshot={snapshot} userName={savedName ?? serverName} onSaveName={saveName} />
         <ActivityBubble target={target} sessions={snapshot.sessions} />
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
         <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />

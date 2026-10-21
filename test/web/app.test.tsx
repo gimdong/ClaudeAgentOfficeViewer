@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
 
@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: fals
 vi.mock("../../web/useSnapshot", () => ({ useSnapshot: () => state.value }));
 
 import { App } from "../../web/App";
+import { BUILDING_TEXT } from "../../web/building/BuildingInfo";
 
 afterEach(cleanup);
 
@@ -85,5 +86,24 @@ describe("App", () => {
     expect(afterFirst!.endsWith("\u00A0")).toBe(true);
     expect(afterSecond!.endsWith("\u00A0")).toBe(false);
     expect(afterFirst).not.toMatch(/ $/);
+  });
+
+  it("B322 #618: 간판을 누르면 빌딩 정보 창, 이름을 저장하면 PUT /api/building을 부르고 간판 글자가 바뀐다", async () => {
+    if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (calls.push({ url, init }), new Response(JSON.stringify({ userName: "Acme", saved: true }), { status: 200 }))));
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()], building: { userName: "Kim" } }), live: true };
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: BUILDING_TEXT.signAria("Kim") }));
+    expect(screen.getByRole("dialog", { name: BUILDING_TEXT.title })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: /이름/ }), { target: { value: " Acme " } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: BUILDING_TEXT.save }));
+    });
+    const put = calls.find((c) => c.url === "/api/building");
+    expect(put?.init?.method).toBe("PUT");
+    expect(JSON.parse(String(put!.init!.body))).toEqual({ userName: "Acme" });
+    expect(screen.getByRole("button", { name: BUILDING_TEXT.signAria("Acme") }).textContent).toBe(BUILDING_TEXT.sign("Acme"));
+    vi.unstubAllGlobals();
   });
 });

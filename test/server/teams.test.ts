@@ -15,8 +15,8 @@ async function seedTeam() {
     leadSessionId: "s1",
     members: [
       { name: "team-lead", agentType: "team-lead" },
-      { name: "developer", agentType: "general-purpose", model: "sonnet", color: "green" },
-      { name: "reviewer", agentType: "general-purpose", color: "blue" },
+      { name: "developer", agentType: "general-purpose", model: "sonnet", color: "green", joinedAt: 1_700_000_000_000 },
+      { name: "reviewer", agentType: "general-purpose", color: "blue", joinedAt: "x" },
     ],
   });
   await h.write("teams/t1/inboxes/developer.json", [{ from: "director", text: "hi", read: false }, { from: "x", read: true }, { from: "y" }]);
@@ -39,7 +39,7 @@ describe("readTeams", () => {
       name: "t1",
       leadSessionId: "s1",
       members: [
-        { name: "developer", agentType: "general-purpose", model: "sonnet", color: "green", transcript: h.path(`${SUB}/agent-adev-new.jsonl`), unread: 2 },
+        { name: "developer", agentType: "general-purpose", model: "sonnet", color: "green", transcript: h.path(`${SUB}/agent-adev-new.jsonl`), unread: 2, joinedAt: 1_700_000_000_000 },
         { name: "reviewer", agentType: "general-purpose", model: undefined, color: "blue", transcript: undefined, unread: 0 },
       ],
     });

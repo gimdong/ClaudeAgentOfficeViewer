@@ -6,6 +6,7 @@ import { Floor } from "../../web/building/Floor";
 import { CH_TEXT } from "../../web/floors/ChannelDialogs";
 import { Desk } from "../../web/office/Desk";
 import { CMD_TEXT } from "../../web/office/leadCmdText";
+import { shortTime } from "../../web/office/leadText";
 import { LeadCommands, LeadDrawers, OpenLeadContext, channelOf, type LeadOpener } from "../../web/office/LeadUi";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
 
@@ -208,6 +209,18 @@ describe("전임자 서랍(§6)", () => {
     cleanup();
     render(<Floor session={makeSession({})} />);
     expect(document.querySelector("details.predecessors")).toBeNull();
+  });
+
+  it("B323: 시작 시각이 있으면 `{시작} ~ {퇴사}`, 없으면 `퇴사 {시각}`. 모두 없으면 머리 줄 `일한 기간`을 그리지 않는다", () => {
+    const retiredAt = "2026-10-21T05:05:00Z";
+    const startedAt = "2026-10-21T01:00:00Z";
+    render(<Floor session={makeSession({ predecessors: [{ name: "designer", retiredAt }] })} />);
+    expect(document.querySelector(".pd-head")).toBeNull();
+    expect(document.querySelector(".pd-time")!.textContent).toBe(`${CMD_TEXT.retiredAt} ${shortTime(retiredAt)}`);
+    cleanup();
+    render(<Floor session={makeSession({ predecessors: [{ name: "designer", retiredAt, startedAt }, { name: "designer", retiredAt }] })} />);
+    expect(document.querySelector(".pd-head")!.textContent).toBe(CMD_TEXT.period);
+    expect([...document.querySelectorAll(".pd-time")].map((e) => e.textContent)).toEqual([`${shortTime(startedAt)} ~ ${shortTime(retiredAt)}`, `${CMD_TEXT.retiredAt} ${shortTime(retiredAt)}`]);
   });
 });
 

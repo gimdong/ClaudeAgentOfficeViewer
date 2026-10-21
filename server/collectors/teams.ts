@@ -12,6 +12,8 @@ export interface TeamMemberRecord {
   unread: number;
   /** 팀 설정의 isActive(false면 그 팀원 프로세스가 끝남, Phase 6b 퇴근 판정 — 읽기만) */
   active?: boolean;
+  /** 팀 설정의 joinedAt(ms) — 전임자 "일한 기간"의 시작(B323, 읽기만) */
+  joinedAt?: number;
 }
 
 export interface TeamRecord {
@@ -153,6 +155,7 @@ export async function readTeams(claudeHome: string): Promise<TeamRecord[]> {
         transcript: transcripts.get(name),
         unread: await countUnread(join(teamDir, "inboxes", `${name}.json`)),
         ...(typeof m.isActive === "boolean" ? { active: m.isActive } : {}),
+        ...(Number.isFinite(m.joinedAt) ? { joinedAt: m.joinedAt as number } : {}),
       });
     }
     out.push({ name: str(config.name) ?? dirName, leadSessionId, members });

@@ -44,11 +44,12 @@ export class DutyBoard {
     }
   }
 
-  view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string }): DutyView {
+  view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string; joinedAt?: number }): DutyView {
     const now = this.now();
     const out: DutyView = {};
     const retire = this.o.reports.retires(floor).find((r) => r.member === member);
     if (retire) out.retiring = { since: new Date(retire.startedAt).toISOString() };
+    if (retire && retire.joinedAt === undefined && c.joinedAt !== undefined) this.o.reports.noteJoined(floor, member, c.joinedAt);
     const last = c.lastActivityAt ? Date.parse(c.lastActivityAt) : NaN;
     const requested = this.off.get(floor)?.get(member);
     if (requested !== undefined) {
@@ -62,7 +63,7 @@ export class DutyBoard {
     return out;
   }
 
-  predecessors(floor: string): Array<{ name: string; retiredAt: number }> {
+  predecessors(floor: string): Array<{ name: string; retiredAt: number; startedAt?: number }> {
     return this.o.reports.predecessors(floor);
   }
 

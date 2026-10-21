@@ -194,18 +194,18 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             ))}
           </div>
           {(session.predecessors?.length ?? 0) > 0 && (
-            // 전임자 서랍(Phase 6b designer SPEC §6): 방 오른쪽 아래, 펼친 목록은 방 위로 겹친다. 이름·퇴사 시각만(글자로만)
+            // 전임자 서랍(Phase 6b designer SPEC §6·B323): 방 오른쪽 아래, 펼친 목록은 방 위로 겹친다. 시작 시각이 있으면 기간, 없으면 퇴사 시각만(글자로만)
             <details className="predecessors">
               <summary aria-label={CMD_TEXT.predecessorsAria(session.predecessors!.length)}>
                 <Icon name="fold" />
                 {CMD_TEXT.predecessors(session.predecessors!.length)}
               </summary>
               <ul>
-                <li className="pd-head">{CMD_TEXT.period}</li>
+                {session.predecessors!.some((p) => p.startedAt) && <li className="pd-head">{CMD_TEXT.period}</li>}
                 {session.predecessors!.map((p) => (
                   <li key={`${p.name}-${p.retiredAt}`}>
                     <span className="pd-name">{p.name}</span>
-                    <span className="pd-time">~ {shortTime(p.retiredAt)}</span>
+                    <span className="pd-time">{p.startedAt ? `${shortTime(p.startedAt)} ~ ${shortTime(p.retiredAt)}` : `${CMD_TEXT.retiredAt} ${shortTime(p.retiredAt)}`}</span>
                   </li>
                 ))}
               </ul>

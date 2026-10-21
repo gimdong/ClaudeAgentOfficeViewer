@@ -47,7 +47,7 @@ export interface BuilderOptions {
   /** 서류철 수(Phase 6b) — 층 id로 */
   folder?: { counts(floor: string): { pending: number; total: number; overdue?: true } | undefined };
   /** 퇴근·오래 쉼·퇴사(Phase 6b) — 층 id로 */
-  duty?: { view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string }): import("./floors/duty").DutyView; predecessors(floor: string): Array<{ name: string; retiredAt: number }> };
+  duty?: { view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string; joinedAt?: number }): import("./floors/duty").DutyView; predecessors(floor: string): Array<{ name: string; retiredAt: number; startedAt?: number }> };
   /** 대화 질문 판(Phase 6b) — 대화 키로 */
   questions?: { list(conv: string): import("../src/shared/types").ChatQuestionView[] };
   /** 마지막 hook이 보낸 플러그인 버전(Phase 5 §3). null이면 아직 받지 않음 */
@@ -377,11 +377,12 @@ export class SnapshotBuilder {
     if (duty && s.alive) {
       for (let i = 1; i < members.length; i++) {
         const m = members[i];
-        const v = duty.view(s.sessionId, m.name, { paused, decision: !!m.decision, active: team?.members.find((x) => x.name === m.name)?.active, lastActivityAt: m.lastActivityAt });
+        const rec = team?.members.find((x) => x.name === m.name);
+        const v = duty.view(s.sessionId, m.name, { paused, decision: !!m.decision, active: rec?.active, lastActivityAt: m.lastActivityAt, joinedAt: rec?.joinedAt });
         if (v.duty || v.longIdle || v.retiring) members[i] = { ...m, ...v };
       }
     }
-    const predecessors = duty?.predecessors(s.sessionId).map((p) => ({ name: p.name, retiredAt: iso(p.retiredAt) })) ?? [];
+    const predecessors = duty?.predecessors(s.sessionId).map((p) => ({ name: p.name, retiredAt: iso(p.retiredAt), ...(p.startedAt !== undefined ? { startedAt: iso(p.startedAt) } : {}) })) ?? [];
 
     return {
       id: s.sessionId,

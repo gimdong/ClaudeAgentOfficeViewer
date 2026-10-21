@@ -106,6 +106,8 @@ export const chApi = {
   // Phase 6b 팀리더 지시·서류철
   lead: (id: string, body: object) => req<{ requestId: string; id: string; state: "sent" | "held" }>("POST", at(id, "lead"), body),
   reports: (id: string) => req<FolderView>("GET", at(id, "reports")),
+  // Phase 6b Task 10 지붕 간판 이름
+  setUserName: (userName: string) => req<{ userName: string; saved: boolean }>("PUT", "/api/building", { userName }),
 };
 const errText = (e: string) => CH_TEXT.errors[e] ?? CH_TEXT.failed;
 

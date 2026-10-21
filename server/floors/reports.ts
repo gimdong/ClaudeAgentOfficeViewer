@@ -31,8 +31,8 @@ export interface Report { id: string; kind: ReportKind; title?: string; member?:
 /** 보고 요청 뒤 이만큼 보고서가 없으면 화면에 알린다(스펙 10장) */
 export const REPORT_OVERDUE_MS = 10 * 60_000;
 /** 퇴사 진행(스펙 7장·11장 e): 시작 시각을 남겨 다시 켜도 이어 간다. nudged: 5분 뒤 "대신 써 달라"를 보냈음 */
-export interface Retire { member: string; requestId: string; startedAt: number; nudged?: boolean }
-export interface Predecessor { name: string; retiredAt: number }
+export interface Retire { member: string; requestId: string; startedAt: number; nudged?: boolean; joinedAt?: number }
+export interface Predecessor { name: string; retiredAt: number; startedAt?: number }
 interface FloorData { lastSeenAt: number; reports: Report[]; archived: Report[]; retires?: Retire[]; predecessors?: Predecessor[] }
 
 /**
@@ -150,11 +150,19 @@ export class ReportStore {
     r.nudged = true;
     this.save();
   }
-  /** 새 팀원 시작(rehire를 보냄): 퇴사를 끝내고 전임자로 남긴다(이름·퇴사 시각만) */
+  /** 퇴사 중인 팀원의 합류 시각(팀 설정 joinedAt). 퇴사 시작 뒤의 값은 같은 이름의 새 팀원이라 쓰지 않는다(B323) */
+  noteJoined(floor: string, member: string, joinedAt: number): void {
+    const r = this.data.floors[floor]?.retires?.find((x) => x.member === member);
+    if (!r || r.joinedAt !== undefined || joinedAt > r.startedAt) return;
+    r.joinedAt = joinedAt;
+    this.save();
+  }
+  /** 새 팀원 시작(rehire를 보냄): 퇴사를 끝내고 전임자로 남긴다(이름·퇴사 시각, 알면 합류 시각) */
   finishRetire(floor: string, member: string): void {
     const f = this.floor(floor);
+    const joinedAt = f.retires?.find((r) => r.member === member)?.joinedAt;
     f.retires = (f.retires ?? []).filter((r) => r.member !== member);
-    f.predecessors = [...(f.predecessors ?? []), { name: member, retiredAt: this.now() }].slice(-20);
+    f.predecessors = [...(f.predecessors ?? []), { name: member, retiredAt: this.now(), ...(joinedAt !== undefined ? { startedAt: joinedAt } : {}) }].slice(-20);
     this.save();
   }
   predecessors(floor: string): Predecessor[] {

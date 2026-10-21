@@ -28,6 +28,7 @@ export const CMD_TEXT = {
   predecessors: (n: number) => `전임자 ${n}`,
   predecessorsAria: (n: number) => `전임자 ${n}명`,
   period: "일한 기간",
+  retiredAt: "퇴사",
   // 알림(W26)
   announce: {
     approve: "승인을 리드에게 보냈습니다",

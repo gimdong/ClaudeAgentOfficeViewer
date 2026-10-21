@@ -162,7 +162,7 @@ export interface SessionView {
   context: ContextInfo | null;
   members: Member[];
   /** 퇴사한 팀원(스펙 7장 4번) — 이름·퇴사 시각만 */
-  predecessors?: Array<{ name: string; retiredAt: string }>;
+  predecessors?: Array<{ name: string; retiredAt: string; startedAt?: string }>;
   /** 서류철(Phase 6b 스펙 5장): 대기 수(보관함 포함)·모두. 본문은 GET /api/floors/:id/reports. overdue: 보고 요청 뒤 10분 넘게 보고서가 없음 */
   folder?: { pending: number; total: number; overdue?: true };
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
