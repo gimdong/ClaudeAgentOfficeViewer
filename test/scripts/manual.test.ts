@@ -13,8 +13,10 @@ import { MAX_LAUNCHED } from "../../src/shared/types";
 import { UID_REJECT_BODY } from "../../server/peer";
 import { REOPEN_WAIT_MS } from "../../server/floors/reopen";
 import { SUBAGENT_LINGER_MS } from "../../server/collectors/subagents";
-// Phase 6a 칩 문구(계획 Global Constraints). HUD 상수 대조는 Task 3 커밋 뒤에 더한다
-const LEGACY_CHIP = "옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요";
+import { PLUGIN_TEXT } from "../../web/hud/PluginChip";
+import { DOCTOR_TEXT } from "../../server/diag/doctor";
+// Phase 6a 칩 문구(계획 Global Constraints)와 HUD 상수가 같아야 설명서가 화면과 맞는다
+const LEGACY_CHIP: string = PLUGIN_TEXT.legacy;
 
 const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
 const { version } = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8")) as { version: string };
@@ -232,7 +234,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
     const box = install.slice(install.indexOf('<div class="box ok-box">\n  <pre class="out">✅ Node.js'));
     const pre = box.slice(box.indexOf("<pre"), box.indexOf("</pre>")).replace(/<[^>]+>/g, "");
     const lines = pre.split("\n").filter((l) => /^(✅|⚠️|❌) |^ {2}→ /.test(l));
-    expect(lines.length).toBe(14); // Phase 2: 대시보드 열쇠, 결정 대기 시간
+    expect(lines.length).toBe(17); // Phase 2: 대시보드 열쇠, 결정 대기 시간 / Phase 6a: hook 열쇠·hook 실행·hook 전달
     for (const l of lines) {
       const fix = /^ {2}→ (.*)$/.exec(l);
       if (fix) {
@@ -971,6 +973,33 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(a).not.toContain("이번 버전에는 없습니다");
     expect(read("server/app.ts")).toContain('"/hooks/event"');
     expect(prose).toContain("<strong>모르는 프로그램</strong>이면 다른 번호로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요");
+  });
+
+  it("Phase 6a: legacy 칩 문구가 계획의 확정 글자와 같다", () => {
+    expect(LEGACY_CHIP).toBe("옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요");
+  });
+
+  it("Phase 6a: 6장 hook doctor 절이 DOCTOR_TEXT·설치 스크립트 글자와 같다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+    const at = prose.indexOf('<h3 id="hook-doctor">');
+    expect(at).toBeGreaterThan(prose.indexOf('<h2 id="s6">'));
+    const sec = prose.slice(at, prose.indexOf("<h3", at + 1));
+    const T = DOCTOR_TEXT;
+    for (const s of [
+      `❌ ${T.hookNode.title}: ${T.hookNode.missing}\n  → ${T.reinstall}`,
+      `<code>${T.hookNode.placeholder.split(" — ")[0]}</code>`,
+      `⚠️ ${T.hookNode.title}: ${T.hookNode.legacy}`,
+      `❌ ${T.hookKey.title}: ${T.hookKey.owner}\n  → ${T.hookKey.ownerFix}`,
+      `⚠️ ${T.relay.title}: ${T.relay.failed(3)}`,
+      `<code>⚠️ 실시간 이벤트: ${T.otherInstall}</code>`,
+    ]) expect(sec, s).toContain(s);
+    const stop = "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다";
+    expect(sec).toContain(`<code>${stop}</code>`);
+    expect(read("packaging/install.sh")).toContain(`${stop} — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요.`);
+    expect(read("packaging/install.ps1")).toContain(`${stop} — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요.`);
+    // 3장 상자의 새 세 줄
+    for (const l of [`✅ ${T.hookKey.title}: 있음`, `✅ ${T.hookNode.title}: ${T.hookNode.ok}`, `✅ ${T.relay.title}: ${T.relay.ok}`]) expect(prose, l).toContain(l);
   });
 
   it("Phase 6a: 원격에서 보기(SSH 터널) 절이 스펙 6장과 런처를 따른다", () => {
