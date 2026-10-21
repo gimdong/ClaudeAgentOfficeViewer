@@ -33,7 +33,9 @@ export function detectAsk(text: string): { asks: boolean; options: string[] } {
   const outside = run ? lines.filter((_, i) => i < run!.at || i >= run!.at + run!.items.length).join("\n") : lines.join("\n");
   const options = run && CHOOSE.test(outside) ? run.items.slice(0, MAX_OPTIONS).map((o) => o.replace(/\*\*/g, "").trim().slice(0, MAX_OPTION)) : [];
   if (options.length > 0) return { asks: true, options };
-  const sentences = lines[lines.length - 1].split(/(?<=[.!?。？])\s+/);
+  // 끝 이모지는 끝 공백·따옴표처럼 걸러 낸다(qa — "진행할까요? 🙂"는 질문)
+  const lastLine = lines[lines.length - 1].replace(/[\s\p{Extended_Pictographic}\u200d\ufe0f]+$/u, "");
+  const sentences = lastLine.split(/(?<=[.!?。？])\s+/);
   const last = sentences[sentences.length - 1].replace(/[\s*"'”’)»]+$/, "");
   return ENDINGS.test(last) ? { asks: true, options: [] } : none;
 }

@@ -13,6 +13,7 @@ const ASKS: Array<{ t: string; options: string[] }> = [
   { t: "다음 중 하나를 골라 주세요.\n1. **A안** — 빠름\n2. **B안** — 안전\n", options: ["A안 — 빠름", "B안 — 안전"] },
   { t: "이 파일은 지워도 될지 모르겠습니다. 지울지 말지 정해 주세요?", options: [] },
   { t: "I found three options:\n1. Retry\n2. Skip\n3. Abort\nLet me know which.", options: ["Retry", "Skip", "Abort"] },
+  { t: "진행할까요? 🙂", options: [] }, // 끝 이모지(qa 애매 예시 → 참으로 정함)
 ];
 const NOT_ASKS = [
   "모든 테스트가 통과했습니다. 커밋 a1b2c3d로 완료했습니다.",
@@ -48,7 +49,7 @@ describe("detectAsk — 끝말·번호 목록 선택지(스펙 4장)", () => {
   });
 
   // 애매(qa 예시 — 테스트 기준으로 쓰지 않고 지금 결과만 남김): "커밋했습니다. 다음으로 Task 4를 시작할까요? (답이 없으면 그대로 진행합니다.)" → false,
-  // "진행할까요? 🙂" → false, "Let me know if you want me to continue." → false, "1. 지금 배포\n2. 내일 배포" → false
+  // "Let me know if you want me to continue." → false, "1. 지금 배포\n2. 내일 배포" → false
 });
 
 describe(`tailText — 뒤 ${MAX_AWAIT_TEXT}자를 남기고 앞에 …(B313)`, () => {
