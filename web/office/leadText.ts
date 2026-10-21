@@ -81,7 +81,7 @@ export const LEAD_TEXT = {
   free: "직접 답하기",
   send: "보내기",
   replyOff: "터미널에서 답하거나, 작업 지시 켜기(옮겨 열기)로 연결하세요",
-  held: "보관한 답이 있습니다. 재개할 때 보냅니다",
+  held: "보관한 답이 있습니다. 재개할 때 확인하고 보냅니다",
   answeredTerminal: "이미 터미널에서 답했습니다",
   superseded: "새 질문이 와서 이 질문은 닫혔습니다",
   showNewer: "새 질문 보기",
