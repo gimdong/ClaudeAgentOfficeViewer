@@ -17,6 +17,8 @@ export interface OfficePaths {
   hookKeyFile: string;
   /** 보고서·인수인계(Phase 6b 스펙 5장, 0600). 진단 묶음에는 넣지 않는다 */
   reportsFile: string;
+  /** 빌딩 설정(Phase 6b Task 10, 0600) */
+  buildingFile: string;
 }
 
 /**
@@ -30,7 +32,7 @@ export function resolvePaths(o: { moduleUrl: string; env: NodeJS.ProcessEnv; log
   const staticDir = basename(file) === "server.mjs" ? join(here, "web") : resolve(here, "../dist/web");
   const prefix = o.env.CLAUDE_OFFICE_PREFIX ? resolve(o.env.CLAUDE_OFFICE_PREFIX) : null;
   const base = prefix
-    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics"), tokenFile: join(prefix, "token"), hookKeyFile: join(prefix, "hook.key"), reportsFile: join(prefix, "reports.json"), stateFile: join(prefix, "state.json"), policyFile: join(prefix, "policy.json") }
-    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics"), tokenFile: resolve(here, "../.logs/token"), hookKeyFile: resolve(here, "../.logs/hook.key"), reportsFile: resolve(here, "../.logs/reports.json"), stateFile: resolve(here, "../.logs/state.json"), policyFile: resolve(here, "../.logs/policy.json") };
+    ? { logDir: join(prefix, "logs"), diagDir: join(prefix, "diagnostics"), tokenFile: join(prefix, "token"), hookKeyFile: join(prefix, "hook.key"), reportsFile: join(prefix, "reports.json"), buildingFile: join(prefix, "building.json"), stateFile: join(prefix, "state.json"), policyFile: join(prefix, "policy.json") }
+    : { logDir: resolve(here, "../.logs"), diagDir: resolve(here, "../.logs/diagnostics"), tokenFile: resolve(here, "../.logs/token"), hookKeyFile: resolve(here, "../.logs/hook.key"), reportsFile: resolve(here, "../.logs/reports.json"), buildingFile: resolve(here, "../.logs/building.json"), stateFile: resolve(here, "../.logs/state.json"), policyFile: resolve(here, "../.logs/policy.json") };
   return { mode: prefix ? "installed" : "dev", prefix, staticDir, ...base, ...(o.logDir ? { logDir: resolve(o.logDir) } : {}) };
 }

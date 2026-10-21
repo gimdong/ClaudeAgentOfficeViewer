@@ -25,6 +25,7 @@ import { leadInstruct, type LeadSent } from "./floors/lead";
 import { DutyBoard } from "./floors/duty";
 import { PairingBook } from "./floors/pairing";
 import { ReportStore, folderView } from "./floors/reports";
+import type { BuildingStore } from "./building";
 import { handleSubmit } from "./floors/submit";
 import { QuestionBoard } from "./floors/questions";
 
@@ -163,6 +164,8 @@ export function createApp(
       hiddenCount(): number;
       record(id: string): SessionRecord | undefined;
     };
+    /** 빌딩 설정(Phase 6b Task 10 — 지붕 간판 이름) */
+    building?: BuildingStore;
     /** 같은 계정 검사의 주입(테스트용). 없으면 실제 OS·uid·/proc */
     sameUser?: { platform?: string; uid?: number; read?: (p: string) => string };
   } = {},
@@ -399,6 +402,20 @@ export function createApp(
       if (!fromPage && !fromCli) return void res.status(403).end();
       if (!req.is("application/json")) return void res.status(415).end();
       next();
+    });
+  }
+
+  // 빌딩 이름(Phase 6b 스펙 12장 f). 쓰기 인증·같은 출처는 위 /api 미들웨어가 한다
+  if (opts.building) {
+    const building = opts.building;
+    app.get("/api/building", (_req, res) => void res.status(200).json({ userName: building.userName() }));
+    app.put("/api/building", express.json({ limit: "1kb", type: () => true }), (req, res) => {
+      const b = req.body as Record<string, unknown> | undefined;
+      if (!b || typeof b !== "object" || Array.isArray(b) || Object.keys(b).some((k) => k !== "userName")) return void res.status(400).json({ error: "name" });
+      const r = building.set(b.userName);
+      if (!r.ok) return void res.status(400).json({ error: "name" });
+      hub.poke?.();
+      res.status(200).json({ userName: r.userName, saved: r.saved });
     });
   }
 

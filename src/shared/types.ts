@@ -212,6 +212,8 @@ export interface UsageSummary {
 }
 
 export interface Snapshot {
+  /** 빌딩 설정(Phase 6b 스펙 12장 f) — 지붕 간판 `{userName}의 회사` */
+  building?: { userName: string };
   generatedAt: string;
   /** 이 스냅샷을 만든 서버의 버전(FB-7). beta.4 이전 서버는 싣지 않으므로 화면은 "없음"도 불일치로 본다 */
   serverVersion?: string;

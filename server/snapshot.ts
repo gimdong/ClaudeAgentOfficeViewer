@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 빌딩 설정(Phase 6b Task 10) */
+  building?: { userName(): string };
   /** 서류철 수(Phase 6b) — 층 id로 */
   folder?: { counts(floor: string): { pending: number; total: number; overdue?: true } | undefined };
   /** 퇴근·오래 쉼·퇴사(Phase 6b) — 층 id로 */
@@ -135,6 +137,10 @@ export class SnapshotBuilder {
     return this.usage.findFile((p) => basename(p) === `${conv}.jsonl`);
   }
 
+  /** 간판 이름은 데이터 폴더를 못 읽어도 보인다 */
+  private buildingField(): Pick<Snapshot, "building"> {
+    return this.opts.building ? { building: { userName: this.opts.building.userName() } } : {};
+  }
   private versionField(): Pick<Snapshot, "serverVersion" | "plugin"> {
     const p = this.opts.plugin?.();
     return { ...(this.opts.version ? { serverVersion: this.opts.version } : {}), ...(p ? { plugin: { version: p, match: p === this.opts.version, ...(this.opts.pluginLegacy?.() ? { legacy: true as const } : {}) } } : {}) };
@@ -145,7 +151,7 @@ export class SnapshotBuilder {
     try {
       await access(claudeHome);
     } catch {
-      return { ...emptySnapshot(now, config, `Claude 데이터 폴더를 읽을 수 없습니다: ${claudeHome}`), ...this.versionField() };
+      return { ...emptySnapshot(now, config, `Claude 데이터 폴더를 읽을 수 없습니다: ${claudeHome}`), ...this.versionField(), ...this.buildingField() };
     }
 
     let stale = false;
@@ -225,7 +231,7 @@ export class SnapshotBuilder {
     const unreadable = p?.store.unreadable() ?? false;
     const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
-    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0, ...this.experimentalField() };
+    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0, ...this.experimentalField(), ...this.buildingField() };
   }
 
   /** 마지막 빌드의 세션 레코드(Phase 4a B114·B117). 종료 API가 pid·procStart를 이것으로 검사한다. 스냅샷에는 싣지 않는다 */

@@ -16,6 +16,7 @@ describe("resolvePaths", () => {
       tokenFile: resolve("/p/token"),
       hookKeyFile: resolve("/p/hook.key"),
       reportsFile: resolve("/p/reports.json"),
+      buildingFile: resolve("/p/building.json"),
       stateFile: resolve("/p/state.json"),
       policyFile: resolve("/p/policy.json"),
     });
@@ -31,6 +32,7 @@ describe("resolvePaths", () => {
       tokenFile: resolve("/repo/.logs/token"),
       hookKeyFile: resolve("/repo/.logs/hook.key"),
       reportsFile: resolve("/repo/.logs/reports.json"),
+      buildingFile: resolve("/repo/.logs/building.json"),
       stateFile: resolve("/repo/.logs/state.json"),
       policyFile: resolve("/repo/.logs/policy.json"),
     });
