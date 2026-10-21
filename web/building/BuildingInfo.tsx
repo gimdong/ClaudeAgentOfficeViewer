@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { CH_TEXT } from "../floors/ChannelDialogs";
 import { formatTokens } from "../format";
+import { BAR_EMPTY } from "../hud/remaining";
 import { graphemes } from "../report/text";
 
 export const NAME_MAX = 40;
@@ -8,6 +9,8 @@ export const BUILDING_TEXT = {
   title: "빌딩 정보",
   name: "이름",
   sign: (name: string) => `${name}의 회사`,
+  signDefault: "User",
+  signAria: (name: string) => `빌딩 정보 열기, ${name}의 회사`,
   signHelp: (name: string) => `간판에는 "${name}의 회사"로 보입니다`,
   empty: "이름을 1자 이상 적어 주세요",
   saved: "저장했습니다",
@@ -21,8 +24,8 @@ export const BUILDING_TEXT = {
   five: "5H 잔여",
   week: "WEEK 잔여",
   plan: "PLAN 잔여",
-  needSetup: "-- 설정 필요",
-  planNone: "-- 요금제가 알려 주지 않음",
+  needSetup: BAR_EMPTY.needSetup,
+  planNone: BAR_EMPTY.planNone,
   // W33 보류: 상태줄 연결(statusline tap)을 설치 때 넣을지 사용자 결정 대기 — 결정이 나면 이 상수 하나만 바꾼다
   planWhy: "PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 배포판은 아직 상태줄 연결을 설치하지 않습니다.",
   floors: "층·팀원",

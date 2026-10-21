@@ -681,3 +681,14 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .bi-row { display: contents; }
 .rf-revise .over, .rd-free .over, .bi .unit.over { color: var(--red); }
 .rf-err { flex-basis: 100%; margin: 0; }
+
+/* ───────── Task 10 빌딩 간판·HUD 토큰 칸(디자인 phase6b §11.1·§11.3, B322) ───────── */
+/* 간판은 버튼(빌딩 정보 창을 엶). 지금 .roof-sign 모양 그대로에 버튼 바탕만 지우고, 40자 이름은 말줄임 */
+button.roof-sign { background: none; border: 0; padding: 0 4px; cursor: pointer; }
+.roof-sign { max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
+button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px var(--pink), 0 0 12px var(--pink); text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+/* TODAY·5H·WEEK: 행 높이를 고정해 보조 줄이 없는 칸도 값이 같은 기준선, 숫자는 오른쪽 정렬·같은 폭 */
+.counter { display: grid; grid-template-columns: minmax(84px, max-content); grid-template-rows: 14px 24px 14px; justify-items: end; text-align: right; }
+.counter .label { grid-row: 1; line-height: 14px; white-space: nowrap; }
+.counter .value { grid-row: 2; line-height: 24px; font-variant-numeric: tabular-nums; }
+.counter .sub { grid-row: 3; line-height: 14px; white-space: nowrap; }

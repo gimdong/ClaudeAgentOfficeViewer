@@ -33,7 +33,8 @@ describe("Hud", () => {
   it("예산과 한도가 없으면 대체 문구를 보여준다", () => {
     render(<Hud snapshot={makeSnapshot()} live={false} />);
     expect(screen.getAllByText("-- 설정 필요")).toHaveLength(2);
-    expect(screen.getByText("-- 데이터 없음")).toBeTruthy();
+    // PLAN 빈 글(디자인 phase6b §11.4, W32)
+    expect(screen.getByText("-- 요금제가 알려 주지 않음")).toBeTruthy();
     expect(screen.getByText("○ 재연결 중")).toBeTruthy();
   });
 

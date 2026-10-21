@@ -17,7 +17,9 @@ describe("Building", () => {
     const tower = screen.getByTestId("vacant-floor").parentElement!;
     const order = [...tower.querySelectorAll("section")].map((s) => s.getAttribute("data-testid") === "vacant-floor" ? "빈" : s.querySelector(".fl-no")!.textContent);
     expect(order).toEqual(["빈", "3F", "2F", "1F"]);
-    expect(screen.getByText("CLAUDE 야근 빌딩")).toBeTruthy();
+    // 간판 처음 값(디자인 phase6b §11.1, W28). snapshot이 없으면 버튼이 아니다
+    expect(screen.getByText("User의 회사")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /빌딩 정보 열기/ })).toBeNull();
   });
 
   it("세션이 없으면 빈 층과 안내 문구 (v1 OfficeGrid 안내 대체)", () => {

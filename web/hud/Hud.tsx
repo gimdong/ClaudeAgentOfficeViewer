@@ -4,13 +4,14 @@ import type { Snapshot } from "../../src/shared/types";
 import { DiagnosticsChip } from "../diag/DiagnosticsChip";
 import { DiagnosticsPanel } from "../diag/DiagnosticsPanel";
 import { useDiagnostics } from "../diag/useDiagnostics";
-import { formatTokens, remainingPct } from "../format";
+import { formatTokens } from "../format";
 import { DecisionChip } from "./DecisionChip";
 import { Elevator } from "./Elevator";
 import { HeartBar } from "./HeartBar";
 import { PolicyChip } from "./PolicyChip";
 import { ExperimentalChip } from "./ExperimentalChip";
 import { PluginChip } from "./PluginChip";
+import { BAR_EMPTY, remainingOf } from "./remaining";
 import { TokenCounter } from "./TokenCounter";
 
 export function Hud({
@@ -38,23 +39,8 @@ export function Hud({
   policyUnreadable?: boolean;
   onPolicyToggle?(opener: HTMLElement): void;
 }) {
-  const { usage, budget, limits } = snapshot;
-  const five = budget.fiveHour ? remainingPct(usage.last5h.total, budget.fiveHour) : null;
-  const week = budget.weekly ? remainingPct(usage.last7d.total, budget.weekly) : null;
-
-  // PLAN 바는 "더 급한" 쪽(더 많이 쓴, 즉 잔여가 더 적은) 창을 보여준다. 세 창 가운데 더 많이 쓴
-  // 쪽을 놓치면 실제로는 그 한도가 얼마 안 남았다는 걸 못 보게 된다.
-  // 두 값이 같으면 5H를 먼저 넣어두는 것만으로 동점 시 5H가 이긴다(엄격한 >로 비교하므로).
-  const planCandidates: Array<{ pct: number; hint: "5H" | "WEEK" | "SPEND" }> = [];
-  if (limits?.fiveHourPct !== undefined) planCandidates.push({ pct: limits.fiveHourPct, hint: "5H" });
-  if (limits?.weeklyPct !== undefined) planCandidates.push({ pct: limits.weeklyPct, hint: "WEEK" });
-  if (limits?.spendPct !== undefined) planCandidates.push({ pct: limits.spendPct, hint: "SPEND" });
-  const worst = planCandidates.reduce<(typeof planCandidates)[number] | undefined>(
-    (acc, c) => (!acc || c.pct > acc.pct ? c : acc),
-    undefined,
-  );
-  const plan = worst ? 100 - worst.pct : null;
-  const planHint = worst?.hint;
+  const { usage } = snapshot;
+  const { five, week, plan, planHint } = remainingOf(snapshot);
 
   // 진단 칩과 패널(베타 디자인 2·3·7장)
   const [diagOpen, setDiagOpen] = useState(false);
@@ -85,9 +71,9 @@ export function Hud({
       <TokenCounter label="TODAY" value={usage.today.total} sub={`캐시 읽기 ${formatTokens(usage.today.cacheRead)}`} />
       <TokenCounter label="5H" value={usage.last5h.total} hint="추정" />
       <TokenCounter label="WEEK" value={usage.last7d.total} hint="추정" />
-      <HeartBar label="5H" remaining={five} emptyText="-- 설정 필요" />
-      <HeartBar label="WEEK" remaining={week} emptyText="-- 설정 필요" />
-      <HeartBar label="PLAN" remaining={plan} emptyText="-- 데이터 없음" hint={planHint} />
+      <HeartBar label="5H" remaining={five} emptyText={BAR_EMPTY.needSetup} />
+      <HeartBar label="WEEK" remaining={week} emptyText={BAR_EMPTY.needSetup} />
+      <HeartBar label="PLAN" remaining={plan} emptyText={BAR_EMPTY.planNone} hint={planHint} />
       <DecisionChip snapshot={snapshot} onOpen={onOpenDecision} />
       {snapshot.experimental && <ExperimentalChip exp={snapshot.experimental} />}
       <PluginChip snapshot={snapshot} />
