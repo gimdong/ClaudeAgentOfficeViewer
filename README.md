@@ -61,7 +61,7 @@ Sending instructions to a running floor and starting a new floor from the dashbo
 
 ## For administrators
 
-Managed settings to allow the plugin and its local hook URL, and what the PLAN bar shows for each plan: [docs/admin.md](docs/admin.md).
+Managed settings to allow the plugin (and, for plugins from earlier versions, its local HTTP hook URL), and what the PLAN bar shows for each plan: [docs/admin.md](docs/admin.md).
 
 ## Building from source
 
