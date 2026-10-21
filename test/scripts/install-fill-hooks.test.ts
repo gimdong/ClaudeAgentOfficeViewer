@@ -44,7 +44,9 @@ describe("fill-hooks.cjs", () => {
     chmodSync(plain, 0o644);
     const shim = join(dir, "shim-node");
     writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 }); // 실행되고 같은 node를 부르지만 다른 파일
-    for (const arg of [shim, "node", "./node", join(dir, "gone"), ...(process.platform === "win32" ? [] : [plain]), dir, undefined]) {
+    const other = join(dir, "other-node");
+    if (process.platform !== "win32") symlinkSync("/bin/sh", other); // 다른 실행 파일로 가는 링크(volta·mise식)
+    for (const arg of [shim, ...(process.platform === "win32" ? [] : [other]), "node", "./node", join(dir, "gone"), ...(process.platform === "win32" ? [] : [plain]), dir, undefined]) {
       const f = join(dir, "hooks.json");
       writeFileSync(f, ORIGINAL);
       expect(run(...[f, "/k", ...(arg === undefined ? [] : [arg])]).status, String(arg)).toBe(0);
