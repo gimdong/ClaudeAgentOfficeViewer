@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { chmodSync, existsSync, utimesSync } from "node:fs";
 import { join } from "node:path";
-import { defaultProbePort, formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
+import { DOCTOR_TEXT, defaultProbePort, formatDoctor, runDoctor, type DoctorDeps, type DoctorItem } from "../../server/diag/doctor";
 import type { HookStatsView } from "../../server/events/stats";
 import type { OfficePaths } from "../../server/paths";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
@@ -66,14 +66,59 @@ async function item(id: string, o: Partial<DoctorDeps> = {}): Promise<DoctorItem
   return found;
 }
 
+describe("Phase 6a doctor: hook 열쇠·node 경로·relay 실패·다른 설치본", () => {
+  const cache = ".claude/plugins/cache/claude-office/claude-office/2.0.0-beta.14/hooks/hooks.json";
+  const cmdHooks = (command: string, key = "/k/hook.key") => ({ hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command, args: ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", key], timeout: 10 }] }], PermissionRequest: [{ matcher: "*", hooks: [{ type: "command", command, args: ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", key], timeout: 600 }] }] } });
+
+  it("hook_node: 실제로 쓰이는 사본의 command가 실행 가능한 파일이면 ok, 없으면 fail, 자리 표시자가 남았거나 http hook이면 알린다", async () => {
+    expect(await item("hook_node")).toMatchObject({ status: "warn", detail: "플러그인 캐시 없음" });
+    await h.write(cache, cmdHooks(process.execPath));
+    expect(await item("hook_node")).toMatchObject({ status: "ok", title: DOCTOR_TEXT.hookNode.title, detail: DOCTOR_TEXT.hookNode.ok });
+    await h.write(cache, cmdHooks(h.path("gone/node")));
+    expect(await item("hook_node")).toMatchObject({ status: "fail", detail: "hook을 실행할 node가 없습니다(nvm 등으로 바뀜) — 다시 설치하세요", fix: DOCTOR_TEXT.reinstall });
+    // qa #574 글자 고정
+    expect([DOCTOR_TEXT.hookNode.ok, DOCTOR_TEXT.reinstall, DOCTOR_TEXT.otherInstall]).toEqual(["Node.js 경로 확인됨", "설치 스크립트로 다시 설치한 뒤, 열려 있는 Claude Code 창에서 /reload-plugins를 실행하거나 창을 다시 열어 주세요.", "다른 설치본의 대시보드가 켜져 있어 확인하지 못했습니다(열쇠가 다름)"]);
+    await h.write("plain.txt", "x");
+    await h.write(cache, cmdHooks(h.path("plain.txt")));
+    expect((await item("hook_node")).status).toBe("fail"); // 실행 권한 없음
+    await h.write(cache, cmdHooks("__NODE__", "__KEYFILE__"));
+    expect(await item("hook_node")).toMatchObject({ status: "fail", detail: DOCTOR_TEXT.hookNode.placeholder, fix: DOCTOR_TEXT.reinstall });
+    await h.write(cache, { hooks: { PreToolUse: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4317/hooks/event", timeout: 5 }] }] } });
+    expect(await item("hook_node")).toMatchObject({ status: "warn", detail: DOCTOR_TEXT.hookNode.legacy, fix: DOCTOR_TEXT.hookNode.legacyFix });
+  });
+
+  it("hook_key: 없으면 warn, 넓은 권한이면 warn, 다른 계정 파일이면 fail, 아니면 ok(값은 읽지 않는다)", async () => {
+    expect(await item("hook_key")).toMatchObject({ status: "warn", title: DOCTOR_TEXT.hookKey.title, detail: "없음", fix: DOCTOR_TEXT.hookKey.missingFix });
+    await h.write("prefix/hook.key", "ab".repeat(32));
+    chmodSync(paths.hookKeyFile, 0o644);
+    expect(await item("hook_key")).toMatchObject({ status: "warn", detail: "있음(권한 확인 필요)" });
+    chmodSync(paths.hookKeyFile, 0o600);
+    expect(await item("hook_key")).toMatchObject({ status: "ok", detail: "있음" });
+    expect(await item("hook_key", { uid: (process.getuid?.() ?? 0) + 1 })).toMatchObject({ status: "fail", detail: DOCTOR_TEXT.hookKey.owner, fix: DOCTOR_TEXT.hookKey.ownerFix });
+    expect(await item("hook_key", { platform: "win32", uid: (process.getuid?.() ?? 0) + 1 })).toMatchObject({ status: "ok" });
+    expect(opened.filter((p) => p.endsWith("hook.key"))).toEqual([]);
+  });
+
+  it("relay: logs/relay.log의 최근 24시간 줄 수(없으면 ok)", async () => {
+    expect(await item("relay")).toMatchObject({ status: "ok", title: DOCTOR_TEXT.relay.title, detail: DOCTOR_TEXT.relay.ok });
+    const at = (ms: number) => new Date(NOW - ms).toISOString();
+    await h.write("prefix/logs/relay.log", `${at(25 * 3_600_000)} decrypt\n${at(3_600_000)} decrypt\n${at(60_000)} status-401\n${at(1000)} keys\n`);
+    expect(await item("relay")).toMatchObject({ status: "warn", detail: DOCTOR_TEXT.relay.failed(3), fix: DOCTOR_TEXT.relay.fix });
+  });
+
+  it("hooks: 포트가 이 프로그램인데 진단 API가 401이면 '열쇠가 다른 대시보드'(서버가 꺼져 있다고 하지 않는다)", async () => {
+    expect(await item("hooks", { hooks: async () => "unauthorized" })).toMatchObject({ status: "warn", detail: DOCTOR_TEXT.otherInstall, fix: DOCTOR_TEXT.otherInstallFix });
+  });
+});
+
 describe("runDoctor", () => {
   it("항목 id 순서가 고정이다", async () => {
-    expect((await runDoctor(deps())).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_timeout", "managed", "proxy", "hooks", "statusline"]);
+    expect((await runDoctor(deps())).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_key", "hook_timeout", "hook_node", "relay", "managed", "proxy", "hooks", "statusline"]);
   });
 
   it("점검 하나가 던지면 그 항목만 warn(확인 중 오류)이고 나머지는 낸다", async () => {
     const items = await runDoctor(deps({ probePort: async () => { throw new Error("boom"); }, which: () => { throw new Error("boom"); } }));
-    expect(items).toHaveLength(12);
+    expect(items).toHaveLength(15);
     expect(items.find((i) => i.id === "port")).toMatchObject({ status: "warn", title: "포트", detail: "확인 중 오류" });
     expect(items.find((i) => i.id === "claude_cli")).toMatchObject({ status: "warn", detail: "확인 중 오류" });
     expect(items.find((i) => i.id === "node")!.status).toBe("ok");
@@ -381,7 +426,7 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
   it("정책 파일이 깨졌으면 대상 0개로 본다(던지지 않는다)", async () => {
     await writeFile(paths.policyFile, "{oops");
     const items = await runDoctor(deps({ hooks: zero }));
-    expect(items).toHaveLength(12);
+    expect(items).toHaveLength(15);
     expect(noted(items)).toEqual([]);
     // doctor는 읽기만 한다: 깨진 파일을 고치거나 .broken으로 옮기지 않는다(B100)
     expect(await readFile(paths.policyFile, "utf8")).toBe("{oops");
@@ -403,9 +448,9 @@ describe("권한 정책이 적용되지 않을 때의 덧붙임(Phase 3)", () =>
     }
   });
 
-  it("항목은 여전히 12개이고 순서가 같다", async () => {
+  it("항목은 여전히 15개이고 순서가 같다", async () => {
     await withPolicy();
-    expect((await runDoctor(deps({ hooks: zero }))).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_timeout", "managed", "proxy", "hooks", "statusline"]);
+    expect((await runDoctor(deps({ hooks: zero }))).map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_key", "hook_timeout", "hook_node", "relay", "managed", "proxy", "hooks", "statusline"]);
   });
 
   it("doctor 결과에 대상 이름이 없다", async () => {
@@ -425,7 +470,7 @@ describe("읽지 못한 정책 파일(B101)", () => {
   it("깨진 파일이면 프로그램 파일 항목이 warn이 되고 안내가 나온다(파일은 바꾸지 않는다)", async () => {
     await writeFile(paths.policyFile, "{oops");
     const items = await runDoctor(deps());
-    expect(items).toHaveLength(12);
+    expect(items).toHaveLength(15);
     expect(items.find((i) => i.id === AT)).toMatchObject({ status: "warn", detail: "권한 정책 파일을 읽지 못함", fix: NOTE });
     expect(marked(items)).toEqual([AT]);
     expect(await readFile(paths.policyFile, "utf8")).toBe("{oops");

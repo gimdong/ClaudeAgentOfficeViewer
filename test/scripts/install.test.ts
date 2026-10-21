@@ -17,6 +17,9 @@ const VERSION = pkg.version as string;
 // claude CLI를 설치한 경우)에서는 "claude 없음" 시나리오가 진짜 claude를 찾아 실행해 버릴 수 있다
 // (리뷰어 지적 — Minor, 안전). node 심볼릭 링크 하나만 있는 전용 폴더를 만들어 그 폴더만 PATH에
 // 넣는다 — 다른 실행 파일이 전혀 없으니 가짜 claude를 뒀을 때만 claude가 "있다".
+// Phase 6a 고객 문구(qa 검토 글자)
+const HOOKS_FAIL = "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요.";
+const PORT_BAD = "--port에는 1~65535 숫자가 필요합니다. 예: --port 4321";
 const NODE_ONLY_DIR = mkdtempSync(join(tmpdir(), "claude-office-installtest-node-only-"));
 symlinkSync(process.execPath, join(NODE_ONLY_DIR, "node"));
 
@@ -149,7 +152,7 @@ function installLogLines(prefix: string): string[] {
  */
 function expectValidInstallLog(lines: string[], tempMarker: string) {
   // 시각은 로컬+오프셋(%z, 예: +0900)으로 바뀌어 자릿수가 고정이 아니다(director 지시 #52.h) — \S+로 느슨하게 받는다.
-  const re = /^\S+ (node|copy|token|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
+  const re = /^\S+ (node|copy|token|hookkey|hooks|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
   for (const line of lines) {
     expect(line, line).toMatch(re);
     if (!line.includes("/")) continue;
@@ -1275,6 +1278,95 @@ describe("FB-1 안내는 입력이 끊겨(EOF) 아니오가 됐을 때만(Ruling
       const r = spawnSync(join(prefix, "bin/claude-office"), ["uninstall"], { env: env(rig), encoding: "utf8", input });
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.includes(UNINSTALL_HINT)).toBe(hinted);
+    } finally {
+      rig.cleanup();
+    }
+  });
+});
+
+// ───────── Phase 6a §2: hooks.json 자리 표시자 치환, --port ─────────
+describe("Phase 6a 설치: hook 자리 표시자를 절대 경로로", () => {
+  const hooksOf = (prefix: string) => join(prefix, "plugin/plugins/claude-office/hooks/hooks.json");
+  type H = { type: string; command: string; args: string[] };
+  const allOf = (f: string) => Object.values((JSON.parse(readFileSync(f, "utf8")) as { hooks: Record<string, Array<{ hooks: H[] }>> }).hooks).flatMap((g) => g.flatMap((x) => x.hooks));
+
+  it("$PREFIX/plugin 사본의 13개 hook: command = 실행 가능한 node 절대 경로, args[1] = $PREFIX/hook.key(0600), 자리 표시자 없음. 저장소 원본은 그대로", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }));
+      expect(r.status, r.stderr).toBe(0);
+      const real = realpathSync(prefix);
+      const hooks = allOf(hooksOf(prefix));
+      expect(hooks).toHaveLength(13);
+      for (const h of hooks) {
+        expect(h.type).toBe("command");
+        expect(h.command.startsWith("/")).toBe(true);
+        expect(statSync(h.command).mode & 0o111).not.toBe(0);
+        expect(h.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", `${real}/hook.key`]);
+      }
+      expect(readFileSync(hooksOf(prefix), "utf8")).not.toMatch(/__NODE__|__KEYFILE__/);
+      expect(readFileSync(join(prefix, "hook.key"), "utf8")).toMatch(/^[0-9a-f]{64}$/);
+      expect(statSync(join(prefix, "hook.key")).mode & 0o777).toBe(0o600);
+      expect(readFileSync(join(ROOT, "plugins/claude-office/hooks/hooks.json"), "utf8")).toContain("__NODE__");
+      expect(installLogLines(prefix).map((l) => l.split(" ").slice(1, 3).join(" "))).toEqual(expect.arrayContaining(["hookkey ok", "hooks ok"]));
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("치환은 claude plugin marketplace add보다 먼저 끝난다(Claude Code가 그 사본을 캐시로 복사)", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      // marketplace add가 불리는 순간 사본에 자리 표시자가 남아 있는지 적는 가짜 claude
+      writeFileSync(join(rig.stubBin, "claude"), `#!/bin/sh\nif [ "$2" = marketplace ]; then grep -c __NODE__ "$4/plugins/claude-office/hooks/hooks.json" >> "$STUB_LOG"; fi\necho "$@" >> "$STUB_LOG"\nexit 0\n`);
+      chmodSync(join(rig.stubBin, "claude"), 0o755);
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") })).status).toBe(0);
+      expect(readFileSync(rig.stubLog, "utf8").split("\n")[0]).toBe("0");
+    } finally {
+      rig.cleanup();
+    }
+  });
+
+  it("치환하지 못하면(hooks.json이 깨짐) 설치를 실패로 끝내고 플러그인을 등록하지 않는다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    const pkg = mkdtempSync(join(tmpdir(), "claude-office-installtest-pkg-"));
+    try {
+      const copy = join(pkg, basename(releaseAppDir));
+      execFileSync("cp", ["-R", releaseAppDir, copy]);
+      writeFileSync(join(copy, "plugin/plugins/claude-office/hooks/hooks.json"), "{ broken");
+      const prefix = join(rig.home, ".claude-office");
+      const r = spawnSync("sh", [join(copy, "install.sh"), "--prefix", prefix, "--yes", "--no-path", "--no-open"], { env: env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }), encoding: "utf8" });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(HOOKS_FAIL);
+      expect(readFileSync(rig.stubLog, "utf8")).not.toContain("plugin marketplace add");
+      expect(installLogLines(prefix).some((l) => / hooks fail /.test(l))).toBe(true);
+    } finally {
+      rig.cleanup();
+      rmSync(pkg, { recursive: true, force: true });
+    }
+  });
+
+  it("--port <n>은 끝의 doctor에 넘기고, 숫자가 아니면 시작 전에 끝낸다", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      const r = runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open", "--port", String(rig.doctorPort)], env(rig, { CLAUDE_CONFIG_DIR: join(rig.home, "cc") }));
+      expect(r.status, r.stderr).toBe(0);
+      // node 래퍼는 --port가 이미 있으면 붙이지 않고 적지도 않는다 — 설치 스크립트가 직접 넘겼다는 뜻
+      expect(existsSync(rig.wrapLog) ? readFileSync(rig.wrapLog, "utf8") : "").toBe("");
+      expect(r.stdout).toContain(`(${rig.doctorPort})`);
+      for (const bad of ["abc", "0", "70000", ""]) {
+        const b = runInstall(["--prefix", prefix, "--yes", "--port", bad], env(rig));
+        expect(b.status, bad).toBe(2);
+        expect(b.stderr, bad).toContain(PORT_BAD);
+      }
+      expect(runInstall(["--prefix", prefix, "--yes", "--port"], env(rig)).status).toBe(2);
     } finally {
       rig.cleanup();
     }

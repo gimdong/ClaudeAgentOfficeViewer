@@ -33,6 +33,19 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     expect(text).toMatch(/\[switch\]\$NoOpen/);
   });
 
+  it("Phase 6a: -Port를 받아 끝의 doctor에 넘기고, 플러그인 등록 전에 fill-hooks.cjs로 hook 자리 표시자를 바꾸며 실패하면 설치를 멈춘다", () => {
+    const text = readFileSync(INSTALL_PS1, "utf8");
+    expect(text).toMatch(/\[string\]\$Port = ""/);
+    expect(text).toContain('[Console]::Error.WriteLine("-Port에는 1~65535 숫자가 필요합니다. 예: -Port 4321")');
+    expect(text).toContain("doctor --port $Port");
+    const fill = text.indexOf('& node (Join-Path $Here "fill-hooks.cjs")');
+    expect(fill).toBeGreaterThan(0);
+    expect(fill).toBeLessThan(text.indexOf("& claude plugin marketplace add"));
+    expect(text).toContain('Fail-Install "hooks" "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."');
+    expect(text).toContain('$hookKeyFile = Join-Path $Prefix "hook.key"');
+    expect(readFileSync(LAUNCHER_PS1, "utf8")).toContain('Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "hook.key")');
+  });
+
   // #76 Important: [Environment]::Get/SetEnvironmentVariable("Path","User")는 %VAR% 참조를
   // 펼친 값을 돌려주고 쓸 때도 항상 REG_SZ로 써서, 원래 REG_EXPAND_SZ였던 사용자 PATH의 형식을
   // 깨 버린다. 레지스트리(HKCU:\Environment)를 직접 Get-Item/Set-ItemProperty로 다뤄야 한다.

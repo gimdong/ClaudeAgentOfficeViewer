@@ -8,7 +8,9 @@ param(
   [string]$Prefix = (Join-Path $env:USERPROFILE ".claude-office"),
   [switch]$Yes,
   [switch]$NoPath,
-  [switch]$NoOpen
+  [switch]$NoOpen,
+  # 끝의 doctor가 볼 포트(Phase 6a §5, install.sh --port와 같음). 시험 설치가 사용자 대시보드(4317)에 묻지 않게 한다
+  [string]$Port = ""
 )
 $ErrorActionPreference = "Stop"
 $Here = $PSScriptRoot
@@ -106,6 +108,11 @@ function Fail-Install([string]$Step, [string]$Message) {
   exit 1
 }
 
+if ($Port -ne "" -and -not ($Port -match '^[1-9][0-9]{0,4}$' -and [int]$Port -le 65535)) {
+  [Console]::Error.WriteLine("-Port에는 1~65535 숫자가 필요합니다. 예: -Port 4321")
+  exit 2
+}
+
 # 1. Node 확인
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
@@ -152,6 +159,27 @@ if ((Test-Path -LiteralPath $tokenFile) -and (Get-Item -LiteralPath $tokenFile).
   [System.IO.File]::WriteAllText($tokenFile, $hex, [System.Text.Encoding]::ASCII)
   Write-InstallLog "token" "ok" "토큰 파일 준비"
 }
+
+# 2-2. hook relay 열쇠(Phase 6a §4): 토큰과 같은 방식(install.sh와 같은 로그 문구)
+$hookKeyFile = Join-Path $Prefix "hook.key"
+if ((Test-Path -LiteralPath $hookKeyFile) -and (Get-Item -LiteralPath $hookKeyFile).Length -gt 0) {
+  Write-InstallLog "hookkey" "skip" "이미 있음"
+} else {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
+  $rng.Dispose()
+  [System.IO.File]::WriteAllText($hookKeyFile, (-join ($bytes | ForEach-Object { $_.ToString("x2") })), [System.Text.Encoding]::ASCII)
+  Write-InstallLog "hookkey" "ok" "hook 열쇠 파일 준비"
+}
+
+# 2-3. hooks.json 자리 표시자(Phase 6a §2): 플러그인 등록(4단계)보다 먼저 사본에서 바꾼다(install.sh와 같은 fill-hooks.cjs).
+# __NODE__는 node.exe 절대 경로, __KEYFILE__은 hook.key 경로가 된다. 실패하면 설치를 멈춘다
+& node (Join-Path $Here "fill-hooks.cjs") (Join-Path $Prefix "plugin\plugins\claude-office\hooks\hooks.json") $hookKeyFile
+if ($LASTEXITCODE -ne 0) {
+  Fail-Install "hooks" "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."
+}
+Write-InstallLog "hooks" "ok" "hook 설정에 node·열쇠 경로 기록"
 
 # PATH 레지스트리 값을 직접 읽고 쓴다 — [Environment]::GetEnvironmentVariable("Path","User")는
 # %VAR% 참조를 펼친 값을 돌려주고, SetEnvironmentVariable은 항상 REG_SZ로 쓴다. 사용자 PATH가
@@ -235,7 +263,7 @@ if ($claude) {
 }
 
 # 5. doctor
-& (Join-Path $Prefix "bin\claude-office.cmd") doctor
+if ($Port -ne "") { & (Join-Path $Prefix "bin\claude-office.cmd") doctor --port $Port } else { & (Join-Path $Prefix "bin\claude-office.cmd") doctor }
 if ($LASTEXITCODE -eq 0) {
   Write-InstallLog "doctor" "ok" "환경 점검 통과"
 } else {

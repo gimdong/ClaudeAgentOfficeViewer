@@ -25,6 +25,15 @@ describe("플러그인 버전 칩(Phase 5 §3)", () => {
     expect([svg.tagName.toLowerCase(), svg.getAttribute("aria-hidden"), svg.getAttribute("width")]).toEqual(["svg", "true", "14"]);
   });
 
+  it("옛 http 입구로 온 세션이 있으면(legacy) 버전이 같아도 '옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요'(Phase 6a §4)", () => {
+    for (const plugin of [{ version: "2.0.0-beta.14", match: true, legacy: true as const }, { version: "2.0.0-beta.13", match: false, legacy: true as const }]) {
+      render(<PluginChip snapshot={makeSnapshot({ serverVersion: "2.0.0-beta.14", plugin })} />);
+      expect(screen.getByTestId("plugin-chip").textContent).toBe("옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요");
+      cleanup();
+    }
+    expect(PLUGIN_TEXT.legacy).toBe("옛 플러그인(http hook)이 남아 있습니다 — 같은 압축 파일로 다시 설치하세요");
+  });
+
   it("헤더가 없던 옛 플러그인(unknown)은 '플러그인 버전 모름'", () => {
     render(<PluginChip snapshot={makeSnapshot({ serverVersion: "2.0.0-beta.12", plugin: { version: "unknown", match: false } })} />);
     expect(screen.getByTestId("plugin-chip").textContent).toBe(PLUGIN_TEXT.unknown);

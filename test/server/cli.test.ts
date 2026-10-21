@@ -114,10 +114,10 @@ describe("CLI", () => {
     expect(files[0]).toMatch(/^claude-office-diag-\d{8}-\d{6}\.json$/);
     expect(r.stdout).toContain(files[0]);
     expect(body).toMatchObject({ kind: "claude-office-diag", snapshot: { sessions: 0 } });
-    expect(body.doctor).toHaveLength(12);
+    expect(body.doctor).toHaveLength(15);
   }, 30_000);
 
-  it("doctor --json은 서버를 켜지 않고 12개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
+  it("doctor --json은 서버를 켜지 않고 15개 항목을 JSON으로 내고, fail이 있으면 종료 코드 1", async () => {
     const home = mkdtempSync(join(tmpdir(), "office-doctor-home-"));
     const logDir = mkdtempSync(join(tmpdir(), "office-doctor-log-"));
     const child = spawn(join("node_modules", ".bin", "tsx"), ["server/index.ts", "doctor", "--json", "--claude-home", home, "--port", String(await freePort()), "--log-dir", logDir], { stdio: ["ignore", "pipe", "pipe"] });
@@ -128,7 +128,7 @@ describe("CLI", () => {
     const logFiles = readdirSync(logDir);
     rmSync(home, { recursive: true, force: true });
     rmSync(logDir, { recursive: true, force: true });
-    expect(items.map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_timeout", "managed", "proxy", "hooks", "statusline"]);
+    expect(items.map((i) => i.id)).toEqual(["node", "app", "port", "claude_home", "claude_cli", "plugin", "token", "hook_key", "hook_timeout", "hook_node", "relay", "managed", "proxy", "hooks", "statusline"]);
     expect(items.find((i) => i.id === "port")!.status).toBe("warn"); // 빈 포트라 서버가 꺼져 있다
     expect(code).toBe(items.some((i) => i.status === "fail") ? 1 : 0);
     expect(logFiles).toEqual([]); // doctor는 서버 로그를 쓰지 않는다

@@ -143,9 +143,10 @@ async function doctorCli(argv: string[]): Promise<void> {
     probePort,
     hooks: async () => {
       if ((await probePort(opts.port)) !== "ours") return null;
+      // 401이면 포트에 이 프로그램이 있지만 열쇠가 다르다(다른 설치본) — "서버가 꺼져 있어"와 구분한다(Phase 6a §5)
       return fetch(`http://127.0.0.1:${opts.port}/api/diagnostics`, { headers: bearer(paths), signal: AbortSignal.timeout(1500) })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j) => (j as { hooks?: HookStatsView } | null)?.hooks ?? null)
+        .then((r) => (r.status === 401 ? "unauthorized" : r.ok ? r.json() : null))
+        .then((j) => (j === "unauthorized" ? j : ((j as { hooks?: HookStatsView } | null)?.hooks ?? null)))
         .catch(() => null);
     },
   });

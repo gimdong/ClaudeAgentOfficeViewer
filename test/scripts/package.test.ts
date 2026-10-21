@@ -141,6 +141,8 @@ describe("npm run package:beta", () => {
       "app/package.json",
       "plugin/.claude-plugin/marketplace.json",
       "plugin/plugins/claude-office/hooks/hooks.json",
+      "plugin/plugins/claude-office/hooks/relay.cjs",
+      "fill-hooks.cjs",
       "LICENSE",
       "THIRD_PARTY_NOTICES.md",
       "VERSION",

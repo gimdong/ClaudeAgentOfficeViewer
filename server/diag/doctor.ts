@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { accessSync, constants as fsc, existsSync, statSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HookStatsView } from "../events/stats";
@@ -21,8 +21,10 @@ export interface DoctorDeps {
   managedPath?: string; // 기본: 플랫폼별 경로
   which?: (cmd: string) => string | null; // 기본: PATH 탐색
   probePort?: (port: number) => Promise<PortState>; // 기본: GET /api/snapshot, 그다음 /api/diagnostics
-  hooks?: () => Promise<HookStatsView | null>; // 서버 안: stats.view(), CLI: /api/diagnostics 조회
+  // 서버 안: stats.view(), CLI: /api/diagnostics 조회. "unauthorized"는 포트가 이 프로그램인데 우리 토큰을 받지 않음(다른 설치본)
+  hooks?: () => Promise<HookStatsView | null | "unauthorized">;
   now?: () => number;
+  uid?: number; // 기본: process.getuid()(열쇠 파일 소유자 비교)
 }
 
 export const MANAGED_PATHS = {
@@ -50,6 +52,60 @@ const POLICY_UNREADABLE_DETAIL = "권한 정책 파일을 읽지 못함";
 
 /** 플러그인 hooks.json의 PermissionRequest timeout(초). 대시보드에서 답할 시간(스펙 3.1) */
 const PERMISSION_TIMEOUT_S = 600;
+
+/** Phase 6a doctor 문구(qa #574 검토 글자). 테스트·설명서가 같은 글자를 쓴다 */
+export const DOCTOR_TEXT = {
+  // 열린 Claude Code 창은 /reload-plugins 전까지 옛 hook을 쓴다(스펙 2장)
+  reinstall: "설치 스크립트로 다시 설치한 뒤, 열려 있는 Claude Code 창에서 /reload-plugins를 실행하거나 창을 다시 열어 주세요.",
+  hookNode: {
+    title: "hook 실행",
+    ok: "Node.js 경로 확인됨",
+    missing: "hook을 실행할 node가 없습니다(nvm 등으로 바뀜) — 다시 설치하세요",
+    placeholder: "hook 설정에 Node.js·열쇠 경로가 적혀 있지 않습니다 — 다시 설치하세요",
+    legacy: "옛 플러그인(http hook)입니다",
+    legacyFix: "같은 압축 파일로 다시 설치한 뒤, 열려 있는 Claude Code 창에서 /reload-plugins를 실행하거나 창을 다시 열어 주세요.",
+  },
+  hookKey: {
+    title: "hook 열쇠",
+    missingFix: "claude-office를 다시 켜면 만들어집니다",
+    wideFix: "claude-office를 다시 켜면 권한이 바로잡힙니다(본인만 읽을 수 있게).",
+    owner: "다른 계정의 파일입니다(hook을 받지 않음)",
+    ownerFix: "설치 폴더의 hook.key를 지운 뒤 claude-office를 다시 켜 주세요. 지울 수 없으면 컴퓨터 관리자에게 문의해 주세요.",
+  },
+  relay: {
+    title: "hook 전달",
+    ok: "최근 24시간 실패 없음",
+    failed: (n: number) => `최근 24시간 실패 ${n}건`,
+    fix: "다른 설치본의 대시보드가 켜져 있으면 늘어납니다. 그 대시보드를 끄고 이 설치본의 claude-office로 다시 켠 뒤에도 늘어나면 같은 압축 파일로 다시 설치해 주세요.",
+  },
+  otherInstall: "다른 설치본의 대시보드가 켜져 있어 확인하지 못했습니다(열쇠가 다름)",
+  otherInstallFix: "켜져 있는 대시보드를 끄고 이 설치본의 claude-office로 다시 켜 주세요.",
+} as const;
+
+/**
+ * Claude Code가 실제로 쓰는 플러그인 사본의 hooks 폴더. installed_plugins.json의 installPath를 먼저 보고,
+ * 등록이 없을 때만 캐시에서 가장 최근 버전 폴더(FB-4: 업그레이드 뒤 등록이 옛 버전에 남음). 읽기만 한다
+ */
+async function findHooksDir(claudeHome: string): Promise<string | null> {
+  const reg = (await readJson(join(claudeHome, "plugins", "installed_plugins.json"))) as { plugins?: Record<string, Array<{ installPath?: unknown }>> } | null;
+  const installPath = reg?.plugins?.[PLUGIN_ID]?.[0]?.installPath;
+  if (typeof installPath === "string" && existsSync(join(installPath, "hooks", "hooks.json"))) return installPath;
+  const root = join(claudeHome, "plugins", "cache", "claude-office", "claude-office");
+  let found: string | null = null;
+  let newestAt = -Infinity;
+  try {
+    for (const v of await readdir(root)) {
+      const at = (await stat(join(root, v))).mtimeMs;
+      if (existsSync(join(root, v, "hooks", "hooks.json")) && at > newestAt) {
+        found = join(root, v);
+        newestAt = at;
+      }
+    }
+  } catch {
+    /* 캐시 폴더 없음 */
+  }
+  return found;
+}
 
 /** 플러그인 파일(비밀 아님)을 JSON으로 읽는다. 읽을 수 없으면 null */
 async function readJson(path: string): Promise<unknown> {
@@ -191,35 +247,67 @@ const checks: Check[] = [
       return item("token", "warn", title, "있음(권한 확인 필요)", "claude-office를 다시 켜면 권한이 바로잡힙니다(본인만 읽을 수 있게).");
     return item("token", "ok", title, "있음");
   },
-  // 플러그인의 PermissionRequest hook이 600초 기다리는지. Claude Code가 실제로 쓰는 등록 경로(installed_plugins.json의
-  // installPath)를 먼저 보고, 등록이 없을 때만 캐시에서 가장 최근 버전 폴더를 본다(FB-4: 업그레이드 뒤 등록이 옛 버전에 남음)
+  // hook relay 열쇠(Phase 6a §4). 권한·소유자만 보고 값은 읽지 않는다
+  async (d) => {
+    const t = DOCTOR_TEXT.hookKey;
+    let st: { mode: number; uid: number };
+    try {
+      st = statSync(d.paths.hookKeyFile);
+    } catch {
+      return item("hook_key", "warn", t.title, "없음", t.missingFix);
+    }
+    if (d.platform !== "win32") {
+      if (st.uid !== d.uid) return item("hook_key", "fail", t.title, t.owner, t.ownerFix);
+      if ((st.mode & 0o077) !== 0) return item("hook_key", "warn", t.title, "있음(권한 확인 필요)", t.wideFix);
+    }
+    return item("hook_key", "ok", t.title, "있음");
+  },
+  // 플러그인의 PermissionRequest hook이 600초 기다리는지(Claude Code가 실제로 쓰는 사본 — findHooksDir)
   async (d) => {
     const title = "결정 대기 시간";
-    let hooksDir: string | null = null;
-    const reg = (await readJson(join(d.claudeHome, "plugins", "installed_plugins.json"))) as { plugins?: Record<string, Array<{ installPath?: unknown }>> } | null;
-    const installPath = reg?.plugins?.[PLUGIN_ID]?.[0]?.installPath;
-    if (typeof installPath === "string" && existsSync(join(installPath, "hooks", "hooks.json"))) hooksDir = installPath;
-    if (!hooksDir) {
-      const root = join(d.claudeHome, "plugins", "cache", "claude-office", "claude-office");
-      let newestAt = -Infinity;
-      try {
-        for (const v of await readdir(root)) {
-          const at = (await stat(join(root, v))).mtimeMs;
-          if (existsSync(join(root, v, "hooks", "hooks.json")) && at > newestAt) {
-            hooksDir = join(root, v);
-            newestAt = at;
-          }
-        }
-      } catch {
-        /* 캐시 폴더 없음 */
-      }
-    }
+    const hooksDir = await findHooksDir(d.claudeHome);
     if (!hooksDir) return item("hook_timeout", "warn", title, "플러그인 캐시 없음", INSTALL_FIX);
     const parsed = (await readJson(join(hooksDir, "hooks", "hooks.json"))) as { hooks?: { PermissionRequest?: Array<{ hooks?: Array<{ timeout?: unknown }> }> } } | null;
     const t = parsed?.hooks?.PermissionRequest?.[0]?.hooks?.[0]?.timeout;
     if (t === PERMISSION_TIMEOUT_S) return item("hook_timeout", "ok", title, `${PERMISSION_TIMEOUT_S}초`);
     // 숫자일 때만 "초"를 붙인다(hooks.json이 깨졌거나 PermissionRequest 항목이 없으면 "알 수 없음")
     return item("hook_timeout", "warn", title, `${typeof t === "number" ? `${t}초` : "알 수 없음"} — 대시보드에서 답하려면 플러그인을 업데이트해 주세요`, UPDATE_FIX);
+  },
+  // hook을 실행할 node(Phase 6a §5): 설치 때 적은 절대 경로가 지금도 실행 가능한지. 자리 표시자가 남았거나 http hook(옛 플러그인)이면 알린다
+  async (d) => {
+    const t = DOCTOR_TEXT.hookNode;
+    const hooksDir = await findHooksDir(d.claudeHome);
+    if (!hooksDir) return item("hook_node", "warn", t.title, "플러그인 캐시 없음", INSTALL_FIX);
+    const text = await readFile(join(hooksDir, "hooks", "hooks.json"), "utf8").catch(() => "");
+    if (/__NODE__|__KEYFILE__/.test(text)) return item("hook_node", "fail", t.title, t.placeholder, DOCTOR_TEXT.reinstall);
+    let hooks: Array<{ type?: unknown; command?: unknown }> = [];
+    try {
+      hooks = Object.values((JSON.parse(text) as { hooks: Record<string, Array<{ hooks: typeof hooks }>> }).hooks).flatMap((g) => g.flatMap((x) => x.hooks));
+    } catch {
+      /* 깨진 파일은 아래에서 command 없음으로 */
+    }
+    if (hooks.some((h) => h.type === "http")) return item("hook_node", "warn", t.title, t.legacy, t.legacyFix);
+    const commands = [...new Set(hooks.map((h) => h.command))];
+    const runnable = (c: unknown) => {
+      if (typeof c !== "string" || !c) return false;
+      try {
+        if (!statSync(c).isFile()) return false;
+        if (d.platform !== "win32") accessSync(c, fsc.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (commands.length === 0 || !commands.every(runnable)) return item("hook_node", "fail", t.title, t.missing, DOCTOR_TEXT.reinstall);
+    return item("hook_node", "ok", t.title, t.ok);
+  },
+  // relay가 남긴 실패(Phase 6a §3 9번): logs/relay.log(열쇠 파일 옆 logs)의 최근 24시간 줄 수. 줄에는 시각과 이유 한 단어뿐
+  async (d) => {
+    const t = DOCTOR_TEXT.relay;
+    const text = await readFile(join(dirname(d.paths.hookKeyFile), "logs", "relay.log"), "utf8").catch(() => "");
+    const since = (d.now ?? Date.now)() - 24 * 3_600_000;
+    const n = text.split("\n").filter((l) => Date.parse(l.split(" ")[0]) >= since).length;
+    return n > 0 ? item("relay", "warn", t.title, t.failed(n), t.fix) : item("relay", "ok", t.title, t.ok);
   },
   async (d) => {
     const m = await pickKeys(d.managedPath, ["allowManagedHooksOnly", "allowedHttpHookUrls", "enabledPlugins"] as const);
@@ -244,7 +332,9 @@ const checks: Check[] = [
       : item("proxy", "warn", "프록시", "있음(로컬 주소 예외 없음)", "환경변수 NO_PROXY에 127.0.0.1,localhost 를 넣어 주세요(회사 IT 담당자에게 문의).");
   },
   async (d) => {
-    const v = await d.hooks().catch(() => null);
+    const got = await d.hooks().catch(() => null);
+    if (got === "unauthorized") return item("hooks", "warn", "실시간 이벤트", DOCTOR_TEXT.otherInstall, DOCTOR_TEXT.otherInstallFix);
+    const v = got;
     // 포트에 이전 버전 서버가 있으면 진단 API가 없어 통계를 못 읽는다 — "꺼져 있다"고 하면 port 항목과 모순된다
     if (!v && (await d.probePort(d.port)) === "v1")
       return item("hooks", "warn", "실시간 이벤트", "확인하지 못했습니다(이전 버전 서버)", "이전 버전 서버를 끄고 claude-office로 다시 켠 뒤 확인해 주세요.");
@@ -287,6 +377,7 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorItem[]> {
     which: defaultWhich(env, platform),
     probePort: defaultProbePort,
     hooks: async () => null,
+    uid: process.getuid?.() ?? -1, // Windows는 소유자를 보지 않는다
     now: Date.now,
     ...deps,
     platform,

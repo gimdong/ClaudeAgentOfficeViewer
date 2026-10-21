@@ -228,6 +228,7 @@ switch ($cmd) {
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "manual-en.html")
     # token(대시보드 열쇠), state.json(층 예산), policy.json(권한 정책)과 그 .broken도 프로그램 파일로 함께 지운다(sh와 같음, 요약 문구는 그대로)
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "token")
+    Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "hook.key")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "state.json")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json")
     Remove-Item -Force -Confirm:$false -ErrorAction SilentlyContinue -LiteralPath (Join-Path $Prefix "policy.json.broken")

@@ -151,6 +151,7 @@ function main() {
   }
   copyIfExists("packaging/install.sh", "install.sh", 0o755);
   copyIfExists("packaging/install.ps1", "install.ps1");
+  copyIfExists("packaging/fill-hooks.cjs", "fill-hooks.cjs"); // hooks.json 자리 표시자를 바꾸는 설치 도우미(Phase 6a §2)
   copyIfExists("packaging/claude-office.sh", "claude-office.sh", 0o755);
   copyIfExists("packaging/claude-office.cmd", "claude-office.cmd");
   copyIfExists("packaging/claude-office.ps1", "claude-office.ps1");
