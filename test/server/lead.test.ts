@@ -59,15 +59,14 @@ describe("buildLead — kind별 틀(스펙 2장)", () => {
     const both = buildLead({ kind: "reply", questionId: "q-33333333", choice: 1, text: "단, 테스트 먼저" }, ID);
     expect(both.ok && both.text.split("\n")[0]).toBe("[대시보드 지시 r-0123abcd] 사용자가 당신의 질문 q-33333333에 답했습니다. 고른 답: 선택지 1번.");
     expect(both.ok && both.text).toContain("> 단, 테스트 먼저");
-    for (const choice of [0, 7, 1.5, "2", -1]) expect(buildLead({ kind: "reply", choice }, ID), String(choice)).toEqual({ ok: false, error: "choice" });
+    for (const choice of [0, 7, 1.5, "2", -1]) expect(buildLead({ kind: "reply", questionId: "q-33333333", choice }, ID), String(choice)).toEqual({ ok: false, error: "choice" });
     expect(buildLead({ kind: "reply", questionId: "q-33333333" }, ID)).toEqual({ ok: false, error: "text" });
-    expect(buildLead({ kind: "reply", text: "x", question: "모델 글" }, ID)).toEqual({ ok: false, error: "body" });
-    expect(buildLead({ kind: "reply", text: "x", options: ["a"] }, ID)).toEqual({ ok: false, error: "body" });
-    // 질문 id 없이(Stop 대체 경로 등) 답할 수 있고, 보고서 id 없이 결재할 수 있다(마지막 보고서)
-    expect(buildLead({ kind: "reply", text: "B" }, ID)).toMatchObject({ ok: true, holdKey: "lead:reply" });
-    const rev = buildLead({ kind: "revise", text: "고쳐 주세요" }, ID);
-    expect(rev.ok && rev.text.split("\n")[0]).toBe('[대시보드 지시 r-0123abcd] 사용자가 마지막 보고서에 수정을 요청했습니다. 반영한 뒤 submit_report 도구(request_id: "r-0123abcd")로 다시 보고하세요.');
-    expect(buildLead({ kind: "approve" }, ID)).toMatchObject({ ok: true });
+    expect(buildLead({ kind: "reply", questionId: "q-33333333", text: "x", question: "모델 글" }, ID)).toEqual({ ok: false, error: "body" });
+    expect(buildLead({ kind: "reply", questionId: "q-33333333", text: "x", options: ["a"] }, ID)).toEqual({ ok: false, error: "body" });
+    // 결재는 보고서 id, 답은 질문 id가 반드시 있다(B316)
+    expect(buildLead({ kind: "reply", text: "B" }, ID)).toEqual({ ok: false, error: "ref" });
+    expect(buildLead({ kind: "revise", text: "고쳐 주세요" }, ID)).toEqual({ ok: false, error: "ref" });
+    expect(buildLead({ kind: "approve" }, ID)).toEqual({ ok: false, error: "ref" });
   });
 
   it("팀원 이름은 그 층 팀 설정에 있는 이름일 때만(스펙 12장 b) — 목록을 주면 없는 이름은 member", () => {
@@ -75,7 +74,7 @@ describe("buildLead — kind별 틀(스펙 2장)", () => {
     expect(buildLead({ kind: "offduty", member: "builder" }, ID, team).ok).toBe(true);
     for (const kind of ["offduty", "onduty", "retire"] as const) expect(buildLead({ kind, member: "stranger" }, ID, team), kind).toEqual({ ok: false, error: "member" });
     expect(buildLead({ kind: "rehire", member: "stranger", handoverId: "r-22222222" }, ID, team)).toEqual({ ok: false, error: "member" });
-    expect(buildLead({ kind: "reply", member: "stranger", text: "x" }, ID, team)).toEqual({ ok: false, error: "member" });
+    expect(buildLead({ kind: "reply", questionId: "q-33333333", member: "stranger", text: "x" }, ID, team)).toEqual({ ok: false, error: "member" });
   });
 
   it("휴업 중 보관 키(스펙 11장 a): kind별 하나, 같은 팀원의 퇴근·출근은 같은 키, 답은 질문마다", () => {
@@ -129,11 +128,11 @@ describe("buildLead — kind별 틀(스펙 2장)", () => {
     expect(buildLead({ kind: "fire" }, ID)).toEqual({ ok: false, error: "kind" });
     expect(buildLead(null, ID)).toEqual({ ok: false, error: "kind" });
     for (const member of ["", "a;b", "-x", "x".repeat(41), 'a"b', "a\nb", undefined]) expect(buildLead({ kind: "offduty", member }, ID), String(member)).toEqual({ ok: false, error: "member" });
-    for (const reportId of ["r-123", "R-0123abcd", "r-0123abcdx", "x", 3]) expect(buildLead({ kind: "approve", reportId }, ID), String(reportId)).toEqual({ ok: false, error: "ref" });
+    for (const reportId of ["r-123", "R-0123abcd", "r-0123abcdx", "x", 3, undefined]) expect(buildLead({ kind: "approve", reportId }, ID), String(reportId)).toEqual({ ok: false, error: "ref" });
     expect(buildLead({ kind: "rehire", member: "a" }, ID)).toEqual({ ok: false, error: "ref" });
     expect(buildLead({ kind: "report", extra: 1 }, ID)).toEqual({ ok: false, error: "body" });
     expect(buildLead({ kind: "reply", questionId: "q-33333333", text: "x", extra: "a" }, ID)).toEqual({ ok: false, error: "body" });
-    for (const questionId of ["q-123", "r-33333333", 3]) expect(buildLead({ kind: "reply", questionId, text: "x" }, ID), String(questionId)).toEqual({ ok: false, error: "ref" });
+    for (const questionId of ["q-123", "r-33333333", 3, undefined]) expect(buildLead({ kind: "reply", questionId, text: "x" }, ID), String(questionId)).toEqual({ ok: false, error: "ref" });
   });
 });
 
