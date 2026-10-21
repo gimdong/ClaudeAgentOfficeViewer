@@ -3,7 +3,7 @@
 // 열쇠·평문은 모두 가짜. 포트는 0(임의)
 import { spawn, spawnSync } from "node:child_process";
 import { createCipheriv, randomBytes } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -461,6 +461,34 @@ describe("11. 설치본 hooks.json의 node 절대 경로(packaging/fill-hooks.cj
     } finally {
       rmSync(plug, { recursive: true, force: true });
       rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("B304·B305: 셋째 인자(PATH에서 찾은 node)는 realpath가 설치한 node와 같을 때만 그 글자로 적는다. shim·다른 바이너리·상대 경로는 execPath", () => {
+    const t = mkdtempSync(join(tmpdir(), "co-sec-shim-"));
+    try {
+      const link = join(t, "bin-node"); // brew의 /opt/homebrew/bin/node처럼 진짜 node로 가는 링크
+      symlinkSync(process.execPath, link);
+      const script = join(t, "shim-node"); // asdf·nodenv처럼 cwd 설정을 읽어 바이너리를 고르는 스크립트 shim
+      writeFileSync(script, "#!/bin/sh\nexec node \"$@\"\n", { mode: 0o755 });
+      const other = join(t, "volta-node"); // volta·mise처럼 다른 바이너리(shim)로 가는 링크
+      symlinkSync("/bin/sh", other);
+      const fillWith = (given: string) => {
+        const plug = mkdtempSync(join(tmpdir(), "co-sec-plug-"));
+        try {
+          mkdirSync(join(plug, "hooks"), { recursive: true });
+          const hooks = join(plug, "hooks/hooks.json");
+          copyFileSync(join(ROOT, "plugins/claude-office/hooks/hooks.json"), hooks);
+          expect(spawnSync(process.execPath, [FILL, hooks, keyFile, given]).status).toBe(0);
+          return firstHook(hooks).command;
+        } finally {
+          rmSync(plug, { recursive: true, force: true });
+        }
+      };
+      expect(fillWith(link)).toBe(link); // 업그레이드 뒤에도 사는 링크 경로(M2의 목적)
+      for (const g of [script, other, "node", "./node", "", join(t, "missing")]) expect(fillWith(g), g).toBe(process.execPath);
+    } finally {
+      rmSync(t, { recursive: true, force: true });
     }
   });
 
