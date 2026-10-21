@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
 import type { DiagnosticsSummary } from "../src/shared/types";
 import type { HookStats } from "./events/stats";
-import { COOKIE, bearerOf, cookieOf, tokenMatches } from "./auth";
+import { CLEAR_OLD_COOKIE, COOKIE, bearerOf, cookieName, cookieOf, tokenMatches } from "./auth";
 import { BUDGET_MAX, BUDGET_MIN } from "./budget/store";
 import { parseAnswer } from "./decisions/protocol";
 import type { DecisionQueue } from "./decisions/queue";
@@ -74,6 +74,9 @@ export function isSameOrigin(origin: string | undefined, host: string | undefine
     return false;
   }
 }
+
+/** 대시보드 쿠키 Set-Cookie 줄. 속성은 Phase 2 그대로(HttpOnly·SameSite=Strict·Path=/, 1년). 이름은 cookieName(B297) */
+const cookieLine = (name: string, token: string) => `${name}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`;
 
 /** handleHook이 쓰는 응답 모양: 결정 큐가 붙잡는 모양 + headersSent */
 type HookResponse = HeldResponse & { readonly headersSent: boolean };
@@ -337,14 +340,23 @@ export function createApp(
         res.status(401).type("text/plain").send("주소가 올바르지 않습니다. 터미널에서 claude-office로 다시 열어 주세요");
         return;
       }
-      res.setHeader("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`);
+      // 이름은 브라우저가 본 포트로(B297). 옛 이름 co는 값이 이 열쇠일 때만 지운다 — co는 포트를 가르지 않아,
+      // 같은 브라우저로 쓰는 다른 포트의 beta.13 설치본 쿠키까지 지우지 않게(B300)
+      const line = cookieLine(cookieName(req.headers.host, req.socket.localPort ?? 0), token);
+      res.setHeader("Set-Cookie", tokenMatches(cookieOf(req.headers.cookie, COOKIE), token) ? [line, CLEAR_OLD_COOKIE] : [line]);
       res.redirect(302, "/");
     });
     // /api/* 전체. /hooks/event와 화면 정적 파일은 여기를 지나지 않는다(스펙 7.1·7.2).
     // 쓰기는 Ruling B32: (쿠키 + 같은 출처 Origin) 또는 (Bearer + Origin 없음 — CLI). 401에 app 표시를 넣어
     // doctor가 토큰 없이도 이 프로그램인지 알아보게 한다
     app.use("/api", (req, res, next) => {
-      const byCookie = tokenMatches(cookieOf(req.headers.cookie), token);
+      const name = cookieName(req.headers.host, req.socket.localPort ?? 0);
+      let byCookie = tokenMatches(cookieOf(req.headers.cookie, name), token);
+      // 옛 이름(co, beta.13까지)은 열쇠가 맞을 때만 받아 새 이름으로 다시 심고 옛 것을 지운다(B297·B298)
+      if (!byCookie && tokenMatches(cookieOf(req.headers.cookie, COOKIE), token)) {
+        byCookie = true;
+        res.setHeader("Set-Cookie", [cookieLine(name, token), CLEAR_OLD_COOKIE]);
+      }
       const byBearer = tokenMatches(bearerOf(req.headers.authorization), token);
       if (!byCookie && !byBearer) return void res.status(401).json({ error: "unauthorized", app: "claude-office", ...(opts.auth?.version ? { version: opts.auth.version } : {}) });
       if (req.method === "GET" || req.method === "HEAD") return next();

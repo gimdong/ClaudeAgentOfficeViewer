@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
-import { bearerOf, cookieOf, loadOrCreateToken, readToken, tokenMatches } from "../../server/auth";
+import { bearerOf, cookieName, cookieOf, loadOrCreateToken, readToken, tokenMatches } from "../../server/auth";
 import { Logger, setLogger } from "../../server/log";
 import type { Snapshot } from "../../src/shared/types";
 import { makeSnapshot } from "../web/fixtures";
 
 const TOKEN = "a".repeat(64);
-const COOKIE_LINE = `co=${TOKEN}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`;
+// 쿠키 이름은 브라우저가 본 포트(Host 헤더)로 나눈다(B297). 옛 이름 co는 지운다
+const cookieLine = (p: number | string) => `co_${p}=${TOKEN}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`;
+const CLEAR_OLD = "co=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
 
 let server: Server;
 let port: number;
@@ -82,7 +84,12 @@ describe("토큰 주소와 쿠키(스펙 7.1)", () => {
     const r = await send("GET", `/?k=${TOKEN}`);
     expect(r.status).toBe(302);
     expect(r.headers.location).toBe("/");
-    expect(r.headers["set-cookie"]).toEqual([COOKIE_LINE]);
+    expect(r.headers["set-cookie"]).toEqual([cookieLine(port)]);
+  });
+
+  it("옛 co는 값이 이 열쇠와 같을 때만 지운다(같은 브라우저의 다른 포트 beta.13 설치본 쿠키는 남긴다, B300)", async () => {
+    expect((await send("GET", `/?k=${TOKEN}`, { Cookie: `co=${TOKEN}` })).headers["set-cookie"]).toEqual([cookieLine(port), CLEAR_OLD]);
+    expect((await send("GET", `/?k=${TOKEN}`, { Cookie: `co=${"b".repeat(64)}` })).headers["set-cookie"]).toEqual([cookieLine(port)]);
   });
 
   it("틀린 k는 401이고 쿠키를 주지 않는다", async () => {
@@ -92,6 +99,36 @@ describe("토큰 주소와 쿠키(스펙 7.1)", () => {
       expect(r.headers["set-cookie"]).toBeUndefined();
       expect(r.body).toBe("주소가 올바르지 않습니다. 터미널에서 claude-office로 다시 열어 주세요");
     }
+  });
+});
+
+describe("쿠키 이름에 브라우저가 본 포트(B297·B298)", () => {
+  it("포트가 다른 Host(로컬 4317·터널 14317)는 서로 다른 이름 — 서로 덮어쓰지 않는다", async () => {
+    const a = await send("GET", `/?k=${TOKEN}`, { Host: "127.0.0.1:4317" });
+    const b = await send("GET", `/?k=${TOKEN}`, { Host: "127.0.0.1:14317" });
+    expect((a.headers["set-cookie"] as string[])[0]).toBe(cookieLine(4317));
+    expect((b.headers["set-cookie"] as string[])[0]).toBe(cookieLine(14317));
+    expect((await send("GET", "/api/snapshot", { Host: "127.0.0.1:14317", Cookie: `co_4317=${"b".repeat(64)}; co_14317=${TOKEN}` })).status).toBe(200);
+    expect((await send("GET", "/api/snapshot", { Host: "127.0.0.1:4317", Cookie: `co_14317=${TOKEN}` })).status).toBe(401);
+  });
+
+  it("이상한 Host 포트는 Set-Cookie에 끼워 넣어지지 않는다(listen 포트 이름으로), 포트가 없으면 80", () => {
+    for (const h of ["127.0.0.1:1; Domain=x", "127.0.0.1:0", "127.0.0.1:65536", "127.0.0.1:abc", "127.0.0.1:", "127.0.0.1:123456", "[::1]:x"]) expect(cookieName(h, 4321), h).toBe("co_4321");
+    expect(cookieName("127.0.0.1", 4321)).toBe("co_80");
+    expect(cookieName("localhost:14317", 4321)).toBe("co_14317");
+    expect(cookieName("[::1]:4317", 4321)).toBe("co_4317");
+    expect(cookieName(undefined, 4321)).toBe("co_4321");
+  });
+
+  it("옛 co는 열쇠가 맞을 때만 새 이름으로 다시 심고 옛 것을 지운다. 틀린 옛 co는 401, 아무것도 심지 않는다", async () => {
+    const ok = await send("GET", "/api/snapshot", { Cookie: `co=${TOKEN}` });
+    expect(ok.status).toBe(200);
+    expect(ok.headers["set-cookie"]).toEqual([cookieLine(port), CLEAR_OLD]);
+    const bad = await send("GET", "/api/snapshot", { Cookie: `co=${"b".repeat(64)}` });
+    expect(bad.status).toBe(401);
+    expect(bad.headers["set-cookie"]).toBeUndefined();
+    const now = await send("GET", "/api/snapshot", { Cookie: `co_${port}=${TOKEN}` });
+    expect([now.status, now.headers["set-cookie"]]).toEqual([200, undefined]);
   });
 });
 

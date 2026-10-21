@@ -20,6 +20,7 @@ const VERSION = pkg.version as string;
 // Phase 6a 고객 문구(qa 검토 글자)
 const HOOKS_FAIL = "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요.";
 const PORT_BAD = "--port에는 1~65535 숫자가 필요합니다. 예: --port 4321";
+const URL_NO_TOKEN = "대시보드 열쇠 파일이 없습니다 — claude-office를 한 번 켜면 만들어집니다.";
 const NODE_ONLY_DIR = mkdtempSync(join(tmpdir(), "claude-office-installtest-node-only-"));
 symlinkSync(process.execPath, join(NODE_ONLY_DIR, "node"));
 
@@ -1370,5 +1371,43 @@ describe("Phase 6a 설치: hook 자리 표시자를 절대 경로로", () => {
     } finally {
       rig.cleanup();
     }
+  });
+});
+
+// ───────── Phase 6a §6·§7: claude-office url, 정리 서브셸 nohup ─────────
+describe("Phase 6a 런처: url·nohup", () => {
+  it("url은 열쇠 주소를 stdout 한 줄로만 낸다(브라우저·서버 없음), --port를 따르고, 열쇠 파일이 없으면 exit 1", () => {
+    requireBuildOk();
+    const rig = makeRig();
+    try {
+      const prefix = join(rig.home, ".claude-office");
+      expect(runInstall(["--prefix", prefix, "--yes", "--no-path", "--no-open"], env(rig)).status).toBe(0);
+      fileOpener(rig);
+      fakeNode(rig);
+      writeFileSync(rig.stubLog, "");
+      const token = readFileSync(join(prefix, "token"), "utf8").trim();
+      let r = runLauncher(prefix, env(rig), ["url"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout === `http://127.0.0.1:4317/?k=${token}\n`).toBe(true); // 값은 단언 인자로 넘기지 않는다
+      expect(r.stderr).toBe("이 주소는 열쇠입니다. 남에게 보내지 마세요.\n"); // stderr라 $(claude-office url)에 섞이지 않는다
+      r = runLauncher(prefix, env(rig), ["url", "--port", "4321"]);
+      expect(r.stdout === `http://127.0.0.1:4321/?k=${token}\n`).toBe(true);
+      expect(runLauncher(prefix, env(rig), ["url", "--port=14317"]).stdout.startsWith("http://127.0.0.1:14317/?k=")).toBe(true);
+      expect(readFileSync(rig.stubLog, "utf8")).toBe(""); // open·claude 아무것도 부르지 않았다
+      const bad = runLauncher(prefix, env(rig), ["url", "--port", "x"]);
+      expect([bad.status, bad.stderr.trim()]).toEqual([2, "--port에는 1~65535 숫자가 필요합니다. 예: --port 4321"]);
+      rmSync(join(prefix, "token"));
+      r = runLauncher(prefix, env(rig), ["url"]);
+      expect([r.status, r.stdout, r.stderr.trim()]).toEqual([1, "", URL_NO_TOKEN]);
+    } finally {
+      rig.cleanup();
+    }
+  }, 20_000);
+
+  it("30초 뒤 열기 파일 지우기는 nohup으로 터미널에서 떼어 낸다(창을 닫아도 0600 HTML이 남지 않게, setsid는 macOS에 없음)", () => {
+    const code = readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8").split("\n").filter((l) => !l.trim().startsWith("#"));
+    const clean = code.filter((l) => l.includes("sleep 30"));
+    expect(clean).toHaveLength(1);
+    expect(clean[0]).toMatch(/^\s*nohup sh -c 'sleep 30; rm -rf "\$1"' sh "\$d" >\/dev\/null 2>&1 <\/dev\/null &$/);
   });
 });

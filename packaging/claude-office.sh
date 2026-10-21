@@ -80,7 +80,8 @@ open_url() {
   fi
   if [ -n "${2:-}" ]; then open -a "$2" "$f" 2>/dev/null; else open "$f" 2>/dev/null || xdg-open "$f" 2>/dev/null; fi
   rc=$?
-  (sleep 30; rm -rf "$d") >/dev/null 2>&1 </dev/null &
+  # 터미널을 닫으면 오는 SIGHUP에 같이 끝나지 않게 nohup으로 떼어 낸다(Phase 6a §7, setsid는 macOS에 없다)
+  nohup sh -c 'sleep 30; rm -rf "$1"' sh "$d" >/dev/null 2>&1 </dev/null &
   return $rc
 }
 
@@ -91,6 +92,30 @@ case "$cmd" in
     ;;
   --version)
     cat "$PREFIX/VERSION"
+    ;;
+  url)
+    # 원격 보기(Phase 6a §6): 열쇠 주소를 stdout 한 줄로만 낸다. 브라우저는 열지 않고 서버도 켜지 않는다.
+    # 토큰은 파일에서 읽어 printf(셸 내장)로만 쓴다 — 어떤 프로세스 인자에도 싣지 않는다(B265). `claude-office url [--port N]`
+    shift
+    port=4317
+    prev=""
+    for a in "$@"; do
+      case "$a" in
+        --port=*) port=${a#--port=} ;;
+      esac
+      [ "$prev" = "--port" ] && port="$a"
+      prev="$a"
+    done
+    case "$port" in
+      [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) [ "$port" -le 65535 ] || { echo "--port에는 1~65535 숫자가 필요합니다. 예: --port 4321" >&2; exit 2; } ;;
+      *) echo "--port에는 1~65535 숫자가 필요합니다. 예: --port 4321" >&2; exit 2 ;;
+    esac
+    if [ ! -s "$PREFIX/token" ]; then
+      echo "대시보드 열쇠 파일이 없습니다 — claude-office를 한 번 켜면 만들어집니다." >&2
+      exit 1
+    fi
+    printf 'http://127.0.0.1:%s/?k=%s\n' "$port" "$(tr -d ' \n\r' < "$PREFIX/token")"
+    echo "이 주소는 열쇠입니다. 남에게 보내지 마세요." >&2 # stderr — $(claude-office url)로 받아도 주소 한 줄만 남는다
     ;;
   open)
     # FB-10: 이미 켜진 대시보드를 다른 브라우저로 열 길. `claude-office open [브라우저 이름] [--port N]`.

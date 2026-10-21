@@ -33,6 +33,17 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     expect(text).toMatch(/\[switch\]\$NoOpen/);
   });
 
+  it("Phase 6a: claude-office.ps1 url은 열쇠 주소를 콘솔 한 줄로만(Start-Process 없음), 열쇠가 없으면 exit 1(sh와 같은 글자)", () => {
+    const text = readFileSync(LAUNCHER_PS1, "utf8");
+    const block = text.slice(text.indexOf('  "url" {'), text.indexOf('  "open" {'));
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).toContain('[Console]::WriteLine("http://127.0.0.1:$port/?k=$t")');
+    expect(block).toContain('[Console]::Error.WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")');
+    expect(block).toContain('[Console]::Error.WriteLine("대시보드 열쇠 파일이 없습니다 — claude-office를 한 번 켜면 만들어집니다.")');
+    expect(block).not.toMatch(/Start-Process|Write-Host/);
+    expect(readFileSync(join(ROOT, "packaging/claude-office.sh"), "utf8")).toContain('echo "대시보드 열쇠 파일이 없습니다 — claude-office를 한 번 켜면 만들어집니다." >&2');
+  });
+
   it("Phase 6a: -Port를 받아 끝의 doctor에 넘기고, 플러그인 등록 전에 fill-hooks.cjs로 hook 자리 표시자를 바꾸며 실패하면 설치를 멈춘다", () => {
     const text = readFileSync(INSTALL_PS1, "utf8");
     expect(text).toMatch(/\[string\]\$Port = ""/);

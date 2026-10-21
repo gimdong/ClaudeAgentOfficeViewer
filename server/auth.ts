@@ -47,10 +47,27 @@ export function tokenMatches(given: string | undefined, token: string): boolean 
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function cookieOf(header: string | undefined): string | undefined {
+/**
+ * 대시보드 쿠키 이름(B297): 브라우저가 본 포트(Host 헤더의 포트)로 나눈다 — 로컬 대시보드(127.0.0.1:4317)와 SSH 터널
+ * (127.0.0.1:14317)을 같이 열어도 서로 덮어쓰지 않게. 서버의 listen 포트로 정하면 터널 끝도 4317이라 충돌이 남는다.
+ * Host 포트는 1~65535 숫자일 때만 이름에 쓴다(B298 — `Host: x:1; Domain=…`가 Set-Cookie 속성으로 끼어들지 않게), 아니면 listen 포트.
+ * Host에 포트가 없으면 80(http 기본)
+ */
+export function cookieName(host: string | undefined, listenPort: number): string {
+  const fallback = `${COOKIE}_${listenPort}`;
+  const m = host === undefined ? null : /^(?:\[[^\]]*\]|[^:[\]]*)(?::(.*))?$/.exec(host);
+  if (!m) return fallback;
+  if (m[1] === undefined) return `${COOKIE}_80`;
+  return /^\d{1,5}$/.test(m[1]) && Number(m[1]) >= 1 && Number(m[1]) <= 65535 ? `${COOKIE}_${Number(m[1])}` : fallback;
+}
+
+/** 옛 이름(co, 포트 없음)을 지우는 줄(B297) */
+export const CLEAR_OLD_COOKIE = `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
+
+export function cookieOf(header: string | undefined, name = COOKIE): string | undefined {
   for (const part of header?.split(";") ?? []) {
-    const [name, ...rest] = part.trim().split("=");
-    if (name === COOKIE) return rest.join("=");
+    const [n, ...rest] = part.trim().split("=");
+    if (n === name) return rest.join("=");
   }
   return undefined;
 }

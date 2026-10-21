@@ -145,6 +145,30 @@ switch ($cmd) {
   "--version" {
     Get-Content -LiteralPath (Join-Path $Prefix "VERSION")
   }
+  "url" {
+    # 원격 보기(Phase 6a §6, sh와 같음): 열쇠 주소를 stdout 한 줄로만. 브라우저는 열지 않고 서버도 켜지 않는다.
+    # 토큰은 파일에서 읽어 콘솔에만 쓴다 — 어떤 프로세스 인자에도 싣지 않는다(B265)
+    $port = "4317"
+    $prev = ""
+    foreach ($a in $RestArgs) {
+      if ($a -like "--port=*") { $port = $a.Substring(7) }
+      elseif ($prev -eq "--port") { $port = $a }
+      $prev = $a
+    }
+    if (-not ($port -match '^[1-9][0-9]{0,4}$' -and [int]$port -le 65535)) {
+      [Console]::Error.WriteLine("--port에는 1~65535 숫자가 필요합니다. 예: --port 4321")
+      exit 2
+    }
+    $tokenFile = Join-Path $Prefix "token"
+    $t = if (Test-Path -LiteralPath $tokenFile) { ([System.IO.File]::ReadAllText($tokenFile)).Trim() } else { "" }
+    if (-not $t) {
+      [Console]::Error.WriteLine("대시보드 열쇠 파일이 없습니다 — claude-office를 한 번 켜면 만들어집니다.")
+      exit 1
+    }
+    [Console]::WriteLine("http://127.0.0.1:$port/?k=$t")
+    [Console]::Error.WriteLine("이 주소는 열쇠입니다. 남에게 보내지 마세요.")
+    exit 0
+  }
   "open" {
     # FB-10: 이미 켜진 대시보드를 다른 브라우저로 열 길. `claude-office open [브라우저 이름] [--port N]`.
     # 열쇠 주소를 기본 브라우저(이름을 주면 그 프로그램)로 열고 서버는 켜지 않는다. 열쇠는 찍지 않는다(sh와 같은 문구)
