@@ -159,7 +159,7 @@ fi
 # 2-3. hooks.json 자리 표시자(Phase 6a §2): 플러그인 등록(4단계)보다 먼저 $PREFIX/plugin 사본에서 바꾼다 —
 # Claude Code가 등록할 때 이 사본을 캐시로 복사해 실행한다. node로 JSON을 읽어 command·args의 자리만 바꾸고(글자 치환 아님),
 # 자리 표시자가 하나라도 남거나 실패하면 설치를 멈춘다(남은 __NODE__는 모든 hook을 조용히 실패시킨다). 바꾸기는 fill-hooks.cjs(ps1과 같이 씀)
-node "$HERE/fill-hooks.cjs" "$PREFIX/plugin/plugins/claude-office/hooks/hooks.json" "$PREFIX/hook.key" \
+node "$HERE/fill-hooks.cjs" "$PREFIX/plugin/plugins/claude-office/hooks/hooks.json" "$PREFIX/hook.key" "$(command -v node)" \
   || fail hooks "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."
 log hooks ok "hook 설정에 node·열쇠 경로 기록"
 

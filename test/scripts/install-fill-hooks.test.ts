@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,6 +23,30 @@ describe("fill-hooks.cjs", () => {
     const hooks = Object.values(JSON.parse(text).hooks as Record<string, Array<{ hooks: Array<{ command: string; args: string[] }> }>>).flatMap((g) => g.flatMap((x) => x.hooks));
     expect(hooks).toHaveLength(13);
     for (const h of hooks) expect([h.command, h.args]).toEqual([process.execPath, ["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", key]]);
+  });
+
+  // review M2(B304): process.execPath는 링크를 푼 실제 경로(예: Homebrew Cellar 버전 폴더)라 업그레이드 뒤 사라진다 —
+  // 설치 스크립트가 넘긴 PATH 위의 node 경로(링크 그대로)를 쓰되, 절대 경로·일반 파일·실행 가능일 때만
+  const commandsOf = (f: string) => [...new Set(Object.values(JSON.parse(readFileSync(f, "utf8")).hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>).flatMap((g) => g.flatMap((x) => x.hooks.map((h) => h.command))))];
+  it.skipIf(process.platform === "win32")("셋째 인자(설치 스크립트가 찾은 node)가 링크면 링크 경로 그대로 적는다(realpath로 풀지 않음)", () => {
+    const f = join(dir, "hooks.json");
+    writeFileSync(f, ORIGINAL);
+    const link = join(dir, "bin-node");
+    symlinkSync(process.execPath, link);
+    expect(run(f, "/k", link).status).toBe(0);
+    expect(commandsOf(f)).toEqual([link]);
+  });
+
+  it("셋째 인자가 상대 경로·없는 파일·실행 불가·폴더이거나 없으면 process.execPath", () => {
+    const plain = join(dir, "plain");
+    writeFileSync(plain, "x");
+    chmodSync(plain, 0o644);
+    for (const arg of ["node", "./node", join(dir, "gone"), ...(process.platform === "win32" ? [] : [plain]), dir, undefined]) {
+      const f = join(dir, "hooks.json");
+      writeFileSync(f, ORIGINAL);
+      expect(run(...[f, "/k", ...(arg === undefined ? [] : [arg])]).status, String(arg)).toBe(0);
+      expect(commandsOf(f), String(arg)).toEqual([process.execPath]);
+    }
   });
 
   it("자리 표시자가 남거나(다른 자리), 깨진 JSON이거나, 인자가 없으면 exit 1이고 파일을 바꾸지 않는다", () => {

@@ -175,7 +175,7 @@ if ((Test-Path -LiteralPath $hookKeyFile) -and (Get-Item -LiteralPath $hookKeyFi
 
 # 2-3. hooks.json 자리 표시자(Phase 6a §2): 플러그인 등록(4단계)보다 먼저 사본에서 바꾼다(install.sh와 같은 fill-hooks.cjs).
 # __NODE__는 node.exe 절대 경로, __KEYFILE__은 hook.key 경로가 된다. 실패하면 설치를 멈춘다
-& node (Join-Path $Here "fill-hooks.cjs") (Join-Path $Prefix "plugin\plugins\claude-office\hooks\hooks.json") $hookKeyFile
+& node (Join-Path $Here "fill-hooks.cjs") (Join-Path $Prefix "plugin\plugins\claude-office\hooks\hooks.json") $hookKeyFile (Get-Command node).Source
 if ($LASTEXITCODE -ne 0) {
   Fail-Install "hooks" "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다 — 사용설명서 6장(문제가 생겼을 때)을 봐 주세요."
 }

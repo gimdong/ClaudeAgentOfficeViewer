@@ -1304,6 +1304,7 @@ describe("Phase 6a 설치: hook 자리 표시자를 절대 경로로", () => {
       for (const h of hooks) {
         expect(h.type).toBe("command");
         expect(h.command.startsWith("/")).toBe(true);
+        expect(h.command).toBe(join(rig.stubBin, "node")); // PATH에서 찾은 node 그대로(링크·래퍼를 풀지 않음, review M2)
         expect(statSync(h.command).mode & 0o111).not.toBe(0);
         expect(h.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", `${real}/hook.key`]);
       }
