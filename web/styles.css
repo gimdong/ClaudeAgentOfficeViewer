@@ -605,3 +605,79 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .ch-team { border-left: 4px solid var(--yellow); padding: 4px 10px; margin: 8px 0; font-size: 12px; }
 .ch-team ul { margin: 2px 0 6px; padding-left: 18px; }
 .ch-team li { word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }
+
+/* ───────── Phase 6b 팀리더 일 부품(디자인 phase6b §3·§4·§5·§11.2, B318) ───────── */
+:root { --folder: var(--green); --paper: #f4f0dc; --await: var(--cyan); }
+/* §3 서류철 */
+.rf { border-left-color: var(--folder); }
+.rf-chip { border-color: var(--folder); color: var(--folder); }
+.rf-list { margin: 0; padding: 0; list-style: none; }
+.rf-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 2px; width: 100%; padding: 10px 6px; background: none; border: 0; border-bottom: 1px dashed var(--desk); color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+.rf-row:hover { background: var(--pick, #1c1a2c); }
+.rf-row .rf-stamp { grid-column: 1; grid-row: 1 / 3; align-self: start; justify-self: start; }
+.rf-row .rf-title { grid-column: 2; grid-row: 1; font-family: var(--font-text); font-size: 14px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: keep-all; overflow-wrap: anywhere; }
+.rf-row .rf-sub { grid-column: 2; grid-row: 2; font-size: 11px; color: var(--muted); }
+.rf-stamp { display: inline-block; border: 2px solid; padding: 0 6px; font-size: 11px; line-height: 1.5; white-space: nowrap; }
+.rf-stamp.wait { color: var(--yellow); }
+.rf-stamp.ok { color: var(--green); }
+.rf-stamp.rev { color: var(--pink); }
+.rf-paper { position: relative; margin: 12px 0 4px; padding: 14px 16px; background: var(--paper); color: var(--wall); box-shadow: 0 4px 0 var(--slab); font-family: var(--font-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.rf-paper.sealed { padding-top: 44px; } /* 도장 자리를 위에 비워 둠 — 첫 줄이 길면 도장이 글을 덮었다(렌더 확인) */
+.rf-seal { position: absolute; top: 10px; right: 12px; border: 2px solid; padding: 2px 8px; font-family: var(--font-pixel); font-size: 13px; transform: rotate(-8deg); background: var(--paper); }
+.rf-seal.ok { color: #1b9e6e; border-color: #1b9e6e; }
+.rf-seal.rev { color: var(--pink-deep); border-color: var(--pink-deep); }
+.rf-meta { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+.rf-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-top: 2px solid var(--desk); background: var(--panel); }
+.rf-foot .pbtn { height: 36px; padding: 0 16px; font-size: 13px; }
+.rf-foot .rf-right { margin-left: auto; }
+.rf-done { flex: 1; font-family: var(--font-text); font-size: 13px; color: var(--muted); }
+.rf-help { flex-basis: 100%; margin: 0; font-family: var(--font-text); font-size: 12px; color: var(--muted); word-break: keep-all; }
+.rf-revise { flex-basis: 100%; }
+.rf-revise label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.rf-revise textarea, .rd-free textarea { display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; line-height: 1.6; resize: vertical; }
+.rf-revise textarea { min-height: 6.4em; }
+.rf-revise textarea:focus, .rd-free textarea:focus { border-color: var(--cyan); outline: none; }
+.rf-limit { margin: 8px 0 0; font-size: 10px; color: var(--muted); }
+
+/* §4 답 칸 */
+.rd--await { border-left-color: var(--await); }
+.rd-chip--await { border-color: var(--await); color: var(--await); }
+.rd-q { margin: 12px 0 0; white-space: pre-wrap; }
+.rd--await .rd-q { border-left-color: var(--await); }
+.rd-cut { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.rd-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.rd-opt { height: auto; min-height: 32px; padding: 6px 10px; white-space: normal; text-align: left; font-family: var(--font-text); font-size: 13px; line-height: 1.4; max-width: 100%; }
+.rd-opt[aria-pressed="true"] { background: var(--pick, #1c1a2c); border-color: var(--yellow); }
+.rd--await .rd-opt[aria-pressed="true"] { border-color: var(--await); }
+.rd-free label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.rd-free textarea { min-height: 4.8em; }
+.rd-off { flex: 1; margin: 0; padding-left: 10px; border-left: 2px solid var(--await); font-family: var(--font-text); font-size: 13px; color: var(--ink); word-break: keep-all; }
+.rd.off .rd-opts, .rd.off .rd-free { opacity: .4; }
+
+/* 판 2 — §3.7 보관함 */
+.rf-archive { border-top: 1px dashed var(--desk); }
+.rf-archive summary { cursor: pointer; list-style: none; padding: 8px 6px; font-size: 11px; color: var(--muted); }
+.rf-archive summary::-webkit-details-marker { display: none; }
+
+/* 판 2 — §4.1 팀원 질문 줄, 제안된 선택지 안내 */
+.rd-who { margin: 12px 0 0; padding-left: 10px; border-left: 2px solid var(--yellow); font-family: var(--font-text); font-size: 12px; color: var(--muted); word-break: keep-all; }
+.rd-help { margin: 0 0 8px; font-family: var(--font-text); font-size: 12px; color: var(--muted); word-break: keep-all; }
+.rd .rp-banner { margin: 10px 14px 0; }
+.rd.locked .rd-opts, .rd.locked .rd-free { opacity: .4; }
+
+/* 한글 문장 줄바꿈(phase3 B105와 같은 규칙): 낱말 가운데서 꺾이지 않게, 띄어쓰기 없는 긴 값은 그래도 꺾이게 */
+.rf-heading, .rf-paper, .rf-help, .rf-done, .rd-q, .rd-opt, .rt-help { word-break: keep-all; overflow-wrap: anywhere; }
+.rf-heading { margin: 8px 0 0; font-family: var(--font-text); font-size: 17px; font-weight: 700; line-height: 1.35; color: var(--ink); }
+
+.bi-name label { display: flex; justify-content: space-between; }
+.bi-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; row-gap: 6px; margin: 14px 0 0; padding-top: 12px; border-top: 1px dashed var(--desk); }
+.bi-kv dt { font-size: 12px; color: var(--muted); }
+.bi-kv dd { margin: 0; font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bi-kv dd small { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.bi-why { display: block; margin-top: 2px; font-family: var(--font-text); font-size: 11px; line-height: 1.5; color: var(--muted); word-break: keep-all; }
+.bi-ok { margin-right: auto; align-self: center; font-family: var(--font-text); font-size: 12px; color: var(--green); }
+
+.rf-archive-note { margin: 0 6px 6px; font-family: var(--font-text); font-size: 11px; color: var(--muted); word-break: keep-all; }
+.bi-row { display: contents; }
+.rf-revise .over, .rd-free .over, .bi .unit.over { color: var(--red); }
+.rf-err { flex-basis: 100%; margin: 0; }
