@@ -251,6 +251,24 @@ describe("hook 열쇠 파일(스펙 4장)", () => {
     expect(b.ok && a.ok && b.key.equals(a.key)).toBe(true);
   });
 
+  it.skipIf(process.platform === "win32")("자기 소유 0400 열쇠는 그대로 두고(chmod 안 함) 그 열쇠로 /hooks/v2가 열린다(B293, review M3)", async () => {
+    const f = join(dir, "ro.key");
+    writeFileSync(f, KEY.toString("hex"));
+    chmodSync(f, 0o400);
+    const k = loadOrCreateHookKey(f);
+    expect(k.ok).toBe(true);
+    expect(statSync(f).mode & 0o777).toBe(0o400);
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    server = createApp({ current: () => makeSnapshot({}), subscribe: () => () => {}, poke: () => {} }, { stats, hookV2: { keys: () => (k.ok ? deriveKeys(k.key) : null), seen: new ReplayWindow() } }).listen(0, "127.0.0.1");
+    await new Promise((r) => server.once("listening", r));
+    port = (server.address() as AddressInfo).port;
+    const p = plain(pre);
+    const r = await send(p);
+    expect(r.status).toBe(200);
+    expect(open(r.body)).toEqual({ id: p.id, out: null });
+  });
+
   it.skipIf(process.platform === "win32")("자기 파일이 넓은 권한이면 0600으로 좁혀 쓰고, 내용이 64자 hex가 아니거나 소유자가 다르면 거부", () => {
     const f = join(dir, "hook.key");
     writeFileSync(f, "cd".repeat(32));

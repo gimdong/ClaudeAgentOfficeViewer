@@ -116,6 +116,16 @@ describe("relay 정상 경로", () => {
     expect(got[0].opened).toMatchObject({ ok: true, plugin: expect.stringMatching(/^2\.0\.0/), event: { tool_input: { command: `echo ${MARK}` } } });
   });
 
+  it.skipIf(process.platform === "win32")("열쇠 파일이 0400(읽기 전용)이어도 정상 왕복(B293, review M3)", async () => {
+    const ro = join(dir, "ro.key");
+    writeFileSync(ro, KEY);
+    chmodSync(ro, 0o400);
+    const out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } };
+    const port = await dashboard(() => ({ out }));
+    const r = await run(port, ev("PreToolUse"), { key: ro });
+    expect({ code: r.code, stdout: JSON.parse(r.stdout) }).toEqual({ code: 0, stdout: out });
+  });
+
   it("out이 null이면 무출력", async () => {
     const port = await dashboard(() => ({ out: null }));
     silent(await run(port, ev("PostToolUse")));
