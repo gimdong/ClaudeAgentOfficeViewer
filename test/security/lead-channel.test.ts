@@ -222,3 +222,31 @@ describe("스펙 11장: ask_user 질문 id와 휴업 중 도구 예외", () => {
     }
   });
 });
+
+describe("스펙 12장 (g): 같은 층의 두 번째 channel 연결", () => {
+  it("첫 연결이 살아 있는 동안 두 번째는 지시를 가로채지 못하고, 첫 연결이 끊기면 두 번째가 (멈추지 않고) 다시 붙는다", async () => {
+    const d = await dashboard();
+    const first = await connected(d, "s1");
+    const second = channel(d.port, d.keys.s1); // 같은 열쇠(팀원 프로세스가 물려받은 경우를 흉내)
+    await wait(1500); // 두 번째가 hello·stream을 시도할 시간
+    // 몇 초에 걸쳐 여러 번 보낸다: 두 번째가 연결을 빼앗았다가 첫째가 되찾는 식(핑퐁)이면 일부가 두 번째로 간다
+    for (let i = 0; i < 8; i++) {
+      d.hub.instruct("s1", `FIRST_ONLY ${i}`, false);
+      await wait(400);
+    }
+    await wait(300);
+    expect(second.instructions().filter((x) => x.startsWith("FIRST_ONLY"))).toEqual([]);
+    expect(first.instructions().filter((x) => x.startsWith("FIRST_ONLY"))).toHaveLength(8);
+    // 리드가 끝나면(옮겨 열기·재시작) 정당한 새 연결은 받아야 한다 — 거절을 401·403으로 하면 channel 서버가 영영 멈춘다
+    first.child.kill();
+    await new Promise((r) => (first.child.exitCode !== null ? r(null) : first.child.once("exit", r)));
+    // 끊김이 서버에 닿기 전 보낸 지시는 잃을 수 있으니, 두 번째가 받을 때까지 0.5초마다 새 지시를 보낸다
+    const t = Date.now();
+    while (!second.instructions().some((x) => x.startsWith("SECOND_NOW")) && Date.now() - t < 15_000) {
+      d.hub.instruct("s1", `SECOND_NOW ${Date.now()}`, false);
+      await wait(500);
+    }
+    expect(second.child.exitCode).toBeNull();
+    expect(second.instructions().some((x) => x.startsWith("SECOND_NOW"))).toBe(true);
+  }, 30_000);
+});
