@@ -1,6 +1,7 @@
 import type { ChannelHub } from "./channels";
 import { LEAD_ID } from "./leadText";
 import type { PairingBook } from "./pairing";
+import { QuestionBoard } from "./questions";
 import type { ReportStore } from "./reports";
 import { getLogger } from "../log";
 
@@ -11,6 +12,8 @@ const MEMBER = /^(?!-)[\p{L}\p{N} ._-]{1,40}$/u;
 const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !v.includes("\0");
 
 type Out = { status: number; body: object };
+/** 질문 판을 넘기지 않은 부르기(단위 테스트)용 */
+const fallbackBoard = new QuestionBoard();
 const KINDS = ["submit_report", "submit_handover", "ask_user"] as const;
 type Kind = (typeof KINDS)[number];
 
@@ -37,7 +40,8 @@ export function argsError(kind: Kind, a: Record<string, unknown>): string | null
  * - submit_handover: 그 층에 건 retire 요청 id만 한 번, member는 retire 때 정한 이름(12장 b), 팀리더나 그 팀원 것만. 먼저 온 것만 쓴다
  * - ask_user: 질문 id q-8hex를 만들고 주인(짝짓기)과 함께 저장
  */
-export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports: ReportStore; pairing: PairingBook }, token: string | undefined, body: unknown): Out {
+/** convOf: 층 id → 대화 키(질문 판에 쓰는 키, hook의 정규화된 session_id와 같게) */
+export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports: ReportStore; pairing: PairingBook; questions?: Pick<QuestionBoard, "ask">; convOf?: (floor: string) => string }, token: string | undefined, body: unknown): Out {
   const b = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
   if (!token || !b || typeof b.mac !== "string" || typeof b.nonce !== "string" || !NONCE.test(b.nonce) || !(KINDS as readonly string[]).includes(b.kind as string) || !b.args || typeof b.args !== "object" || Array.isArray(b.args))
     return { status: 401, body: {} };
@@ -50,7 +54,7 @@ export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports
   const owner = d.pairing.ownerOf(kind, args);
   const isLead = owner.name === "team-lead" && !owner.sub;
   if (kind === "ask_user") {
-    const id = d.reports.addQuestion(floor, args.question as string, (args.options as string[] | undefined) ?? [], owner);
+    const id = (d.questions ?? fallbackBoard).ask(d.convOf?.(floor) ?? floor, owner, args.question as string, (args.options as string[] | undefined) ?? []);
     getLogger().info("reports", "question", { owner: isLead ? "lead" : owner.sub ? "sub" : "member" });
     return { status: 200, body: { questionId: id } };
   }

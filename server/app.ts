@@ -25,6 +25,7 @@ import { leadInstruct } from "./floors/lead";
 import { PairingBook } from "./floors/pairing";
 import { ReportStore } from "./floors/reports";
 import { handleSubmit } from "./floors/submit";
+import { QuestionBoard } from "./floors/questions";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -144,6 +145,8 @@ export function createApp(
       reports?: ReportStore;
       /** 제출 도구 PreToolUse 짝짓기(B311). 없으면 새로 */
       pairing?: PairingBook;
+      /** 대화 질문 판(Phase 6b 스펙 4장). 없으면 새로(Stop 대체 경로는 꺼짐) */
+      questions?: QuestionBoard;
     };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
@@ -165,6 +168,8 @@ export function createApp(
   const snapshotHub = hub; // 아래 channels 블록의 hub(ChannelHub)와 이름이 겹친다
   const reports = opts.channels?.reports ?? new ReportStore();
   const pairing = opts.channels?.pairing ?? new PairingBook();
+  const questions = opts.channels?.questions ?? new QuestionBoard();
+  opts.channels?.hub.onHeldGone((key, sent) => questions.heldGone(key, sent));
 
   app.use((req, res, next) => {
     if (!isAllowedHost(req.headers.host)) {
@@ -193,10 +198,11 @@ export function createApp(
     } catch (e) {
       getLogger().error("hooks", "plugin version failed", { error: errInfo(e) });
     }
-    // 제출 도구의 주인 짝짓기는 /hooks/v2 이벤트만(스펙 12장 d)
+    // 제출 도구의 주인 짝짓기와 대화 질문 해제·Stop 판정은 /hooks/v2 이벤트만(스펙 12장 d)
     if (!legacy) {
       try {
         pairing.onPreToolUse(input);
+        void questions.onEvent(input).catch((e) => getLogger().error("questions", "event failed", { error: errInfo(e) }));
       } catch (e) {
         getLogger().error("hooks", "pairing failed", { error: errInfo(e) });
       }
@@ -655,6 +661,9 @@ export function createApp(
         if (!id) return void res.status(400).json({});
         const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.map((m) => m.name) ?? [];
         const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members, reports);
+        // 답을 보냈으면 질문 표시를 지우고, 보관했으면 "보관됨"(B308·B309)
+        const qid = (req.body as { kind?: unknown; questionId?: unknown } | undefined)?.kind === "reply" ? (req.body as { questionId?: unknown }).questionId : undefined;
+        if (r.status === 200 && typeof qid === "string") questions.onReply(qid, (r.body as { state: "sent" | "held" }).state);
         res.status(r.status).json(r.body);
       });
       app.put("/api/experimental", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
@@ -729,7 +738,7 @@ export function createApp(
     // channel MCP 도구의 제출(Phase 6b 스펙 3장). 크기 상한은 MAC 계산 전(본문 파서)에, 층은 연결로만
     app.post("/channel/submit", noBrowser, express.json({ limit: "256kb", type: () => true }), (req, res) => {
       const t = /^Ack ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];
-      const r = handleSubmit({ hub: ch, reports, pairing }, t, req.body);
+      const r = handleSubmit({ hub: ch, reports, pairing, questions, convOf: (f) => opts.normalizeSession?.(f) ?? f }, t, req.body);
       res.status(r.status).json(r.body);
     });
     app.post("/channel/ack", noBrowser, body, (req, res) => {

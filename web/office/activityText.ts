@@ -62,6 +62,7 @@ const WAITING_FOR: Record<DecisionKind, string> = {
   plan: "계획 승인을",
   budget: "예산 추가 여부를",
   team: "팀 리드의 결정을",
+  chat: "질문에 대한 답을", // ask_user(Phase 6b) — question과 같은 글자
 };
 
 /** 작업 중 + 방금 쓴 문장(사용자 결정 2026-10-16, B193) */

@@ -31,6 +31,8 @@ import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import { LegacySessions, ReplayWindow, deriveKeys, loadOrCreateHookKey } from "./hooks/v2";
 import { PairingBook } from "./floors/pairing";
 import { ReportStore } from "./floors/reports";
+import { QuestionBoard } from "./floors/questions";
+import { readLastAssistantText } from "./lib/jsonlTail";
 import type { Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
 
@@ -351,8 +353,16 @@ async function main(): Promise<void> {
   let legacyShown = false;
   // 보고서 저장소(Phase 6b 스펙 5장). 스냅샷 빌드마다 살아 있는 층으로 정리한다 — 첫 빌드 전에는 정리하지 않는다(11장 g)
   const reports = new ReportStore({ file: paths.reportsFile });
+  // 대화 질문(Phase 6b 스펙 4장): Stop 대체 경로의 마지막 글은 서버가 아는 그 대화 기록에서만(12장 d). 빌더·허브는 아래에서 만든다(나중에 부름)
+  const questions = new QuestionBoard({
+    lastText: async (conv) => {
+      const f = builder.transcriptOf(conv);
+      return f ? readLastAssistantText(f) : null;
+    },
+    onChange: () => hub.poke(),
+  });
   const channelsView = { view: channels.view.bind(channels), enabled: channels.enabled.bind(channels), available: channels.available.bind(channels), sweep: (alive: ReadonlySet<string>) => (channels.sweep(alive), reports.sweep(alive)) };
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, matchProcStart: defaultProcStartMatcher });
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, questions, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -420,7 +430,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook() } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook(), questions } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

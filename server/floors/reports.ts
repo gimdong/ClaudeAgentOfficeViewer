@@ -1,7 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { AgentRef } from "../events/summarize";
 import { errInfo, getLogger } from "../log";
 
 /** 층마다 화면에 두는 보고서 수(스펙 5장) */
@@ -13,24 +11,32 @@ export const STALE_FLOOR_MS = 7 * 24 * 3_600_000;
 /** 답을 기다리는 요청 id 상한(층 수와 무관하게 메모리가 늘지 않게) */
 const MAX_PENDING = 200;
 
+/** 있으면 0600으로(Windows는 권한 비트가 뜻이 없어 무시된다) */
+function narrow(file: string): void {
+  try {
+    if (existsSync(file)) chmodSync(file, 0o600);
+  } catch {
+    /* 소유자가 다르면 못 바꾼다 — 그대로 두고 쓰기에서 실패를 로그로 */
+  }
+}
+
 export type ReportKind = "report" | "handover";
 export type ReportState = "pending" | "approved" | "revise";
 export interface Report { id: string; kind: ReportKind; title?: string; member?: string; body: string; at: number; state: ReportState }
-export interface Question { id: string; floor: string; question: string; options: string[]; owner: AgentRef; at: number }
 interface FloorData { lastSeenAt: number; reports: Report[]; archived: Report[] }
 
 /**
  * 보고서·인수인계 저장소(Phase 6b 스펙 5장·11장 g). `<PREFIX>/reports.json`(0600, 임시 파일 뒤 rename으로 원자 쓰기)에만 둔다.
  * 진단 묶음에는 넣지 않는다(보고서 본문은 모델 글). 요청 id(r-8hex)는 lead 지시 때 expect로 걸고, 제출 때 그 층·그 종류로 한 번만 take한다.
- * ask_user 질문은 메모리에만(표시는 Task 3)
+ * ask_user 질문은 questions.ts(QuestionBoard)
  */
 export class ReportStore {
   private data: { floors: Record<string, FloorData> } = { floors: {} };
   private readonly pending = new Map<string, { floor: string; kind: ReportKind; member?: string; at: number }>();
-  private readonly questions = new Map<string, Question>();
   private broken = false;
   constructor(private readonly o: { file?: string; now?: () => number } = {}) {
     if (!o.file || !existsSync(o.file)) return;
+    narrow(o.file); // 읽기만 해도 넓은 권한을 남기지 않는다(security Minor-3)
     try {
       const d = JSON.parse(readFileSync(o.file, "utf8"));
       if (d && typeof d === "object" && d.floors && typeof d.floors === "object") this.data = d;
@@ -56,6 +62,7 @@ export class ReportStore {
         this.broken = false;
       }
       const tmp = `${file}.tmp`;
+      narrow(tmp); // 남아 있던 임시 파일은 writeFileSync의 mode가 적용되지 않는다
       writeFileSync(tmp, JSON.stringify(this.data) + "\n", { mode: 0o600 });
       renameSync(tmp, file);
     } catch (e) {
@@ -124,16 +131,5 @@ export class ReportStore {
       }
     }
     if (changed) this.save();
-  }
-
-  /** ask_user 질문(스펙 11장 b). 질문 id q-8hex를 돌려준다 */
-  addQuestion(floor: string, question: string, options: string[], owner: AgentRef): string {
-    const id = `q-${randomBytes(4).toString("hex")}`;
-    this.questions.set(id, { id, floor, question, options, owner, at: this.now() });
-    while (this.questions.size > MAX_PENDING) this.questions.delete(this.questions.keys().next().value!);
-    return id;
-  }
-  question(id: string): Question | undefined {
-    return this.questions.get(id);
   }
 }

@@ -16,7 +16,24 @@ export interface Activity {
 }
 
 /** budget, team은 Phase 2에서 서버가 보낸다(Ruling P4). Phase 1 서버는 앞의 세 가지만 보낸다 */
-export type DecisionKind = "permission" | "question" | "plan" | "budget" | "team";
+/** chat: 팀리더·팀원이 ask_user로 물은 질문(Phase 6b 스펙 4장) — 답은 Member.awaitingReply로 */
+export type DecisionKind = "permission" | "question" | "plan" | "budget" | "team" | "chat";
+
+/**
+ * 대화 질문(Phase 6b 스펙 4장·11장). source: ask_user 도구 / Stop 대체 경로. owner는 책상 주인 이름.
+ * state: 서버는 open·held(휴업 중 보낸 답이 보관됨)만 낸다. answered-terminal·superseded는 화면이 열어 둔 창에서만 쓴다
+ */
+export interface ChatQuestionView {
+  id: string;
+  source: "ask" | "await";
+  owner: string;
+  ownerIsLead: boolean;
+  text: string;
+  options: string[];
+  state: "open" | "held" | "answered-terminal" | "superseded";
+  /** 질문이 온 시각(ISO) */
+  since?: string;
+}
 
 export interface Decision {
   kind: DecisionKind;
@@ -102,6 +119,8 @@ export interface Member {
   lastActivityAt?: string;
   activity?: Activity;
   decision?: Decision;
+  /** 이 책상의 대화 질문(Phase 6b) — 답을 기다립니다 / ask_user */
+  awaitingReply?: ChatQuestionView;
   /** 이 구성원에게 걸린 권한 정책(Phase 3 스펙 7.4). 규칙이 없으면 싣지 않는다 */
   policy?: MemberPolicy;
   /** 30초 안의 마지막 정책 deny(Ruling B85) */

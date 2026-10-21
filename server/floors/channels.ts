@@ -44,6 +44,20 @@ export class ChannelHub {
   private readonly floors = new Map<string, Floor>();
   private enabledFlag = false;
   private readonly no = new Map<string, number>();
+  /** 키가 있는 보관 지시가 나가거나(sent) 지워졌을 때(Phase 6b — 보관한 답의 질문 표시를 지우거나 다시 열려고) */
+  private heldListener?: (key: string, sent: boolean) => void;
+  onHeldGone(fn: (key: string, sent: boolean) => void): void {
+    this.heldListener = fn;
+  }
+  private heldGone(items: readonly HeldItem[], sent: boolean): void {
+    for (const h of items) if (h.key) {
+      try {
+        this.heldListener?.(h.key, sent);
+      } catch (e) {
+        getLogger().error("floors", "held listener failed", { error: errInfo(e) });
+      }
+    }
+  }
   /** keyDir: 층 열쇠 파일을 둘 폴더(0700). 없으면 파일을 쓰지 않는다(테스트) */
   constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string }) {}
 
@@ -219,7 +233,7 @@ export class ChannelHub {
     const f = this.floors.get(sessionId);
     if (!f) return { ok: false, error: "not-launched" };
     if (paused) {
-      if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey);
+      if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey); // 대체(같은 키 — 질문 표시는 새 보관으로 그대로 held)
       if (f.held.length >= MAX_HELD) return { ok: false, error: "held-full" };
       const item = { id: randomUUID(), text, at: new Date().toISOString(), ...(holdKey !== undefined ? { key: holdKey } : {}) };
       f.held.push(item);
@@ -249,7 +263,7 @@ export class ChannelHub {
     const f = this.floors.get(sessionId);
     const i = f?.held.findIndex((h) => h.id === hid) ?? -1;
     if (!f || i < 0) return false;
-    f.held.splice(i, 1);
+    this.heldGone(f.held.splice(i, 1), false);
     this.changed();
     return true;
   }
@@ -259,6 +273,7 @@ export class ChannelHub {
     if (!f?.conn || f.held.length === 0) return 0;
     const items = f.held.splice(0);
     for (const h of items) this.push(f, h.id, h.text);
+    this.heldGone(items, true);
     getLogger().info("floors", "resume-send", { session: this.n(sessionId), count: items.length });
     this.changed();
     return items.length;

@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 대화 질문 판(Phase 6b) — 대화 키로 */
+  questions?: { list(conv: string): import("../src/shared/types").ChatQuestionView[] };
   /** 마지막 hook이 보낸 플러그인 버전(Phase 5 §3). null이면 아직 받지 않음 */
   plugin?: () => string | null;
   /** 옛 http 입구로 온 세션이 남아 있는지(Phase 6a §4) */
@@ -122,6 +124,11 @@ export class SnapshotBuilder {
 
   constructor(private readonly opts: BuilderOptions) {
     this.usage = new UsageCollector(join(opts.claudeHome, "projects"));
+  }
+
+  /** 대화 키의 대화 기록 파일(Phase 6b Stop 대체 경로 — 서버가 이미 아는 파일만, 12장 d). 모르면 undefined */
+  transcriptOf(conv: string): string | undefined {
+    return this.usage.findFile((p) => basename(p) === `${conv}.jsonl`);
   }
 
   private versionField(): Pick<Snapshot, "serverVersion" | "plugin"> {
@@ -342,6 +349,15 @@ export class SnapshotBuilder {
     const p = this.opts.policy;
     if (p) {
       for (let i = 0; i < members.length; i++) members[i] = policyFields(members[i], p, conv, now, i === 0 ? agents : undefined);
+    }
+    // 대화 질문(Phase 6b 스펙 4장): 주인 책상에 awaitingReply. ask_user는 다른 결정이 없을 때 손들기(kind chat)
+    const qs = this.opts.questions?.list(conv) ?? [];
+    for (let i = 0; i < members.length && qs.length; i++) {
+      const q = qs.find((x) => x.owner === members[i].name);
+      if (!q) continue;
+      const m = members[i];
+      const raise = q.source === "ask" && q.state === "open" && s.alive && !m.decision;
+      members[i] = { ...m, awaitingReply: q, ...(raise ? { decision: { kind: "chat" as const, since: q.since ?? iso(now), summary: q.text.slice(0, 200), id: q.id }, state: "decision" as const } : {}) };
     }
 
     return {

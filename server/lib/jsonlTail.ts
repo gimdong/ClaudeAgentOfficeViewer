@@ -81,3 +81,27 @@ export async function readLastEntry(path: string, maxBytes = 65536): Promise<unk
     window = Math.min(window * 2, cap);
   }
 }
+
+/**
+ * 대화 기록 끝 maxBytes 안에서 마지막 assistant 항목의 글(text 블록을 줄바꿈으로 이음). 그 항목에 글이 없으면(도구 호출만) null.
+ * Stop 대체 경로(Phase 6b 스펙 4장·12장 d)가 서버가 이미 아는 그 세션의 대화 기록에서만 읽는다
+ */
+export async function readLastAssistantText(path: string, maxBytes = 512 * 1024): Promise<string | null> {
+  const { size } = await stat(path);
+  if (size === 0) return null;
+  const buf = await readRange(path, Math.max(0, size - maxBytes), size);
+  const lines = buf.toString("utf8").split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let e: { type?: unknown; message?: { content?: unknown } };
+    try {
+      e = JSON.parse(lines[i]);
+    } catch {
+      continue; // 창 앞의 잘린 줄·빈 줄
+    }
+    if (e?.type !== "assistant") continue;
+    const content = e.message?.content;
+    const text = typeof content === "string" ? content : Array.isArray(content) ? content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text as string).join("\n") : "";
+    return text.trim() ? text : null;
+  }
+  return null;
+}

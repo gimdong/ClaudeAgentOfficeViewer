@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { leadInstruct } from "../../server/floors/lead";
 import { PairingBook } from "../../server/floors/pairing";
+import { QuestionBoard } from "../../server/floors/questions";
 import { ReportStore } from "../../server/floors/reports";
 import { handleSubmit } from "../../server/floors/submit";
 import { Logger, setLogger } from "../../server/log";
@@ -10,16 +11,18 @@ const TOKEN = "a".repeat(64);
 const NONCE = () => Math.random().toString(16).slice(2).padEnd(32, "0").slice(0, 32);
 let reports: ReportStore;
 let pairing: PairingBook;
+let questions: QuestionBoard;
 let verified: string | null;
 const hub = { verifySubmit: () => verified };
 beforeEach(() => {
   setLogger(new Logger({ dir: "" }));
   reports = new ReportStore();
   pairing = new PairingBook();
+  questions = new QuestionBoard();
   verified = "s1";
 });
 afterEach(() => undefined);
-const submit = (kind: string, args: object, extra: object = {}) => handleSubmit({ hub, reports, pairing }, TOKEN, { kind, nonce: NONCE(), args, mac: "m", ...extra });
+const submit = (kind: string, args: object, extra: object = {}) => handleSubmit({ hub, reports, pairing, questions, convOf: (f) => `conv-${f}` }, TOKEN, { kind, nonce: NONCE(), args, mac: "m", ...extra });
 /** lead 지시를 보내 요청 id를 건다(실제 경로와 같게) */
 function ask(body: object, floor = "s1"): string {
   const r = leadInstruct({ instruct: () => ({ ok: true, id: "i", state: "sent" }) }, floor, false, body, ["team-lead", "builder", "tester"], reports);
@@ -90,8 +93,9 @@ describe("handleSubmit — ask_user", () => {
     expect(r.status).toBe(200);
     const id = (r.body as { questionId: string }).questionId;
     expect(id).toMatch(/^q-[0-9a-f]{8}$/);
-    expect(reports.question(id)).toMatchObject({ floor: "s1", question: "어느 쪽?", options: ["A", "B"], owner: { name: "tester", sub: false } });
+    // 질문 판은 대화 키(convOf)로, 주인 책상에
+    expect(questions.list("conv-s1")).toEqual([{ id, source: "ask", owner: "tester", ownerIsLead: false, text: "어느 쪽?", options: ["A", "B"], state: "open", since: expect.any(String) }]);
     const lead = submit("ask_user", { question: "다른 질문" });
-    expect(reports.question((lead.body as { questionId: string }).questionId)!.owner).toEqual({ name: "team-lead", sub: false });
+    expect(questions.list("conv-s1").find((q) => q.id === (lead.body as { questionId: string }).questionId)).toMatchObject({ owner: "team-lead", ownerIsLead: true });
   });
 });

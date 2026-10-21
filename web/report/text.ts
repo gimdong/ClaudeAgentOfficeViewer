@@ -1,4 +1,5 @@
 import type { DecisionKind, DecisionState, DecisionView } from "../../src/shared/types";
+import { LEAD_TEXT } from "../office/leadText";
 
 /** 결정 보고서 문구(디자인 phase2 §2·§3·§9). 값은 표의 글자 그대로다 */
 
@@ -22,6 +23,7 @@ export const KIND_CHIP: Record<DecisionKind, string> = {
   plan: "계획 승인",
   budget: "예산 도달",
   team: "팀원 요청",
+  chat: LEAD_TEXT.chipAsk, // ask_user(Phase 6b) — designer 글자
 };
 
 const FILE_TOOLS = new Set(["Edit", "MultiEdit", "NotebookEdit", "Write"]);
@@ -45,6 +47,7 @@ export function titleOf(v: DecisionView): string {
       if (v.toolName === "WebFetch") return "이 페이지를 열어도 될까요?";
       return "이 도구를 써도 될까요?";
     case "question":
+    case "chat": // 결정 큐에는 오지 않는다(ask_user는 ReplyDialog) — 같은 글자
       return "질문에 답해 주세요";
     case "plan":
       return v.answerable ? "이 계획대로 진행할까요?" : "계획 승인을 기다리고 있습니다";
@@ -65,6 +68,7 @@ export function whyLine(v: DecisionView): string {
       if (FILE_TOOLS.has(v.toolName)) return "이 파일을 바꿔도 될지 묻고 있습니다";
       return "이 도구를 써도 될지 묻고 있습니다";
     case "question":
+    case "chat":
       return "작업을 이어 가려면 답이 필요합니다";
     case "plan":
       return v.answerable ? "승인하면 계획을 마치고 파일을 고치기 시작합니다" : "이 계획은 터미널에서 승인할 수 있습니다";
