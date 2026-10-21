@@ -1,13 +1,13 @@
 // Phase 6a 보안 회귀(Task 5): 암호화 command relay(plugins/claude-office/hooks/relay.cjs)와 진짜 서버(createApp + /hooks/v2)를 실제로 잇고,
 // 그 사이에 가짜 서버·중계자를 끼운다. spike 시험 후보 12 + 13번, B294(재전송 창 기준 시각·창 안 id 가득 참·half-close).
 // 열쇠·평문은 모두 가짜. 포트는 0(임의)
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createCipheriv, randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import { HOOK_V2, ReplayWindow, deriveKeys, openRequest, sealResponse, type HookKeys } from "../../server/hooks/v2";
@@ -400,6 +400,85 @@ describe("13. hooks.json(저장소 원본)", () => {
           expect(x.timeout, n).toBe(n === "PermissionRequest" ? 600 : 10);
         }
       }
+    }
+  });
+});
+
+describe("11. 설치본 hooks.json의 node 절대 경로(packaging/fill-hooks.cjs)", () => {
+  const FILL = join(ROOT, "packaging/fill-hooks.cjs");
+  /** 저장소 원본을 임시 플러그인 폴더로 복사하고 설치 스크립트처럼 채운다 */
+  function filled(keyPath: string) {
+    const plug = mkdtempSync(join(tmpdir(), "co-sec-plug-"));
+    mkdirSync(join(plug, "hooks"), { recursive: true });
+    copyFileSync(RELAY, join(plug, "hooks/relay.cjs"));
+    const hooks = join(plug, "hooks/hooks.json");
+    copyFileSync(join(ROOT, "plugins/claude-office/hooks/hooks.json"), hooks);
+    const r = spawnSync(process.execPath, [FILL, hooks, keyPath], { encoding: "utf8" });
+    return { plug, hooks, r };
+  }
+  /** Claude Code의 exec form처럼: 셸 없이 command를 args로, cwd는 프로젝트 폴더. ${CLAUDE_PLUGIN_ROOT}는 플러그인 폴더 */
+  function execForm(h: { command: string; args: string[] }, plug: string, cwd: string, path: string, input: string) {
+    return spawnSync(h.command, h.args.map((a) => a.replace("${CLAUDE_PLUGIN_ROOT}", plug)), { cwd, input, encoding: "utf8", env: { PATH: path, CLAUDE_PLUGIN_ROOT: plug } });
+  }
+  const firstHook = (file: string) => (Object.values(JSON.parse(readFileSync(file, "utf8")).hooks) as { hooks: { command: string; args: string[] }[] }[][])[0][0].hooks[0];
+
+  it("13개 모두 command = 설치한 node의 절대 경로(실행 가능), args = [relay, 열쇠 경로 그대로], 자리 표시자 0", () => {
+    const keyPath = join(dir, "sp ace 'q\" key", "hook.key"); // 공백·따옴표가 있어도 JSON 값으로 들어간다
+    const { plug, hooks, r } = filled(keyPath);
+    try {
+      expect(r.status).toBe(0);
+      const text = readFileSync(hooks, "utf8");
+      expect(text).not.toMatch(/__NODE__|__KEYFILE__/);
+      const all = Object.values(JSON.parse(text).hooks as Record<string, { hooks: { command: string; args: string[] }[] }[]>).flatMap((gs) => gs.flatMap((g) => g.hooks));
+      expect(all).toHaveLength(13);
+      for (const h of all) {
+        expect(isAbsolute(h.command)).toBe(true);
+        expect(h.command).toBe(process.execPath);
+        expect(statSync(h.command).mode & 0o111).not.toBe(0);
+        expect(h.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/hooks/relay.cjs", keyPath]);
+      }
+    } finally {
+      rmSync(plug, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("PATH 앞에 .이 있고 cwd(프로젝트)에 가짜 node가 있어도 설치본 명령은 가짜를 실행하지 않는다. 맨 node였다면 실행됐다(대조군)", () => {
+    const { plug, hooks, r } = filled(keyFile);
+    const proj = mkdtempSync(join(tmpdir(), "co-sec-proj-"));
+    const marker = join(proj, "PWNED");
+    try {
+      expect(r.status).toBe(0);
+      writeFileSync(join(proj, "node"), `#!/bin/sh\ntouch "${marker}"\n`, { mode: 0o755 });
+      const path = `.:${process.env.PATH ?? "/usr/bin:/bin"}`;
+      const input = JSON.stringify(ev("PreToolUse"));
+      const h = firstHook(hooks);
+      const out = execForm(h, plug, proj, path, input);
+      expect({ status: out.status, stdout: out.stdout }).toEqual({ status: 0, stdout: "" }); // 진짜 relay: 대시보드 없음 → 무출력
+      expect(existsSync(marker)).toBe(false);
+      // 대조군: 같은 조건에서 command가 맨 "node"면 cwd의 가짜가 실행된다 — 위 검사가 헛돌지 않음을 보인다
+      execForm({ ...h, command: "node" }, plug, proj, path, input);
+      expect(existsSync(marker)).toBe(true);
+    } finally {
+      rmSync(plug, { recursive: true, force: true });
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("채우지 못하면 exit 1: 인자 없음·JSON 아님·hooks 없음. 설치 스크립트는 그 실패에서 멈춘다(마켓플레이스 등록보다 앞)", () => {
+    const t = mkdtempSync(join(tmpdir(), "co-sec-fill-"));
+    try {
+      writeFileSync(join(t, "bad.json"), "{not json");
+      writeFileSync(join(t, "nohooks.json"), "{}");
+      for (const args of [[], [join(t, "bad.json"), keyFile], [join(t, "nohooks.json"), keyFile], [join(t, "missing.json"), keyFile]]) {
+        expect(spawnSync(process.execPath, [FILL, ...args]).status, args.join(" ")).toBe(1);
+      }
+    } finally {
+      rmSync(t, { recursive: true, force: true });
+    }
+    for (const [f, fail] of [["packaging/install.sh", /fill-hooks\.cjs"[^\n]*\\\n\s*\|\| fail hooks/], ["packaging/install.ps1", /fill-hooks\.cjs[\s\S]{0,200}\$LASTEXITCODE -ne 0\)\s*\{\s*\n\s*Fail-Install "hooks"/]] as const) {
+      const s = readFileSync(join(ROOT, f), "utf8");
+      expect(s, f).toMatch(fail);
+      expect(s.indexOf("fill-hooks.cjs"), f).toBeLessThan(s.indexOf("plugin marketplace add"));
     }
   });
 });
