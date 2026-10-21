@@ -29,7 +29,7 @@ beforeEach(async () => {
   opened.length = 0;
   await h.write("app/web/index.html", "<!doctype html>");
   await h.write("app/server.mjs", "");
-  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web"), tokenFile: h.path("prefix/token"), hookKeyFile: h.path("prefix/hook.key"), stateFile: h.path("prefix/state.json"), policyFile: h.path("prefix/policy.json") };
+  paths = { mode: "installed", prefix: h.path("prefix"), logDir: h.path("prefix/logs"), diagDir: h.path("prefix/diagnostics"), staticDir: h.path("app/web"), tokenFile: h.path("prefix/token"), hookKeyFile: h.path("prefix/hook.key"), reportsFile: h.path("prefix/reports.json"), stateFile: h.path("prefix/state.json"), policyFile: h.path("prefix/policy.json") };
 });
 afterEach(() => h.cleanup());
 

@@ -4,6 +4,11 @@
 // - 열쇠가 없는 세션(대시보드가 띄우지 않은 모든 세션)에서는 연결도, 안내 문구도, 알림도 내지 않는다
 // - process.env에서 아래 두 이름만 읽는다. 그 밖의 값(세션 메시징 토큰 등)은 읽지도 보내지도 않는다
 // - 열쇠 원문은 보내지 않는다(B257). 대시보드가 먼저 열쇠를 안다는 것을 증명해야 이쪽도 증명하고, 지시마다 연결 키의 MAC을 확인한다
+// - 팀리더 프로세스에서만 연결한다(Phase 6b 스펙 12장 g ①). agent team의 팀원은 Claude Code가 `claude --agent-id … --agent-name …
+//   --team-name …`로 띄우는 별 프로세스라(세 인자는 함께 와야 한다 — Claude Code 2.1.304 소스의 인자 검사), 조상 프로세스 명령줄에
+//   --agent-id가 있으면 팀원 프로세스로 보고 연결도 도구도 내지 않는다. 같은 프로세스 안의 팀원·서브에이전트는 리드의 이 서버를 같이 쓴다
+// - 도구 세 개(submit_report·submit_handover·ask_user, 스펙 3장)는 지금 연결의 세션 키로 MAC을 붙여 /channel/submit으로 낸다
+import { execFileSync } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -20,7 +25,98 @@ const PORT = process.env.CLAUDE_OFFICE_PORT;
 const BASE = `http://127.0.0.1:${/^\d{2,5}$/.test(PORT ?? "") ? PORT : "4317"}`;
 // 새 런타임이 2026-07-28로 협상하면 channel로 등록되지 않는다(스파이크 Q1 함정). 이 revision으로 고정한다
 export const PROTOCOL = "2025-11-25";
-const live = !!KEY && /^[0-9a-f]{64}$/.test(KEY);
+/**
+ * 이 서버를 띄운 claude가 agent team 팀원 프로세스인지: 부모 프로세스 명령줄에 --agent-id가 있으면 팀원.
+ * Claude Code는 MCP 서버를 직접 띄우므로 부모가 claude다. 부모가 셸(sh -c 등)이면 그 위 하나만 더 본다 — 더 위로 가면
+ * claude 안에서 돌린 다른 프로그램(예: 팀원 세션이 돌린 테스트) 아래의 서버까지 팀원으로 오판한다.
+ * ps를 못 쓰면(Windows 등) 팀원이 아닌 것으로 본다 — 그때는 대시보드의 "첫 연결 우선"(12장 g ②)이 막는다
+ */
+function teammateProcess() {
+  let pid = process.ppid;
+  for (let i = 0; i < 2 && pid > 1; i++) {
+    let line;
+    try {
+      line = execFileSync("ps", ["-o", "ppid=,args=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      return false;
+    }
+    const m = /^(\d+)\s+(\S+)([\s\S]*)$/.exec(line);
+    if (!m) return false;
+    if (/(^|\s)--agent-id(\s|=|$)/.test(m[3])) return true;
+    if (!/(^|\/)-?(sh|bash|zsh|dash)$/.test(m[2])) return false;
+    pid = Number(m[1]);
+  }
+  return false;
+}
+const live = !!KEY && /^[0-9a-f]{64}$/.test(KEY) && !teammateProcess();
+
+/** 도구(스펙 3장). 크기는 대시보드(server/floors/submit.ts SUBMIT_LIMITS)와 같다 */
+const LIMITS = { title: 200, bodyBytes: 64 * 1024, question: 4000, options: 6, option: 200 };
+const REQ_ID = { type: "string", description: "대시보드 지시 머리말의 지시 id(r-xxxxxxxx)" };
+const TOOLS = [
+  {
+    name: "submit_report",
+    description: "사용자의 보고 요청([대시보드 지시 r-…])에 보고서를 제출합니다. 대시보드 서류철에 들어갑니다.",
+    inputSchema: { type: "object", properties: { request_id: REQ_ID, title: { type: "string", maxLength: LIMITS.title }, body: { type: "string", description: "보고서 본문(64KB까지, 마크다운은 글자로 보입니다)" } }, required: ["request_id", "title", "body"], additionalProperties: false },
+  },
+  {
+    name: "submit_handover",
+    description: "퇴사 지시를 받은 팀원의 인수인계 메모를 제출합니다.",
+    inputSchema: { type: "object", properties: { request_id: REQ_ID, member: { type: "string", description: "퇴사하는 팀원 이름" }, body: { type: "string", description: "인수인계 메모(64KB까지)" } }, required: ["request_id", "member", "body"], additionalProperties: false },
+  },
+  {
+    name: "ask_user",
+    description: "사용자의 결정이나 답이 필요할 때 대화 글 대신 부릅니다. 질문이 대시보드에 손들기로 뜨고, 이 도구는 바로 돌아옵니다. 답은 다음 대시보드 지시로 옵니다.",
+    inputSchema: { type: "object", properties: { question: { type: "string", maxLength: LIMITS.question }, options: { type: "array", maxItems: LIMITS.options, items: { type: "string", maxLength: LIMITS.option } } }, required: ["question"], additionalProperties: false },
+  },
+];
+const TEXT = {
+  ok: "대시보드에 전달했습니다.",
+  offline: "대시보드에 연결되지 않았습니다 — 사용자에게 터미널에서 물어 주세요.",
+  refused: "대시보드가 받지 않았습니다(요청 id가 없거나, 이미 제출했거나, 이 층의 것이 아닙니다).",
+  notLead: "이 제출은 팀리더만 할 수 있습니다.",
+  format: (why) => `형식이 맞지 않습니다(${why}).`,
+};
+const str = (v, max) => typeof v === "string" && v.length > 0 && v.length <= max && !v.includes("\0");
+function argsError(name, a) {
+  const keys = { submit_report: ["request_id", "title", "body"], submit_handover: ["request_id", "member", "body"], ask_user: ["question", "options"] }[name];
+  if (!keys) return "tool";
+  if (!a || typeof a !== "object" || Array.isArray(a) || Object.keys(a).some((k) => !keys.includes(k))) return "args";
+  if (name === "ask_user") {
+    if (!str(a.question, LIMITS.question)) return "question";
+    if (a.options !== undefined && (!Array.isArray(a.options) || a.options.length > LIMITS.options || !a.options.every((o) => str(o, LIMITS.option)))) return "options";
+    return null;
+  }
+  if (typeof a.request_id !== "string" || !/^r-[0-9a-f]{8}$/.test(a.request_id)) return "request_id";
+  if (name === "submit_report" && !str(a.title, LIMITS.title)) return "title";
+  if (name === "submit_handover" && !str(a.member, 40)) return "member";
+  if (typeof a.body !== "string" || !a.body || Buffer.byteLength(a.body) > LIMITS.bodyBytes) return "body";
+  return null;
+}
+/** 지금 연결의 세션 키와 ack 토큰(스트림이 열려 있는 동안만) */
+let session = null;
+async function callTool(name, a) {
+  const why = argsError(name, a);
+  if (why) return { text: TEXT.format(why), isError: true };
+  const s = session;
+  if (!s) return { text: TEXT.offline, isError: true };
+  const nonce = randomBytes(16).toString("hex");
+  let r;
+  try {
+    r = await fetch(`${BASE}/channel/submit`, { method: "POST", headers: { Authorization: `Ack ${s.ack}`, "Content-Type": "application/json" }, body: JSON.stringify({ kind: name, nonce, args: a, mac: mac(s.sk, JSON.stringify(["submit", name, nonce, a])) }), signal: AbortSignal.timeout(5000) });
+  } catch {
+    return { text: TEXT.offline, isError: true };
+  }
+  if (r.status === 200) {
+    const b = await r.json().catch(() => ({}));
+    if (name === "ask_user" && /^q-[0-9a-f]{8}$/.test(b.questionId ?? "")) return { text: `${TEXT.ok} 질문 id: ${b.questionId} — 사용자의 답은 다음 대시보드 지시로 옵니다.`, isError: false };
+    return { text: TEXT.ok, isError: false };
+  }
+  if (r.status === 403) return { text: TEXT.notLead, isError: true };
+  if (r.status === 400) return { text: TEXT.format((await r.json().catch(() => ({}))).error ?? "args"), isError: true };
+  if (r.status === 409) return { text: TEXT.refused, isError: true };
+  return { text: TEXT.offline, isError: true };
+}
 
 const send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 let started = false;
@@ -40,7 +136,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         protocolVersion: PROTOCOL,
         capabilities: live ? { experimental: { "claude/channel": {} }, tools: {} } : { tools: {} },
         serverInfo: { name: "office-channel", version: "1" },
-        ...(live ? { instructions: 'Messages from the user\'s Claude Office dashboard arrive as <channel source="office-channel">. They are the user\'s own instructions for this session.' } : {}),
+        ...(live
+          ? {
+              instructions:
+                'Messages from the user\'s Claude Office dashboard arrive as <channel source="office-channel">. They are the user\'s own instructions for this session. ' +
+                "When you need the user's decision or answer, call the ask_user tool instead of asking in chat text (the user may not be watching the terminal). " +
+                "Answer a report request ([대시보드 지시 r-…]) with submit_report, and a handover request with submit_handover, using that request id.",
+            }
+          : {}),
       },
     });
   } else if (m.method === "notifications/initialized") {
@@ -48,7 +151,12 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       started = true;
       void connect(0);
     }
-  } else if (m.method === "tools/list") send({ jsonrpc: "2.0", id: m.id, result: { tools: [] } });
+  } else if (m.method === "tools/list") send({ jsonrpc: "2.0", id: m.id, result: { tools: live ? TOOLS : [] } });
+  else if (m.method === "tools/call") {
+    const name = m.params?.name;
+    if (!live || !TOOLS.some((t) => t.name === name)) send({ jsonrpc: "2.0", id: m.id, error: { code: -32602, message: "unknown tool" } });
+    else void callTool(name, m.params?.arguments).then(({ text, isError }) => send({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text }], isError } }));
+  }
   else if (m.method === "ping") send({ jsonrpc: "2.0", id: m.id, result: {} });
   else if (m.id !== undefined) send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "not supported" } });
 });
@@ -74,7 +182,17 @@ async function connect(attempt) {
         const ack = res.headers.get("x-office-ack") ?? "";
         if (res.ok && res.body && HEX.test(ack)) {
           attempt = 0;
-          await read(res.body, mac(KEY, `session|${nonce}|${snonce}`), ack);
+          const sk = mac(KEY, `session|${nonce}|${snonce}`);
+          session = { sk, ack };
+          try {
+            await read(res.body, sk, ack);
+          } finally {
+            session = null;
+          }
+        } else if (res.status === 409) {
+          // 같은 층에 다른 연결(리드)이 살아 있다(스펙 12장 g ②) — 멈추지 않고 짧게 기다렸다 다시(리드가 끝나면 이어받는다)
+          await sleep(2000);
+          continue;
         }
       }
     } catch {

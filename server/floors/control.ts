@@ -3,6 +3,13 @@ import { PAUSED_REASON, preToolDeny } from "../decisions/protocol";
 import { errInfo, getLogger } from "../log";
 import { EXEMPT_TOOLS } from "../policy/tools";
 
+/**
+ * 이 플러그인의 channel MCP 도구(Phase 6b 스펙 11장 끝). 휴업 중에도 막지 않는다 — 제출만 하고 세션 작업을 진행시키지 않는다.
+ * 정확한 이름만(B310): 접두 일치·대소문자 바꿈·비슷한 서버 이름은 일반 도구처럼 막는다. 권한 정책의 EXEMPT_TOOLS와는 따로다(휴업에만)
+ */
+export const CHANNEL_TOOL_PREFIX = "mcp__plugin_claude-office_office-channel__";
+export const CHANNEL_TOOLS: ReadonlySet<string> = new Set(["ask_user", "submit_report", "submit_handover"].map((t) => CHANNEL_TOOL_PREFIX + t));
+
 export type TerminateError = "ended" | "self" | "pid-reused" | "unverified";
 export type TerminateResult = { ok: true; signal: "SIGTERM" | "SIGKILL"; sent: boolean } | { ok: false; error: TerminateError };
 export interface FloorView { paused: boolean; pausedDenied: number; terminating: boolean }
@@ -46,7 +53,7 @@ export class FloorControl {
       const tool = input.tool_name;
       if (typeof raw !== "string" || typeof tool !== "string" || !tool) return null;
       const sessionId = this.aliasOf(raw);
-      if (!this.paused.has(sessionId) || EXEMPT_TOOLS.has(tool)) return null;
+      if (!this.paused.has(sessionId) || EXEMPT_TOOLS.has(tool) || CHANNEL_TOOLS.has(tool)) return null;
       this.pausedDenied.set(sessionId, (this.pausedDenied.get(sessionId) ?? 0) + 1);
       // warn + 고정 msg라 되풀이 deny는 로거가 10분 동안 한 줄로 묶는다(B125·B128). 도구 이름은 data에만 —
       // msg에 넣으면 이름을 바꿔 가며 오는 호출이 묶이지 않고 로거의 억제 표가 커진다

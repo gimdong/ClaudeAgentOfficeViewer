@@ -345,15 +345,38 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     expect(first).toMatch(/^[0-9a-f]{64}$/);
     const ack = (t: string) => send("/channel/ack", { headers: { Authorization: `Ack ${t}`, "Content-Type": "application/json" }, body: '{"id":"x"}' });
     expect((await ack(first)).status).toBe(200);
-    const b = openStream(key); // 새 연결이 옛 연결을 끊는다
+    // 첫 연결이 살아 있는 동안 새 연결은 409(Phase 6b 스펙 12장 g ② — 빼앗지 않는다), 토큰도 없다
+    const busy = openStream(key);
+    await busy.ready;
+    expect([busy.status(), busy.ack()]).toEqual([409, ""]);
+    expect((await ack(first)).status).toBe(200);
+    a.close();
+    await until(() => hub.view("s1")?.connected === false);
+    expect((await ack(first)).status).toBe(401); // 끊긴 연결의 토큰은 무효
+    const b = openStream(key); // 끊긴 뒤의 다시 연결은 받는다
     await b.ready;
+    expect(b.status()).toBe(200);
     expect(b.ack()).not.toBe(first);
-    expect((await ack(first)).status).toBe(401);
     expect((await ack(b.ack())).status).toBe(200);
     expect((await ack(key)).status).toBe(401);
     b.close();
     await until(() => hub.view("s1")?.connected === false);
     expect((await ack(b.ack())).status).toBe(401);
+  });
+
+  it("verifySubmit(Phase 6b): 살아 있는 연결의 ack 토큰 + 그 연결 키 MAC만, nonce는 한 번만, 끊긴 연결은 거절", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const s = openStream(key);
+    await s.ready;
+    const input = JSON.stringify(["submit", "ask_user", "n1", { question: "q" }]);
+    expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input) .replace(/^./, (c) => (c === "0" ? "1" : "0")), "n1")).toBeNull(); // MAC 틀림
+    expect(hub.verifySubmit("b".repeat(64), input, mac(s.sk(), input), "n1")).toBeNull(); // 모르는 토큰
+    expect(hub.verifySubmit(s.ack(), input, mac(key, input), "n1")).toBeNull(); // 층 열쇠로 만든 MAC(연결 키가 아님)
+    expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n1")).toBe("s1");
+    expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n1")).toBeNull(); // 같은 nonce 두 번째
+    s.close();
+    await until(() => hub.view("s1")?.connected === false);
+    expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n2")).toBeNull();
   });
 
   it("hello·stream·ack의 응답과 로그에 열쇠·proof 값이 나오지 않는다", async () => {

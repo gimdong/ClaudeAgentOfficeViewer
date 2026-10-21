@@ -22,6 +22,9 @@ import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
 import { leadInstruct } from "./floors/lead";
+import { PairingBook } from "./floors/pairing";
+import { ReportStore } from "./floors/reports";
+import { handleSubmit } from "./floors/submit";
 
 const ALLOWED_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -137,6 +140,10 @@ export function createApp(
       reopen?(record: SessionRecord, mode: ReopenMode): Promise<ReopenResult>;
       /** 그 층의 옮겨 열기가 진행 중인지 — 그동안 pause·resume·terminate·hide는 409 busy(B205 ②) */
       reopening?(sessionId: string): boolean;
+      /** 보고서·인수인계·질문 저장소(Phase 6b). 없으면 메모리만(테스트) */
+      reports?: ReportStore;
+      /** 제출 도구 PreToolUse 짝짓기(B311). 없으면 새로 */
+      pairing?: PairingBook;
     };
     /** 층 관리(Phase 4a 스펙 4·5·6). record는 마지막 스냅샷 빌드의 세션 레코드(B117) */
     floors?: {
@@ -156,6 +163,8 @@ export function createApp(
 ): Express {
   const app = express();
   const snapshotHub = hub; // 아래 channels 블록의 hub(ChannelHub)와 이름이 겹친다
+  const reports = opts.channels?.reports ?? new ReportStore();
+  const pairing = opts.channels?.pairing ?? new PairingBook();
 
   app.use((req, res, next) => {
     if (!isAllowedHost(req.headers.host)) {
@@ -183,6 +192,14 @@ export function createApp(
       opts.onPluginVersion?.(pluginVersion, legacy, input.session_id as string);
     } catch (e) {
       getLogger().error("hooks", "plugin version failed", { error: errInfo(e) });
+    }
+    // 제출 도구의 주인 짝짓기는 /hooks/v2 이벤트만(스펙 12장 d)
+    if (!legacy) {
+      try {
+        pairing.onPreToolUse(input);
+      } catch (e) {
+        getLogger().error("hooks", "pairing failed", { error: errInfo(e) });
+      }
     }
     const isPre = input.hook_event_name === "PreToolUse";
     // 0. 일시정지 deny(Phase 4a 스펙 4.2): 가장 넓은 규칙이라 맨 앞. 정책·예산 관문·큐·이벤트 저장소를 거치지 않는다
@@ -637,7 +654,7 @@ export function createApp(
         const id = idOf(req);
         if (!id) return void res.status(400).json({});
         const members = snapshotHub.current().sessions.find((x) => x.id === id)?.members.map((m) => m.name) ?? [];
-        const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members);
+        const r = leadInstruct(hub, id, floors.isPaused(id), req.body, members, reports);
         res.status(r.status).json(r.body);
       });
       app.put("/api/experimental", guard, express.json({ limit: "1kb", type: () => true }), (req, res) => {
@@ -701,11 +718,19 @@ export function createApp(
     app.get("/channel/stream", noBrowser, (req, res) => {
       const m = /^Proof ([0-9a-f]{64}) ([0-9a-f]{64}) ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "");
       const a = m && ch.attach({ kid: m[1], snonce: m[2], proof: m[3] }, res);
+      // 같은 층에 살아 있는 연결이 있으면 409(스펙 12장 g ② — 401·403이면 channel 서버가 영영 멈춘다. 409는 잠시 뒤 다시 시도)
+      if (a === "busy") return void res.status(409).end();
       if (!a) return void res.status(401).end();
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Office-Ack": a.ack });
       res.flushHeaders(); // 첫 지시나 심장박동을 기다리지 않고 연결됨을 알린다
       const heartbeat = setInterval(() => res.write(": ping\n\n"), opts.heartbeatMs ?? 15_000);
       req.on("close", () => clearInterval(heartbeat));
+    });
+    // channel MCP 도구의 제출(Phase 6b 스펙 3장). 크기 상한은 MAC 계산 전(본문 파서)에, 층은 연결로만
+    app.post("/channel/submit", noBrowser, express.json({ limit: "256kb", type: () => true }), (req, res) => {
+      const t = /^Ack ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];
+      const r = handleSubmit({ hub: ch, reports, pairing }, t, req.body);
+      res.status(r.status).json(r.body);
     });
     app.post("/channel/ack", noBrowser, body, (req, res) => {
       const t = /^Ack ([0-9a-f]{64})$/.exec(req.headers.authorization ?? "")?.[1];

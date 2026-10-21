@@ -27,7 +27,8 @@ export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | 
 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -152,8 +153,12 @@ export class ChannelHub {
     return { snonce, proof: mac(f.key, `server|${nonce}|${snonce}`) };
   }
 
-  /** 핸드셰이크 2단계 — /channel/stream 연결. snonce는 맞든 틀리든 한 번 쓰고 지운다. 증명이 틀리면 null */
-  attach(a: { kid: string; snonce: string; proof: string }, res: ServerResponse): { id: string; ack: string } | null {
+  /**
+   * 핸드셰이크 2단계 — /channel/stream 연결. snonce는 맞든 틀리든 한 번 쓰고 지운다. 증명이 틀리면 null.
+   * 같은 층에 살아 있는 연결이 있으면 "busy"(Phase 6b 스펙 12장 g ② — 새 연결이 리드 연결을 빼앗지 않게. 라우트가 409로 답하고
+   * channel 서버는 잠시 뒤 다시 시도한다). 연결이 끊기면(close) 다음 시도를 받는다
+   */
+  attach(a: { kid: string; snonce: string; proof: string }, res: ServerResponse): { id: string; ack: string } | "busy" | null {
     const hit = this.byKid(a.kid);
     if (!hit) return null;
     const [id, f] = hit;
@@ -164,13 +169,17 @@ export class ChannelHub {
       getLogger().warn("floors", "channel-proof-failed", { session: this.n(id) });
       return null;
     }
-    f.conn?.end();
+    if (f.conn && !f.conn.destroyed && !f.conn.writableEnded) {
+      getLogger().info("floors", "channel-busy", { session: this.n(id) });
+      return "busy";
+    }
     f.conn = res;
     f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
     f.ackToken = randomBytes(32).toString("hex");
+    f.nonces = new Set();
     res.on("close", () => {
       if (f.conn === res) {
-        f.conn = f.sk = f.ackToken = undefined;
+        f.conn = f.sk = f.ackToken = f.nonces = undefined;
         getLogger().info("floors", "channel-drop", { session: this.n(id) });
         this.changed();
       }
@@ -189,6 +198,21 @@ export class ChannelHub {
       this.changed();
     }
     return true;
+  }
+
+  /**
+   * /channel/submit(Phase 6b 스펙 3장): ack 토큰으로 연결(=층)을 찾고, 그 연결 키로 만든 MAC을 확인한다(B268과 같은 JSON 배열 입력).
+   * nonce는 연결마다 한 번만. 층은 연결로만 정한다(본문의 값으로 정하지 않는다). 맞으면 층 id, 아니면 null
+   */
+  verifySubmit(token: string, input: string, givenMac: string, nonce: string): string | null {
+    let hit: [string, Floor] | null = null;
+    for (const e of this.floors) if (e[1].ackToken && same(e[1].ackToken, token)) hit = e;
+    if (!hit) return null;
+    const [id, f] = hit;
+    if (!f.sk || !f.nonces || !same(mac(f.sk, input), givenMac) || f.nonces.has(nonce)) return null;
+    f.nonces.add(nonce);
+    if (f.nonces.size > 1000) f.nonces.delete(f.nonces.values().next().value!);
+    return id;
   }
 
   instruct(sessionId: string, text: string, paused: boolean, holdKey?: string): InstructResult {

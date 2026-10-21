@@ -174,6 +174,38 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     expect(notes().filter((t) => t === "i0")).toHaveLength(2); // 가장 오래된 것은 잊었다
   }, 15_000);
 
+  it("agent team 팀원 프로세스(부모 명령줄에 --agent-id)면 연결하지 않고 도구도 내지 않는다(Phase 6b 스펙 12장 g ①). 부모가 셸이면 그 위를 본다", async () => {
+    const d = await fakeDashboard();
+    const wrapper = join(keyDir ?? tmpdir(), "fake-claude.cjs");
+    writeFileSync(wrapper, `require("child_process").spawn(process.execPath, [${JSON.stringify(SCRIPT)}], { stdio: "inherit" }).on("exit", (c) => process.exit(c ?? 0));`);
+    const env = { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() };
+    for (const argv of [[wrapper, "--agent-id", "tester@team", "--agent-name", "tester", "--team-name", "team"], ["-e", `require("child_process").spawn("sh", ["-c", ${JSON.stringify(`exec "${process.execPath}" "${SCRIPT}"`)}], { stdio: "inherit" }).on("exit", (c) => process.exit(c ?? 0))`, "--", "--agent-id", "tester@team"]]) {
+      const c = spawn(process.execPath, argv, { env, stdio: ["pipe", "pipe", "pipe"] });
+      const lines: string[] = [];
+      c.stdout.on("data", (b) => lines.push(...String(b).split("\n").filter(Boolean)));
+      c.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "t", version: "0" } } }) + "\n");
+      c.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+      c.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) + "\n");
+      await until(() => lines.length >= 2);
+      await new Promise((r) => setTimeout(r, 600));
+      const msgs = lines.map((l) => JSON.parse(l));
+      expect(msgs.find((m) => m.id === 1).result.capabilities.experimental, argv[0]).toBeUndefined();
+      expect(msgs.find((m) => m.id === 2).result.tools).toEqual([]);
+      c.kill();
+    }
+    expect(d.seen).toEqual([]);
+    // 대조군: 같은 감싸기라도 --agent-id가 없으면(리드) 연결하고 도구 셋을 낸다
+    const lead = spawn(process.execPath, [wrapper, "--session-id", "s"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const out: string[] = [];
+    lead.stdout.on("data", (b) => out.push(...String(b).split("\n").filter(Boolean)));
+    lead.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");
+    lead.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+    lead.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) + "\n");
+    await until(() => d.seen.length > 0);
+    expect(out.map((l) => JSON.parse(l)).find((m) => m.id === 2).result.tools.map((t: { name: string }) => t.name).sort()).toEqual(["ask_user", "submit_handover", "submit_report"]);
+    lead.kill();
+  });
+
   it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
     const src = readFileSync(SCRIPT, "utf8");
     const names = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
