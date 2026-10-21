@@ -27,16 +27,8 @@ export interface FolderView {
   reports: ReportView[];
   archived: ReportView[];
 }
-export interface ChatQuestionView {
-  id: string;
-  /** ask_user 도구 / Stop 대체 경로 */
-  source: "ask" | "await";
-  owner: string;
-  ownerIsLead: boolean;
-  text: string;
-  options: string[];
-  state: "open" | "held" | "answered-terminal" | "superseded";
-}
+/** 대화 질문 화면 모양은 shared로 옮김(4c8e70d). 여기서 다시 내보내 기존 import를 그대로 둔다 */
+export type { ChatQuestionView } from "../../src/shared/types";
 
 export const LEAD_MAX = 4_000;
 
