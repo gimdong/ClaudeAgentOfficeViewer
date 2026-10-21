@@ -24,7 +24,7 @@ import { validateLaunch, type LaunchInput } from "./floors/launch";
 import { leadInstruct, type LeadSent } from "./floors/lead";
 import { DutyBoard } from "./floors/duty";
 import { PairingBook } from "./floors/pairing";
-import { ReportStore } from "./floors/reports";
+import { ReportStore, folderView } from "./floors/reports";
 import { handleSubmit } from "./floors/submit";
 import { QuestionBoard } from "./floors/questions";
 
@@ -662,6 +662,12 @@ export function createApp(
         const r = hub.instruct(id, text, floors.isPaused(id));
         if (!r.ok) return void res.status(r.error === "not-launched" ? 404 : 409).json({ error: r.error });
         res.status(200).json({ id: r.id, state: r.state });
+      });
+      // 서류철(Phase 6b 스펙 5장). 읽기 — 본문(모델 글)은 화면이 글자로만 그린다
+      app.get("/api/floors/:id/reports", (req, res) => {
+        const id = idOf(req);
+        if (!id) return void res.status(400).json({});
+        res.status(200).json(folderView(reports, id));
       });
       // 팀리더 지시(Phase 6b 스펙 2장): kind별 정해진 틀로만 만든다(사용자 글은 틀의 칸에만, leadText.ts)
       app.post("/api/floors/:id/lead", guard, on, express.json({ limit: "32kb", type: () => true }), (req, res) => {

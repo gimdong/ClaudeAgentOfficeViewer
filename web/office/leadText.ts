@@ -5,28 +5,9 @@ import { CH_TEXT } from "../floors/ChannelDialogs";
  * 모양(ReportView 등)은 developer가 src/shared/types.ts에 같은 필드로 둘 때까지 여기 둔다(B318)
  */
 
-export type LeadChannel = "ok" | "not-launched" | "not-connected";
-export type ReportState = "pending" | "approved" | "revise" | "started";
-export interface ReportView {
-  id: string;
-  kind: "report" | "handover";
-  title?: string;
-  /** 인수인계 대상 팀원 */
-  member?: string;
-  /** 제출한 에이전트 이름 */
-  from: string;
-  body: string;
-  /** 받은 시각(ISO) */
-  at: string;
-  state: ReportState;
-  /** 승인·수정 요청·새 팀원 시작 시각(ISO) */
-  decidedAt?: string;
-}
-/** 최신 먼저. archived는 넘쳐서 보관함으로 옮긴 대기 보고서(스펙 11장 g) */
-export interface FolderView {
-  reports: ReportView[];
-  archived: ReportView[];
-}
+/** 화면 모양은 shared로 옮김(developer Task 4). 여기서 다시 내보내 기존 import를 그대로 둔다 */
+export type { FolderView, LeadChannel, ReportState, ReportView } from "../../src/shared/types";
+import type { LeadChannel, ReportState } from "../../src/shared/types";
 /** 대화 질문 화면 모양은 shared로 옮김(4c8e70d). 여기서 다시 내보내 기존 import를 그대로 둔다 */
 export type { ChatQuestionView } from "../../src/shared/types";
 

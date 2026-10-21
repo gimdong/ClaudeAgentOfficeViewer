@@ -2,6 +2,8 @@ import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
+import { CMD_TEXT } from "../office/leadCmdText";
+import { shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { Icon } from "../pixel/Icon";
@@ -48,7 +50,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   // 재개 직후 이 층에서 가장 오래 기다린 결정의 보고서를 연다. 닫으면 스위치로 돌아온다
   const openOldestDecision = () => {
     const oldest = session.members
-      .flatMap((m) => (m.state === "decision" && m.decision?.id ? [m.decision] : []))
+      // ask_user(kind chat)는 결정 보고서가 아니라 답 칸이라 뺀다(Phase 6b)
+      .flatMap((m) => (m.state === "decision" && m.decision?.id && m.decision.kind !== "chat" ? [m.decision] : []))
       .sort((a, b) => Date.parse(a.since) - Date.parse(b.since))[0];
     if (oldest?.id) openDecision?.(oldest.id, document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>('[role="switch"]'));
   };
@@ -184,12 +187,30 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           <div className="desks">
             {session.members.map((m, i) => (
               <Fragment key={m.name}>
-                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} />
+                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} />
                 {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>
             ))}
           </div>
+          {(session.predecessors?.length ?? 0) > 0 && (
+            // 전임자 서랍(Phase 6b designer SPEC §6): 방 오른쪽 아래, 펼친 목록은 방 위로 겹친다. 이름·퇴사 시각만(글자로만)
+            <details className="predecessors">
+              <summary aria-label={CMD_TEXT.predecessorsAria(session.predecessors!.length)}>
+                <Icon name="fold" />
+                {CMD_TEXT.predecessors(session.predecessors!.length)}
+              </summary>
+              <ul>
+                <li className="pd-head">{CMD_TEXT.period}</li>
+                {session.predecessors!.map((p) => (
+                  <li key={`${p.name}-${p.retiredAt}`}>
+                    <span className="pd-name">{p.name}</span>
+                    <span className="pd-time">~ {shortTime(p.retiredAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       </div>
       {term.stage !== 0 && (

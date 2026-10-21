@@ -92,6 +92,12 @@ export const ICONS = {
   // phase2 §0: 설정 톱니, 경광등(x 등, a 반사광, b 받침 — 받침은 Icon이 아니라 Siren이 색을 준다)
   settings: ["...x...", ".xxxxx.", ".xx.xx.", "xx...xx", ".xx.xx.", ".xxxxx.", "...x..."],
   siren: ["..xxx..", ".xaxxx.", ".xaxxx.", ".xxxxx.", ".xxxxx.", "bbbbbbb", "bbbbbbb"],
+  // Phase 6b(designer SPEC §0): 서류철, 퇴근(a = 손잡이)
+  folder: ["xxx....", "x..xxxx", "x.....x", "xxxxxxx", "x.....x", "x.....x", "xxxxxxx"],
+  door: ["xxxxxxx", "x.....x", "x.....x", "x...a.x", "x.....x", "x.....x", "xxxxxxx"],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof ICONS;
+
+/** 책상 위 작은 서류철(4×4, designer SPEC §0·§2.2): x 표지, a 종이 */
+export const FOLDER_DESK = ["xx..", "xxxx", "xaax", "xxxx"];

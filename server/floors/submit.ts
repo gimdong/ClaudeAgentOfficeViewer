@@ -62,7 +62,7 @@ export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports
   if (kind === "submit_report") {
     if (!isLead) return { status: 403, body: { error: "not-lead" } };
     if (!d.reports.take(args.request_id as string, floor, "report")) return { status: 409, body: { error: "request" } };
-    d.reports.add(floor, { id: args.request_id as string, kind: "report", title: args.title as string, body: args.body as string });
+    d.reports.add(floor, { id: args.request_id as string, kind: "report", title: args.title as string, from: owner.name, body: args.body as string });
     getLogger().info("reports", "report", {});
     return { status: 200, body: {} };
   }
@@ -72,7 +72,7 @@ export function handleSubmit(d: { hub: Pick<ChannelHub, "verifySubmit">; reports
   const p = d.reports.peek(args.request_id as string, floor, "handover");
   if (!p || p.member !== member) return { status: 409, body: { error: "request" } };
   d.reports.take(args.request_id as string, floor, "handover");
-  d.reports.add(floor, { id: args.request_id as string, kind: "handover", member, body: args.body as string });
+  d.reports.add(floor, { id: args.request_id as string, kind: "handover", member, from: owner.name, body: args.body as string });
   getLogger().info("reports", "handover", { by: isLead ? "lead" : "member" });
   return { status: 200, body: {} };
 }

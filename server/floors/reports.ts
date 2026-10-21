@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { FolderView, ReportView } from "../../src/shared/types";
 import { errInfo, getLogger } from "../log";
 
 /** 층마다 화면에 두는 보고서 수(스펙 5장) */
@@ -25,7 +26,10 @@ function narrow(file: string): void {
 export type ReportKind = "report" | "handover";
 /** started: 인수인계 메모로 새 팀원을 시작함(rehire) */
 export type ReportState = "pending" | "approved" | "revise" | "started";
-export interface Report { id: string; kind: ReportKind; title?: string; member?: string; body: string; at: number; state: ReportState }
+/** from: 제출한 에이전트 이름(짝짓기 주인), decidedAt: 결재·새 팀원 시작 시각 */
+export interface Report { id: string; kind: ReportKind; title?: string; member?: string; from?: string; body: string; at: number; state: ReportState; decidedAt?: number }
+/** 보고 요청 뒤 이만큼 보고서가 없으면 화면에 알린다(스펙 10장) */
+export const REPORT_OVERDUE_MS = 10 * 60_000;
 /** 퇴사 진행(스펙 7장·11장 e): 시작 시각을 남겨 다시 켜도 이어 간다. nudged: 5분 뒤 "대신 써 달라"를 보냈음 */
 export interface Retire { member: string; requestId: string; startedAt: number; nudged?: boolean }
 export interface Predecessor { name: string; retiredAt: number }
@@ -39,6 +43,8 @@ interface FloorData { lastSeenAt: number; reports: Report[]; archived: Report[];
 export class ReportStore {
   private data: { floors: Record<string, FloorData> } = { floors: {} };
   private readonly pending = new Map<string, { floor: string; kind: ReportKind; member?: string; at: number }>();
+  /** 층마다 마지막 보고 요청 시각(메모리) — 그 뒤 보고서가 오면 지운다 */
+  private readonly askedAt = new Map<string, number>();
   private broken = false;
   /** 파일에 쓴 lastSeenAt(층마다) */
   private readonly savedSeen = new Map<string, number>();
@@ -82,6 +88,10 @@ export class ReportStore {
   }
 
   /** lead 지시(report·revise → report, retire → handover)를 보냈을 때 요청 id를 건다 */
+  /** 보고 요청을 보냄(10분 무응답 표시용) */
+  asked(floor: string): void {
+    this.askedAt.set(floor, this.now());
+  }
   expect(id: string, floor: string, kind: ReportKind, member?: string): void {
     this.pending.set(id, { floor, kind, ...(member ? { member } : {}), at: this.now() });
     while (this.pending.size > MAX_PENDING) this.pending.delete(this.pending.keys().next().value!);
@@ -101,6 +111,7 @@ export class ReportStore {
 
   add(floor: string, r: Omit<Report, "at" | "state">): void {
     const f = this.floor(floor);
+    if (r.kind === "report") this.askedAt.delete(floor);
     f.lastSeenAt = this.now();
     f.reports.push({ ...r, at: this.now(), state: "pending" });
     // 상한: 오래된 결재된 것부터 지우고, 대기 중인 것뿐이면 가장 오래된 대기 보고서를 보관함으로(스펙 11장 g)
@@ -149,10 +160,20 @@ export class ReportStore {
   predecessors(floor: string): Predecessor[] {
     return [...(this.data.floors[floor]?.predecessors ?? [])];
   }
+  /** 스냅샷용 수(대기는 보관함 포함) */
+  counts(floor: string): { pending: number; total: number; overdue?: true } | undefined {
+    const f = this.data.floors[floor];
+    const asked = this.askedAt.get(floor);
+    const overdue = asked !== undefined && this.now() - asked > REPORT_OVERDUE_MS;
+    if (!f && !overdue) return undefined;
+    const all = [...(f?.reports ?? []), ...(f?.archived ?? [])];
+    return { pending: all.filter((r) => r.state === "pending").length, total: all.length, ...(overdue ? { overdue: true as const } : {}) };
+  }
   setState(floor: string, id: string, state: ReportState): boolean {
-    const r = this.data.floors[floor]?.reports.find((x) => x.id === id);
+    const r = this.data.floors[floor]?.reports.find((x) => x.id === id) ?? this.data.floors[floor]?.archived.find((x) => x.id === id);
     if (!r) return false;
     r.state = state;
+    if (state !== "pending") r.decidedAt = this.now();
     this.save();
     return true;
   }
@@ -174,4 +195,21 @@ export class ReportStore {
     }
     if (changed) this.save();
   }
+}
+
+const iso = (ms: number) => new Date(ms).toISOString();
+const viewOf = (r: Report): ReportView => ({
+  id: r.id,
+  kind: r.kind,
+  ...(r.title !== undefined ? { title: r.title } : {}),
+  ...(r.member !== undefined ? { member: r.member } : {}),
+  from: r.from ?? "team-lead",
+  body: r.body,
+  at: iso(r.at),
+  state: r.state,
+  ...(r.decidedAt !== undefined ? { decidedAt: iso(r.decidedAt) } : {}),
+});
+/** 서류철 화면 모양(GET /api/floors/:id/reports) */
+export function folderView(store: Pick<ReportStore, "list" | "archived">, floor: string): FolderView {
+  return { reports: store.list(floor).map(viewOf), archived: store.archived(floor).map(viewOf) };
 }

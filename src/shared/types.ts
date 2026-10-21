@@ -163,6 +163,8 @@ export interface SessionView {
   members: Member[];
   /** 퇴사한 팀원(스펙 7장 4번) — 이름·퇴사 시각만 */
   predecessors?: Array<{ name: string; retiredAt: string }>;
+  /** 서류철(Phase 6b 스펙 5장): 대기 수(보관함 포함)·모두. 본문은 GET /api/floors/:id/reports. overdue: 보고 요청 뒤 10분 넘게 보고서가 없음 */
+  folder?: { pending: number; total: number; overdue?: true };
   /** 이 층의 토큰 예산(Phase 2 스펙 5장). 없으면 "예산 없음" */
   budget?: BudgetView;
   /** 일하는 동안의 일반 서브에이전트(임시 책상). 살아 있는 층에서 하나 이상일 때만 */
@@ -252,3 +254,28 @@ export interface MemberPolicy { source: "own" | "others"; rules: PolicyRules; de
 export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string }
 /** unreadable: 저장해 둔 정책 파일을 읽지 못했다(Ruling B101). 이때는 대상·횟수가 없어도 싣는다 */
 export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }>; unreadable?: true }
+
+/** 팀리더 지시 통로 상태(Phase 6b 화면, designer SPEC §1.2) */
+export type LeadChannel = "ok" | "not-launched" | "not-connected";
+/** 보고서 도장(started: 인수인계로 새 팀원을 시작함) */
+export type ReportState = "pending" | "approved" | "revise" | "started";
+/** 서류철 한 장(GET /api/floors/:id/reports). 시각은 ISO */
+export interface ReportView {
+  id: string;
+  kind: "report" | "handover";
+  title?: string;
+  /** 인수인계 대상 팀원 */
+  member?: string;
+  /** 제출한 에이전트 이름 */
+  from: string;
+  body: string;
+  at: string;
+  state: ReportState;
+  /** 승인·수정 요청·새 팀원 시작 시각 */
+  decidedAt?: string;
+}
+/** 최신 먼저. archived는 넘쳐서 보관함으로 옮긴 대기 보고서(스펙 11장 g) */
+export interface FolderView {
+  reports: ReportView[];
+  archived: ReportView[];
+}

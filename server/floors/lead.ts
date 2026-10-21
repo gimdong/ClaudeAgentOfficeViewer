@@ -22,7 +22,7 @@ export function leadInstruct(
   paused: boolean,
   body: unknown,
   members: readonly string[],
-  reports?: Pick<ReportStore, "expect" | "find">,
+  reports?: Pick<ReportStore, "expect" | "find" | "asked" | "setState">,
   onSent?: (s: LeadSent) => void,
 ): { status: number; body: object } {
   const b = (body ?? {}) as { kind?: unknown; member?: unknown; handoverId?: unknown };
@@ -39,6 +39,10 @@ export function leadInstruct(
   if (!r.ok) return { status: r.error === "not-launched" ? 404 : 409, body: { error: r.error } };
   // 제출 도구가 쓸 요청 id를 건다(스펙 3장): 보고 요청·수정 요청 → submit_report, 퇴사 → submit_handover(그 팀원 이름으로만, 12장 b)
   if (built.kind === "report" || built.kind === "revise") reports?.expect(built.id, floorId, "report");
+  if (built.kind === "report") reports?.asked(floorId);
+  // 결재는 누른 순간 서류철 도장을 바꾼다(휴업 중 보관이어도 — 사용자의 결정은 이미 내려졌다)
+  const rid = (body as { reportId?: unknown }).reportId;
+  if ((built.kind === "approve" || built.kind === "revise") && typeof rid === "string") reports?.setState(floorId, rid, built.kind === "approve" ? "approved" : "revise");
   if (built.kind === "retire") reports?.expect(built.id, floorId, "handover", b.member as string);
   if (r.state === "sent") onSent?.(sent);
   getLogger().info("floors", "lead", { kind: built.kind, state: r.state });

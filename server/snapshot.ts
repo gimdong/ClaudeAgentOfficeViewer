@@ -42,6 +42,8 @@ export interface BuilderOptions {
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
+  /** 서류철 수(Phase 6b) — 층 id로 */
+  folder?: { counts(floor: string): { pending: number; total: number; overdue?: true } | undefined };
   /** 퇴근·오래 쉼·퇴사(Phase 6b) — 층 id로 */
   duty?: { view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string }): import("./floors/duty").DutyView; predecessors(floor: string): Array<{ name: string; retiredAt: number }> };
   /** 대화 질문 판(Phase 6b) — 대화 키로 */
@@ -210,8 +212,10 @@ export class SnapshotBuilder {
     }
     const defaultBudgetTokens = budget?.store.defaultTokens();
     // 팀원 요청(보고서만)도 손을 든 만큼 센다
+    // ask_user(kind chat)도 결정 대기 수에 넣는다 — 결재 대기·"답을 기다립니다"는 넣지 않는다(B317 ②)
+    const chats = views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision" && m.decision?.kind === "chat").length, 0);
     const decisionCount = decisions
-      ? decisions.filter((d) => d.state === "pending").length + teamItems.length
+      ? decisions.filter((d) => d.state === "pending").length + teamItems.length + chats
       : views.reduce((n, v) => n + v.members.filter((m) => m.state === "decision").length, 0);
 
     const p = this.opts.policy;
@@ -388,6 +392,10 @@ export class SnapshotBuilder {
       context: contextInfo(last, this.opts.config.contextWindows),
       members,
       ...(predecessors.length ? { predecessors } : {}),
+      ...((): { folder?: { pending: number; total: number; overdue?: true } } => {
+        const f = this.opts.folder?.counts(s.sessionId);
+        return f ? { folder: f } : {};
+      })(),
       ...(await this.subagentField(s, leadFile, now)),
       ...this.channelField(s),
       ...this.reopenField(s),

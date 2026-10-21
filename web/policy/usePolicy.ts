@@ -5,10 +5,11 @@ import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 export type SaveResult = "saved" | "not-persisted" | "limit" | "invalid" | "failed";
 type Back = { view: "agent"; target: string } | { view: "list" };
 /** back은 ‹ 로 돌아갈 곳(디자인 §1.2): 리드 패널에서 서브에이전트·그 밖의 모든으로 옮겼거나, 목록의 [고치기]·[대상 추가]로 열었을 때만 있다 */
-export type PolicyOpen = { view: "agent"; target: string; back?: Back } | { view: "list" } | null;
+/** floor: 책상에서 열었으면 그 층 id(Phase 6b 지시 절이 그 층의 리드·팀원에게만 뜬다) */
+export type PolicyOpen = { view: "agent"; target: string; back?: Back; floor?: string } | { view: "list" } | null;
 
 /** 책상 → 에이전트 패널 열기(Building·Floor를 거치지 않고 Desk가 쓴다). 없으면 책상은 v1처럼 div다 */
-export const OpenPolicyContext = createContext<((target: string, opener?: HTMLElement | null) => void) | null>(null);
+export const OpenPolicyContext = createContext<((target: string, opener?: HTMLElement | null, floor?: string) => void) | null>(null);
 
 async function request(method: "PUT" | "DELETE", target: string, body: object): Promise<SaveResult> {
   try {
@@ -34,9 +35,9 @@ export function usePolicy() {
   /** 목록의 [고치기]로 연 대상. ‹로 목록에 돌아오면 그 행의 [고치기]에 포커스를 둔다(§7.2) */
   const listReturn = useRef<string | null>(null);
 
-  const openAgent = useCallback((target: string, el?: HTMLElement | null, back?: Back) => {
+  const openAgent = useCallback((target: string, el?: HTMLElement | null, back?: Back, floor?: string) => {
     if (el !== undefined) opener.current = el;
-    setOpen({ view: "agent", target, ...(back ? { back } : {}) });
+    setOpen({ view: "agent", target, ...(back ? { back } : {}), ...(floor ? { floor } : {}) });
   }, []);
 
   const openList = useCallback((el?: HTMLElement | null) => {

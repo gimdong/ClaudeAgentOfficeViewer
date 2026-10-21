@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { LeadCommands, OpenLeadContext } from "../office/LeadUi";
 import { formatTokens, modelLabel } from "../format";
 import { createPortal } from "react-dom";
 import type { Member, Snapshot } from "../../src/shared/types";
@@ -37,6 +38,7 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
   const open = policy.open;
   const target = open?.view === "agent" ? open.target : null;
   const title = useRef<HTMLHeadingElement>(null);
+  const lead = useContext(OpenLeadContext);
 
   // 열 때와 대상이 바뀔 때 포커스는 제목(§7.2)
   useLayoutEffect(() => {
@@ -70,6 +72,10 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
   const back = open.back;
   const backLabel = !back ? null : back.view === "list" ? "정책 목록으로 돌아가기" : back.target === "lead" ? "리드 권한으로 돌아가기" : `${targetLabel(back.target)} 권한으로 돌아가기`;
   const goTo = (next: string) => policy.openAgent(next, undefined, { view: "agent", target });
+  // 지시 절(Phase 6b designer SPEC §1): 책상에서 연 그 층의 리드·팀원일 때만(서브에이전트·그 밖의 모든·목록에서 연 화면은 없음)
+  const floor = open.floor ? snapshot.sessions.find((s) => s.id === open.floor) : undefined;
+  const onFloor = floor && (target === "lead" ? floor.members.find((m) => m.role === "lead") : target.startsWith("agent:") ? floor.members.find((m) => m.role !== "lead" && targetKeyOf(m) === target) : undefined);
+  const commands = lead && floor && onFloor && floor.alive && <LeadCommands session={floor} member={onFloor} announce={announce} lead={lead} />;
 
   // 모델·토큰(사용자 요청 2026-10-13): 이름표 줄의 자세한 판. 화면에 있는 구성원(리드·팀원)만
   const t = member?.tokens;
@@ -146,7 +152,7 @@ export function AgentPanel({ policy, snapshot, announce }: { policy: Policy; sna
           </button>
         </div>
       </header>
-      <RuleEditor key={target} target={target} saved={own ?? {}} onSave={(rules) => policy.save(target, rules)} announce={announce} before={<>{usage}{notes}</>} after={after} />
+      <RuleEditor key={target} target={target} saved={own ?? {}} onSave={(rules) => policy.save(target, rules)} announce={announce} before={<>{commands}{usage}{notes}</>} after={after} />
     </aside>,
     document.body,
   );

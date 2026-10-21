@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PairingBook } from "../../server/floors/pairing";
-import { MAX_FLOOR_FILE, MAX_FLOOR_REPORTS, ReportStore, SEEN_SAVE_MS, STALE_FLOOR_MS } from "../../server/floors/reports";
+import { MAX_FLOOR_FILE, MAX_FLOOR_REPORTS, REPORT_OVERDUE_MS, ReportStore, SEEN_SAVE_MS, STALE_FLOOR_MS, folderView } from "../../server/floors/reports";
 import { Logger, setLogger } from "../../server/log";
 
 // Phase 6b Task 2: 보고서 저장소(스펙 5장·11장 g)와 PreToolUse·제출 짝짓기(B311)
@@ -121,6 +121,28 @@ describe("ReportStore — sweep은 스냅샷마다 파일을 쓰지 않는다(B3
     clock += SEEN_SAVE_MS;
     s.sweep(new Set(["live"]));
     expect(saved()).toBe(clock);
+  });
+});
+
+describe("서류철 화면 모양·수(Phase 6b Task 4)", () => {
+  it("counts: 대기(보관함 포함)·모두, 보고 요청 뒤 10분 넘게 보고서가 없으면 overdue(보고서가 오면 사라짐)", () => {
+    const s = store();
+    expect(s.counts("s1")).toBeUndefined();
+    s.asked("s1");
+    clock += REPORT_OVERDUE_MS + 1;
+    expect(s.counts("s1")).toEqual({ pending: 0, total: 0, overdue: true });
+    s.add("s1", { id: rid(1), kind: "report", title: "t", from: "team-lead", body: "b" });
+    s.add("s1", { id: rid(2), kind: "report", title: "t", body: "b" });
+    s.setState("s1", rid(1), "approved");
+    expect(s.counts("s1")).toEqual({ pending: 1, total: 2 });
+  });
+
+  it("folderView: ISO 시각, from(없으면 team-lead), 결재하면 decidedAt", () => {
+    const s = store();
+    s.add("s1", { id: rid(1), kind: "handover", member: "tester", from: "tester", body: "메모" });
+    clock += 1000;
+    s.setState("s1", rid(1), "started");
+    expect(folderView(s, "s1")).toEqual({ reports: [{ id: rid(1), kind: "handover", member: "tester", from: "tester", body: "메모", at: new Date(clock - 1000).toISOString(), state: "started", decidedAt: new Date(clock).toISOString() }], archived: [] });
   });
 });
 

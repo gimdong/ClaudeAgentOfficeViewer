@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
+import type { FolderView } from "../../src/shared/types";
 import type { Snapshot } from "../../src/shared/types";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 
@@ -102,6 +103,9 @@ export const chApi = {
   held: (id: string) => req<{ held: Held[] }>("GET", at(id, "held")),
   editHeld: (id: string, hid: string, text: string) => req<object>("PUT", at(id, `held/${encodeURIComponent(hid)}`), { text }),
   dropHeld: (id: string, hid: string) => req<object>("DELETE", at(id, `held/${encodeURIComponent(hid)}`)),
+  // Phase 6b 팀리더 지시·서류철
+  lead: (id: string, body: object) => req<{ requestId: string; id: string; state: "sent" | "held" }>("POST", at(id, "lead"), body),
+  reports: (id: string) => req<FolderView>("GET", at(id, "reports")),
 };
 const errText = (e: string) => CH_TEXT.errors[e] ?? CH_TEXT.failed;
 

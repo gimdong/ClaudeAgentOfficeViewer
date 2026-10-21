@@ -692,3 +692,35 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .counter .label { grid-row: 1; line-height: 14px; white-space: nowrap; }
 .counter .value { grid-row: 2; line-height: 24px; font-variant-numeric: tabular-nums; }
 .counter .sub { grid-row: 3; line-height: 14px; white-space: nowrap; }
+
+/* ───── Phase 6b 연결(developer Task 4) — designer docs/design/phase6b/renders/mock.css §1·§2·§6에서 옮김 ───── */
+/* §1 지시 절 */
+.ap-cmd-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-cmd-row .pbtn { height: 32px; }
+.ap-cmd-why { margin: 6px 0 0; font-family: var(--font-text); font-size: 12px; line-height: 1.6; color: var(--muted); word-break: keep-all; overflow-wrap: anywhere; }
+.ap-cmd-ok { margin: 6px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--green); }
+.ap-cmd-late { margin: 6px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--yellow); word-break: keep-all; }
+
+/* §2 책상 — 한 줄 자리는 모든 책상에 둔다(비어 있어도). 줄이 있는 책상만 위로 밀려 바닥선이 어긋나는 것을 막는다(렌더 확인) */
+.desk-extra { display: block; height: 14px; line-height: 14px; overflow: hidden; font-size: 10px; }
+.desk-folder { display: inline-block; vertical-align: top; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--yellow); color: var(--wall); }
+.desk-status { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desk-status.pink { color: var(--pink); }
+.desk--await .nametag { text-decoration: underline; text-decoration-color: var(--await); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.desk--offduty .nametag { color: var(--muted); }
+
+/* §6 전임자 */
+.predecessors { position: relative; align-self: flex-end; margin-left: auto; flex: none; font-size: 11px; color: var(--muted); z-index: 1; }
+.predecessors summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; }
+.predecessors summary::-webkit-details-marker { display: none; }
+.predecessors ul { position: absolute; right: 0; bottom: 100%; margin: 0 0 4px; padding: 6px 8px; list-style: none; width: max-content; max-width: min(320px, calc(100vw - 48px)); max-height: 10.4em; overflow-y: auto; background: var(--panel); border: 2px solid var(--desk); color: var(--ink); }
+.predecessors ul { display: grid; grid-template-columns: minmax(0, max-content) max-content; column-gap: 8px; row-gap: 2px; }
+.predecessors li { display: contents; line-height: 1.3; white-space: nowrap; }
+.predecessors .pd-head { grid-column: 1 / 3; display: block; }
+.predecessors .pd-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.predecessors .pd-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 판 2 — §6 전임자 기간 머리 */
+.predecessors .pd-head { font-size: 10px; color: var(--muted); }
+
+.ap-cmd-err { color: var(--red); }

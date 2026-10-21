@@ -12,6 +12,7 @@ import { useBudgetAlarm } from "./budget/useBudgetAlarm";
 import { AgentPanel } from "./policy/AgentPanel";
 import { PolicyList } from "./policy/PolicyList";
 import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
+import { LeadDrawers, OpenLeadContext, useLead } from "./office/LeadUi";
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
 /** FB-7: 설치 뒤 옛 서버(메모리)가 새 화면(디스크)을 내보내면 저장 API가 없어 "저장하지 못했습니다"가 난다. 서버 버전이 없거나 다르면 알린다 */
@@ -66,18 +67,27 @@ export function App() {
   const { target, handlers } = useBubble();
   const d = useDecisions(snapshot);
   const policy = usePolicy();
+  const lead = useLead();
+  const openAgentAt = useCallback((t: string, el?: HTMLElement | null, floor?: string) => policy.openAgent(t, el, undefined, floor), [policy.openAgent]);
   useBudgetAlarm(snapshot, announce);
   // 서랍은 한 번에 하나(디자인 phase3 §7.1): 새로 연 쪽이 다른 쪽을 포커스 되돌림 없이 닫는다
   const policyOpen = policy.open !== null;
   // 레이아웃 단계에서 닫아 두 서랍이 한 프레임도 함께 그려지지 않게 한다(B105)
   useLayoutEffect(() => {
-    if (d.openId !== null) policy.close(false);
+    if (d.openId !== null) policy.close(false), lead.close(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.openId]);
   useLayoutEffect(() => {
     if (policyOpen) d.close(false);
+    // 지시 절의 [서류철]·[퇴사]는 패널 안에서 연다 — 패널이 열려 있는 동안 연 서류철은 패널을 닫는다(아래)
+    if (policyOpen && lead.open?.kind !== "retire") lead.close(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policyOpen, policy.open]);
+  // Phase 6b 서류철·답 칸은 같은 서랍 자리(한 번에 하나). 퇴사 창은 모달이라 패널 위에 뜬다
+  useLayoutEffect(() => {
+    if (lead.open && lead.open.kind !== "retire") d.close(false), policy.close(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.open]);
   if (unauthorized) return <AuthScreen />;
   if (!snapshot) return <div className="loading">사무실 불 켜는 중...</div>;
   // aria-live(role=status)는 같은 노드의 "내용이 바뀔 때" 알린다 — key로 다시 마운트하면 새 영역의
@@ -89,7 +99,8 @@ export function App() {
   return (
     <BudgetSettingsContext.Provider value={{ defaultTokens: snapshot.defaultBudgetTokens, announce }}>
     <OpenDecisionContext.Provider value={d.open}>
-    <OpenPolicyContext.Provider value={policy.openAgent}>
+    <OpenPolicyContext.Provider value={openAgentAt}>
+    <OpenLeadContext.Provider value={lead.api}>
       <div className="app">
         {snapshot.error && (
           <div className="banner" role="alert">
@@ -120,10 +131,12 @@ export function App() {
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
         <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />
         <PolicyList policy={policy} snapshot={snapshot} announce={announce} />
+        <LeadDrawers lead={lead} snapshot={snapshot} announce={announce} />
         <div className="sr-only" role="status">
           {shown}
         </div>
       </div>
+    </OpenLeadContext.Provider>
     </OpenPolicyContext.Provider>
     </OpenDecisionContext.Provider>
     </BudgetSettingsContext.Provider>

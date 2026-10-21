@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import { ChannelHub } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
+import { ReportStore } from "../../server/floors/reports";
 import { LEAD_KINDS, MAX_LEAD_TEXT, QUOTE_BEGIN, QUOTE_END, buildLead } from "../../server/floors/leadText";
 import { Logger, setLogger } from "../../server/log";
 import { makeMember, makeSession, makeSnapshot } from "../web/fixtures";
@@ -150,9 +151,11 @@ let tmp: string;
 let hub: ChannelHub;
 let floors: FloorControl;
 let team: string[];
+let reports: ReportStore;
 beforeEach(async () => {
   tmp = mkdtempSync(join(tmpdir(), "co-lead-"));
   team = ["team-lead", "a", "b"];
+  reports = new ReportStore();
   setLogger(new Logger({ dir: "" }));
   hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true } });
   hub.setEnabled(true);
@@ -165,7 +168,7 @@ beforeEach(async () => {
         preToolUse: (i) => floors.preToolUse(i), pause: (id) => floors.pause(id), resume: (id) => floors.resume(id), isPaused: (id) => floors.isPaused(id),
         terminate: (r, f) => floors.terminate(r, f), hide: (id) => floors.hide(id), unhideAll: () => floors.unhideAll(), hiddenCount: () => floors.hiddenCount(), record: () => undefined,
       },
-      channels: { hub, launch: async () => ({ ok: false, error: "tmux" }) },
+      channels: { hub, launch: async () => ({ ok: false, error: "tmux" }), reports },
     },
   ).listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -260,6 +263,27 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     floors.pause("s1");
     for (const kind of ["offduty", "retire"]) expect(JSON.parse((await post("/api/floors/s1/lead", { kind, member: "team-lead" })).body), kind).toEqual({ error: "member" });
     expect((await post("/api/floors/s1/lead", { kind: "offduty", member: "a" })).status).toBe(200);
+  });
+
+  it("결재를 보내면 서류철 도장이 바로 바뀌고, GET /api/floors/:id/reports가 화면 모양으로 돌려준다(Phase 6b Task 4)", async () => {
+    hub.register("s1", "co-1");
+    floors.pause("s1");
+    const get = () =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port, path: "/api/floors/s1/reports", method: "GET", headers: { Host: `127.0.0.1:${port}`, Cookie: `co_${port}=${TOKEN}` } }, (res) => {
+          let t = "";
+          res.on("data", (d) => (t += d));
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body: t }));
+        });
+        req.on("error", reject);
+        req.end();
+      });
+    expect(JSON.parse((await get()).body)).toEqual({ reports: [], archived: [] });
+    const rid = JSON.parse((await post("/api/floors/s1/lead", { kind: "report" })).body).requestId as string;
+    reports.take(rid, "s1", "report");
+    reports.add("s1", { id: rid, kind: "report", title: "주간", from: "team-lead", body: "b" });
+    expect((await post("/api/floors/s1/lead", { kind: "approve", reportId: rid })).status).toBe(200);
+    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "approved", from: "team-lead", decidedAt: expect.any(String) });
   });
 
   it("지시 id는 요청마다 새로", async () => {
