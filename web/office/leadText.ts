@@ -27,6 +27,7 @@ export const LEAD_TEXT = {
   stampHandoverPending: "시작 전",
   // 휴업 중 결재(스펙 12장 l): 보낼 때까지 도장은 "보관됨", 위 줄에 무엇을 보관했는지
   stampHeld: "보관됨",
+  heldLineAny: "결재를 보관했습니다 — 재개할 때 확인하고 보냅니다",
   heldLine: { approve: "승인을 보관했습니다 — 재개할 때 확인하고 보냅니다", revise: "수정 요청을 보관했습니다 — 재개할 때 확인하고 보냅니다" },
   seal: { approved: "승인", revise: "수정 요청" } as Partial<Record<ReportState, string>>,
   kindReport: (at: string) => `보고서 · ${at}`,

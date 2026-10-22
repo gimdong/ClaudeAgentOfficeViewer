@@ -113,7 +113,7 @@ describe("ReportFolder", () => {
   });
 
   it("휴업 중 보관된 결재: 도장 \"보관됨\", 무엇을 보관했는지 한 줄, 다시 누를 수 있음(스펙 12장 l)", () => {
-    const p = folderProps(folder([{ ...rep(), held: "revise" } as ReportView]));
+    const p = folderProps(folder([{ ...rep(), state: "held", held: "revise" } as ReportView]));
     render(<ReportFolder {...p} />);
     expect(screen.getByText(LEAD_TEXT.stampHeld).className).toContain("held");
     fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
@@ -121,6 +121,12 @@ describe("ReportFolder", () => {
     expect(screen.queryByTestId("rf-paper")!.querySelector(".rf-seal")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: LEAD_TEXT.approve }));
     expect(p.onApprove).toHaveBeenCalledWith("r-1");
+  });
+
+  it("보관된 결재인데 무엇을 보관했는지 모르면 공통 줄", () => {
+    render(<ReportFolder {...folderProps(folder([rep({ state: "held" })]))} />);
+    fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
+    expect(screen.getByText(LEAD_TEXT.heldLineAny)).toBeTruthy();
   });
 
   it("인수인계: 새 팀원 시작 → onRehire(id)", () => {

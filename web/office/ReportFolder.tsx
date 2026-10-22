@@ -4,9 +4,12 @@ import { Icon } from "../pixel/Icon";
 import { graphemes } from "../report/text";
 import { channelWhy, LEAD_MAX, LEAD_TEXT as T, shortTime, type FolderView, type LeadChannel, type ReportView } from "./leadText";
 
-/** 휴업 중 보관된 결재(스펙 12장 l). shared ReportView에 held가 들어오기 전에도 읽을 수 있게 넓혀 둔다 */
+/**
+ * 휴업 중 보관된 결재(스펙 12장 l): 서버는 state "held"로 낸다. 무엇을 보관했는지(held: approve·revise)가 오면 그 줄을,
+ * 없으면 공통 줄을 쓴다. 보관이 아니면 null
+ */
 type Held = { held?: "approve" | "revise" };
-const heldOf = (r: ReportView) => (r.state === "pending" ? (r as ReportView & Held).held : undefined);
+const heldOf = (r: ReportView): "approve" | "revise" | "any" | null => (r.state === "held" ? ((r as ReportView & Held).held ?? "any") : null);
 const stampClass = (r: ReportView) => (heldOf(r) ? "held" : r.state === "approved" || r.state === "started" ? "ok" : r.state === "revise" ? "rev" : "wait");
 const stampText = (r: ReportView) => (heldOf(r) ? T.stampHeld : r.kind === "handover" && r.state === "pending" ? T.stampHandoverPending : T.stamp[r.state]);
 const titleOf = (r: ReportView) => (r.kind === "handover" ? T.handoverTitle(r.member ?? r.from) : r.title?.trim() || T.untitled);
@@ -127,7 +130,7 @@ export function ReportFolder(p: {
             {off}
           </p>
         )}
-        {held && !off && <p className="rf-help rf-held">{T.heldLine[held]}</p>}
+        {held && !off && <p className="rf-help rf-held">{held === "any" ? T.heldLineAny : T.heldLine[held]}</p>}
         <button ref={reviseBtn} type="button" className="pbtn" aria-disabled={!!off || undefined} aria-describedby={off ? why : undefined} onClick={() => !off && setRevise(true)}>
           {T.reviseOpen}
         </button>
