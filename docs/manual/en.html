@@ -120,12 +120,14 @@
   </ol>
 </div>
 
-<h3>The two questions</h3>
+<h3>The questions</h3>
 <dl>
   <dt><code>~/.zshrc에 claude-office 명령 경로를 추가할까요? [y/N]</code></dt>
   <dd>"Add the claude-office command to PATH in ~/.zshrc?" Press <kbd>y</kbd> so you can type <code>claude-office</code> from any folder. The file name may be <code>~/.bash_profile</code> or <code>~/.bashrc</code> depending on your shell; on Windows it asks about the user PATH. If you press <kbd>n</kbd>, the last line tells you the full path to run instead.</dd>
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? … [y/N]</code></dt>
   <dd>"Install the Claude Code plugin?" <kbd>y</kbd> is recommended. The plugin sends Claude Code's tool events to the dashboard and returns the answers you click there. Without it you still see floors and token counts, but no speech bubbles, raised hands or answering. It never allows or denies anything on its own; it passes on only the answer from this computer's dashboard that uses the same key file (see <a href="#port-taken">Another account on port 4317</a>).</dd>
+  <dt><code>Claude Code 상태줄(statusline)에 연결할까요? PLAN 바(남은 사용량 %)를 채우려면 필요합니다. Claude Code 설정(~/.claude/settings.json)의 statusLine을 바꾸고, 원래 설정은 백업하며, 쓰던 상태줄은 그대로 보입니다. [y/N]</code> (macOS / Linux)</dt>
+  <dd>"Connect to the Claude Code status line? It is needed to fill the PLAN bar (remaining usage %). It changes statusLine in the Claude Code settings (~/.claude/settings.json), backs up the original, and the status line you used keeps showing." Optional. This is the only time the installer changes a Claude Code setting, and only if you press <kbd>y</kbd> here or run the installer with <code>--statusline</code>; <code>--yes</code> alone does not turn it on. If it was not asked (for example with <code>--yes</code>), the installer prints <code>statusline 연결은 묻지 않고 건너뛰었습니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.</code> ("Skipped the statusline connection without asking. To turn it on, run the installer again with --statusline."). Windows does not support it: <code>-StatusLine</code> only prints <code>PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다.</code> ("The PLAN bar (statusline connection) is not supported on Windows.").</dd>
 </dl>
 <div class="box ok-box">
   <p>The installer finishes with a setup check (doctor) and this last line:</p>
@@ -243,13 +245,22 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <h3>The installer stops: "플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다"</h3>
 <p>"Could not write the plugin's hook settings (node and key paths), so the installation stops." The installer could not write the Node.js and key paths into the plugin's hooks, and stopped before registering the plugin, so Claude Code is unchanged; if an earlier plugin is installed, it keeps running. Extract the archive again into a new folder and run the installer from there. If it stops again, send a diagnostics file (it includes the install log shown on the <code>자세한 기록:</code> line).</p>
 
+<h3>The PLAN bar is empty</h3>
+<p>The PLAN bar shows the plan's remaining usage, which Claude Code passes only to a connected status line. What the empty bar says tells you why:</p>
+<ul>
+  <li><code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code> ("status line connection is off; can be turned on when reinstalling"): run the installer again with <code>--statusline</code> (macOS / Linux).</li>
+  <li><code>-- 요금제가 알려 주지 않음</code> ("the plan does not report it"): connected, but the value comes only on Pro / Max plans or behind a gateway with a spend limit. This account does not get it.</li>
+  <!-- Windows의 PLAN 빈 글(B331)은 developer #630 커밋 뒤 코드 글자로 넣는다 -->
+</ul>
+<p><code>claude-office doctor</code> shows the connection on its <strong>요금제 한도(선택)</strong> (plan limits, optional) line: <code>연결됨(최근 1시간 안에 갱신됨)</code> (connected, updated within the last hour), <code>연결됨(아직 받은 값 없음)</code> (connected, no value received yet), <code>연결 안 됨</code> (not connected), <code>⚠️ … 다른 statusline이 설정되어 연결이 빠졌습니다</code> (another status line was set, so the connection was dropped: run the installer again with <code>--statusline</code>; the status line you use keeps showing), or <code>Windows에서는 지원하지 않음</code> (not supported on Windows).</p>
+
 <h3>The installer finished with "no" without asking</h3>
 <pre class="out">입력을 받을 수 없어 '아니오'로 처리했습니다. 설치하려면 --yes를 붙여 다시 실행하세요.</pre>
-<p>"Could not read input, so treated as 'no'. Run again with --yes to install." It ran somewhere it could not ask you, such as <code>!</code> inside Claude Code. Run it again in a normal terminal, or answer yes to both questions with <code>sh install.sh --yes</code> (Windows: <code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes</code>).</p>
+<p>"Could not read input, so treated as 'no'. Run again with --yes to install." It ran somewhere it could not ask you, such as <code>!</code> inside Claude Code. Run it again in a normal terminal, or answer yes to the PATH and plugin questions with <code>sh install.sh --yes</code> (add <code>--statusline</code> to also connect the status line) (Windows: <code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes</code>).</p>
 
 <h3>Uninstall</h3>
 <pre><code>claude-office uninstall</code></pre>
-<p>It asks two questions: whether to remove the Claude Code plugin, and whether to delete logs and diagnostics files (default: keep). Answer <kbd>n</kbd> to the second if you still need to send a diagnostics file. <code>claude-office uninstall --yes</code> answers yes to both.</p>
+<p>If the installer connected the status line, uninstall first puts <code>statusLine</code> back, but only if it is still the one the installer set; a status line you changed afterwards is left as it is. If it cannot, it prints <code>statusline 설정을 되돌리지 못했습니다. Claude Code 설정의 statusLine을 확인해 주세요.</code> ("Could not restore the statusline setting. Check statusLine in the Claude Code settings."). It asks two questions: whether to remove the Claude Code plugin, and whether to delete logs and diagnostics files (default: keep). Answer <kbd>n</kbd> to the second if you still need to send a diagnostics file. <code>claude-office uninstall --yes</code> answers yes to both.</p>
 
 <h2 id="lead">4. Working with the lead (experimental)</h2>
 <div class="box caution"><strong>Only on floors where "작업 지시" (sending instructions) is on, that is, floors with a channel connection.</strong> These features use the same experimental channels feature as sending instructions and starting a new floor. On a floor you opened yourself in a terminal the buttons are dimmed, with <code>작업 지시 켜기(옮겨 열기)로 연결하면 쓸 수 있습니다</code> ("Available after you connect it with 작업 지시 켜기 (reopen)") below them.</div>
