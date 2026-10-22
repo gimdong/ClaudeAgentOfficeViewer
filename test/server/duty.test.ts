@@ -107,6 +107,20 @@ describe("퇴사(스펙 7장·11장 e f)", () => {
     expect(again.take("r-11111111", "s1", "handover")).toBeNull();
   });
 
+  it("B333 I-2: 다시 켠 뒤 연결된 층의 퇴사는 재촉 여부·경과 시간과 관계없이 요청 id를 다시 건다(인수인계가 이미 왔으면 걸지 않음)", () => {
+    sent("retire");
+    reports.markNudged("s1", "tester");
+    const again = new ReportStore({ file: join(dir, "reports.json"), now: () => clock });
+    const board = new DutyBoard({ reports: again, now: () => clock });
+    board.sweep(new Set(["s1"]), hub(false).h);
+    expect(again.peek("r-11111111", "s1", "handover")).toBeNull(); // 연결이 없으면 아직
+    board.sweep(new Set(["s1"]), hub().h);
+    expect(again.take("r-11111111", "s1", "handover")).toMatchObject({ member: "tester" });
+    again.add("s1", { id: "r-11111111", kind: "handover", member: "tester", body: "메모" });
+    board.sweep(new Set(["s1"]), hub().h);
+    expect(again.peek("r-11111111", "s1", "handover")).toBeNull(); // 한 번만 받는다
+  });
+
   it("인수인계가 이미 왔으면 재촉하지 않는다", () => {
     sent("retire");
     reports.add("s1", { id: "r-11111111", kind: "handover", member: "tester", body: "메모" });

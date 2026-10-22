@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -141,6 +141,22 @@ describe("statusline-setup.mjs", () => {
     execFileSync("node", [SETUP, "install"], { env });
     execFileSync("node", [SETUP, "remove"], { env });
     expect((await json("settings.json")).statusLine.command).toBe("echo B");
+  });
+
+  it("B333 m3: 다른 설치본(다른 경로의 tap)을 제거해도 이 설치본의 연결은 되돌리지 않는다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo A" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    const mine = (await json("settings.json")).statusLine.command;
+    const other = h.path("other-prefix");
+    await mkdir(other, { recursive: true });
+    for (const f of ["statusline-setup.mjs", "statusline-tap.sh"]) await copyFile(resolve("scripts", f), `${other}/${f}`);
+    execFileSync("node", [`${other}/statusline-setup.mjs`, "remove"], { env, stdio: "pipe" });
+    expect((await json("settings.json")).statusLine.command).toBe(mine);
+    expect(execFileSync("node", [`${other}/statusline-setup.mjs`, "status"], { env, encoding: "utf8" }).trim()).not.toBe("on");
+    // 다른 설치본이 이어받아 켜면 이 tap을 "원래 명령"으로 백업하지 않는다 — 그쪽을 제거하면 사용자 원래 값으로
+    execFileSync("node", [`${other}/statusline-setup.mjs`, "install"], { env, stdio: "pipe" });
+    execFileSync("node", [`${other}/statusline-setup.mjs`, "remove"], { env, stdio: "pipe" });
+    expect((await json("settings.json")).statusLine.command).toBe("echo A");
   });
 
   it("status는 on·off·other(우리가 연결했던 흔적이 있는데 다른 statusline으로 바뀜)를 낸다", async () => {

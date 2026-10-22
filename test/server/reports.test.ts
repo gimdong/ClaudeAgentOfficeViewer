@@ -43,6 +43,14 @@ describe("ReportStore — 파일(0600·원자 쓰기)·다시 켜도 남음", ()
     expect(store().list("s1")).toMatchObject([{ id: rid(1), kind: "report", title: "주간", body: "본문", state: "pending" }]);
   });
 
+  it("B333 I-1: 보관 지시는 메모리에만 있으므로, 다시 켜면 '보관됨'(state held) 결재는 대기로 되돌린다", () => {
+    const a = store();
+    a.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
+    a.setHeld("s1", "r-11111111", "approve");
+    const r = store().find("s1", "r-11111111")!;
+    expect([r.state, r.held]).toEqual(["pending", undefined]);
+  });
+
   it("깨진 파일은 빈 것으로 시작하고 덮어쓰기 전에 .broken으로 남긴다", async () => {
     const { writeFileSync } = await import("node:fs");
     writeFileSync(file, "{oops", { mode: 0o600 });

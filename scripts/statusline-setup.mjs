@@ -29,9 +29,12 @@ async function readSettings() {
   }
 }
 
-const isOurs = (s) => typeof s.statusLine?.command === "string" && s.statusLine.command.includes("statusline-tap.sh");
 // sh '<경로>' — 경로의 작은따옴표는 '\''로(B326 ③)
 const tapCommand = () => `sh '${tapPath.replaceAll("'", "'\\''")}'`;
+// 이 설치본의 tap인지는 명령 전체로 본다 — 다른 PREFIX 설치본을 제거해도 이 연결을 되돌리지 않게(B333 m3)
+const isOurs = (s) => s.statusLine?.command === tapCommand();
+// 어느 설치본이든 우리 tap(다른 경로 포함): install은 이것을 "원래 명령"으로 백업하지 않고 경로만 바꾼다
+const isAnyTap = (s) => typeof s.statusLine?.command === "string" && s.statusLine.command.includes("statusline-tap.sh");
 
 // ~/.claude/settings.json은 Claude Code가 수시로 읽고 쓰는 핵심 설정 파일이다. writeFile은
 // truncate 후 쓰기라서 중간에 끊기면(Ctrl-C, 디스크 가득 참) 잘린 JSON이 남아 Claude Code
@@ -47,12 +50,12 @@ async function writeJson(path, data, mode) {
 
 async function install() {
   const settings = await readSettings();
-  if (isOurs(settings) && settings.statusLine.command === tapCommand()) {
+  if (isOurs(settings)) {
     console.log("이미 연결되어 있습니다.");
     return;
   }
   await mkdir(officeDir, { recursive: true, mode: 0o700 });
-  if (!isOurs(settings)) {
+  if (!isAnyTap(settings)) {
     // 지금 값이 우리 tap이 아니면 그것이 되돌릴 값이다 — 남은 옛 백업이 있어도 새로 만든다(B328 Minor-10)
     await writeJson(backupPath, settings, 0o600);
     const original = settings.statusLine?.type === "command" ? settings.statusLine.command : "";

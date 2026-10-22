@@ -379,6 +379,16 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     expect(hub.verifySubmit(s.ack(), input, mac(s.sk(), input), "n2")).toBeNull();
   });
 
+  it("B333 I-1: 층을 정리(unregister)하면 남은 보관 지시마다 '보내지 않고 사라짐'을 알린다(결재 도장이 보관됨에 남지 않게)", () => {
+    hub.register("s1", "co-1");
+    const gone: Array<[string, boolean, unknown]> = [];
+    hub.onHeldGone((k, sent, meta) => void gone.push([k, sent, meta]));
+    const meta = { floor: "s1", kind: "approve", requestId: "r-99999999", reportId: "r-11111111" };
+    hub.instruct("s1", "승인", true, "lead:verdict:r-11111111", meta);
+    hub.unregister("s1");
+    expect(gone).toEqual([["lead:verdict:r-11111111", false, meta]]);
+  });
+
   it("보관한 팀리더 지시는 실제로 나갈 때 meta와 함께 알린다(Phase 6b 11장 a) — 화면용 held 목록에는 meta가 없다", async () => {
     const key = hub.register("s1", "co-1")!;
     const gone: Array<[string, boolean, unknown]> = [];

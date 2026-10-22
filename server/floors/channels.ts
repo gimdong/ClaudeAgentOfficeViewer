@@ -113,6 +113,8 @@ export class ChannelHub {
     f.conn?.end();
     if (this.o.keyDir) rmSync(floorKeyFile(this.o.keyDir, f.tmux), { force: true });
     this.floors.delete(sessionId);
+    // 남은 보관 지시는 보내지 않고 사라진다(결재 도장·질문 표시를 되돌리게, B333 I-1)
+    this.heldGone(f.held, false);
     this.changed();
   }
   /**

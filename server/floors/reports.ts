@@ -56,6 +56,8 @@ export class ReportStore {
       if (d && typeof d === "object" && d.floors && typeof d.floors === "object") this.data = d;
       else throw new Error("shape");
       for (const [id, f] of Object.entries(this.data.floors)) this.savedSeen.set(id, f.lastSeenAt);
+      // 보관 지시는 메모리(ChannelHub)에만 있다 — 다시 켜면 "보관됨" 결재는 대기로 되돌린다(B333 I-1)
+      for (const f of Object.values(this.data.floors)) for (const r of [...f.reports, ...f.archived]) if (r.state === "held") (r.state = "pending"), delete r.held;
     } catch (e) {
       this.broken = true; // 다음 쓰기 전에 .broken으로 남긴다(정책 파일과 같은 방식)
       getLogger().warn("reports", "load failed", { error: errInfo(e) });
