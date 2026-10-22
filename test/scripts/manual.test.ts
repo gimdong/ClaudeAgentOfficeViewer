@@ -1067,6 +1067,7 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
       LEAD_TEXT.notLaunched, LEAD_TEXT.failed, CH_TEXT.instructPaused, CH_TEXT.briefMemory, LEAD_TEXT.archiveNote, LEAD_TEXT.optionsHelp, LEAD_TEXT.memberNote("developer"),
       LEAD_TEXT.held, LEAD_TEXT.answeredTerminal, LEAD_TEXT.replyOff, LEAD_TEXT.retireBody("designer"), LEAD_TEXT.chipAwait,
       LEAD_TEXT.stamp.pending, LEAD_TEXT.stamp.approved, LEAD_TEXT.stamp.revise, LEAD_TEXT.stampHandoverPending,
+      LEAD_TEXT.stampHeld, LEAD_TEXT.heldLine.approve, LEAD_TEXT.heldLine.revise, CMD_TEXT.retireResume,
     ]) expect(lead, t).toContain(`<code>${t}</code>`);
     for (const t of [LEAD_TEXT.reviseOpen, LEAD_TEXT.reviseSend, LEAD_TEXT.approve, LEAD_TEXT.rehire, LEAD_TEXT.options, LEAD_TEXT.free, LEAD_TEXT.send, LEAD_TEXT.retireGo]) expect(lead, t).toContain(`<strong>${t}</strong>`);
     expect(lead).toContain(`${LEAD_MAX.toLocaleString("en-US")}자까지`);
