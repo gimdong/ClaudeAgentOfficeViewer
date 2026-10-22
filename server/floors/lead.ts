@@ -9,7 +9,13 @@ import { getLogger } from "../log";
  * 지시 id(r-8hex)는 요청마다 새로 만들고, 팀리더가 도구를 부를 때 쓴다. 로그에는 kind만(사용자 글은 남기지 않는다)
  */
 /** 퇴근·퇴사 기록에 쓰는 값(지시가 실제로 나갈 때 DutyBoard.onSent로) */
-export interface LeadSent { floor: string; kind: LeadKind; member?: string; requestId: string; handoverId?: string }
+export interface LeadSent { floor: string; kind: LeadKind; member?: string; requestId: string; handoverId?: string; reportId?: string }
+
+/** 보관한 결재가 실제로 나가면 그 도장(승인됨·수정 요청), 보관함에서 지우면 대기로(스펙 12장 l) */
+export function verdictHeldGone(reports: Pick<ReportStore, "setState">, meta: LeadSent, sent: boolean): void {
+  if ((meta.kind !== "approve" && meta.kind !== "revise") || !meta.reportId) return;
+  reports.setState(meta.floor, meta.reportId, !sent ? "pending" : meta.kind === "approve" ? "approved" : "revise");
+}
 
 /**
  * members: 그 층 팀 설정의 팀원 이름(스펙 12장 b — 그 밖의 이름은 400 member).
@@ -34,15 +40,16 @@ export function leadInstruct(
   }
   const built = buildLead(body, `r-${randomBytes(4).toString("hex")}`, members, { memo });
   if (!built.ok) return { status: 400, body: { error: built.error } };
-  const sent: LeadSent = { floor: floorId, kind: built.kind, requestId: built.id, ...(typeof b.member === "string" ? { member: b.member } : {}), ...(typeof b.handoverId === "string" ? { handoverId: b.handoverId } : {}) };
+  const rid = (body as { reportId?: unknown }).reportId;
+  const sent: LeadSent = { floor: floorId, kind: built.kind, requestId: built.id, ...(typeof b.member === "string" ? { member: b.member } : {}), ...(typeof b.handoverId === "string" ? { handoverId: b.handoverId } : {}), ...(typeof rid === "string" ? { reportId: rid } : {}) };
   const r = hub.instruct(floorId, built.text, paused, built.holdKey, sent);
   if (!r.ok) return { status: r.error === "not-launched" ? 404 : 409, body: { error: r.error } };
   // 제출 도구가 쓸 요청 id를 건다(스펙 3장): 보고 요청·수정 요청 → submit_report, 퇴사 → submit_handover(그 팀원 이름으로만, 12장 b)
   if (built.kind === "report" || built.kind === "revise") reports?.expect(built.id, floorId, "report");
   if (built.kind === "report") reports?.asked(floorId);
-  // 결재는 누른 순간 서류철 도장을 바꾼다(휴업 중 보관이어도 — 사용자의 결정은 이미 내려졌다)
-  const rid = (body as { reportId?: unknown }).reportId;
-  if ((built.kind === "approve" || built.kind === "revise") && typeof rid === "string") reports?.setState(floorId, rid, built.kind === "approve" ? "approved" : "revise");
+  // 결재: 보냈으면 바로 도장, 휴업 중 보관이면 "보관됨" — 실제로 나갈 때 바꾼다(verdictHeldGone, 스펙 12장 l)
+  if (r.state === "held" && sent.reportId && (built.kind === "approve" || built.kind === "revise")) reports?.setState(floorId, sent.reportId, "held");
+  else if (r.state === "sent" && reports) verdictHeldGone(reports, sent, true);
   if (built.kind === "retire") reports?.expect(built.id, floorId, "handover", b.member as string);
   if (r.state === "sent") onSent?.(sent);
   getLogger().info("floors", "lead", { kind: built.kind, state: r.state });

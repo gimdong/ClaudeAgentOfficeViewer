@@ -23,7 +23,7 @@ export const LEAD_TEXT = {
   // 서류철(§3)
   folderChip: "서류철",
   folderSub: (pending: number, all: number) => `대기 ${pending} · 모두 ${all}`,
-  stamp: { pending: "대기", approved: "승인됨", revise: "수정 요청", started: "시작함" } as Record<ReportState, string>,
+  stamp: { pending: "대기", held: "보관됨", approved: "승인됨", revise: "수정 요청", started: "시작함" } as Record<ReportState, string>,
   stampHandoverPending: "시작 전",
   // 휴업 중 결재(스펙 12장 l): 보낼 때까지 도장은 "보관됨", 위 줄에 무엇을 보관했는지
   stampHeld: "보관됨",

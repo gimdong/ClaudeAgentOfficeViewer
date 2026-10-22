@@ -25,7 +25,7 @@ function narrow(file: string): void {
 
 export type ReportKind = "report" | "handover";
 /** started: 인수인계 메모로 새 팀원을 시작함(rehire) */
-export type ReportState = "pending" | "approved" | "revise" | "started";
+export type ReportState = "pending" | "held" | "approved" | "revise" | "started";
 /** from: 제출한 에이전트 이름(짝짓기 주인), decidedAt: 결재·새 팀원 시작 시각 */
 export interface Report { id: string; kind: ReportKind; title?: string; member?: string; from?: string; body: string; at: number; state: ReportState; decidedAt?: number }
 /** 보고 요청 뒤 이만큼 보고서가 없으면 화면에 알린다(스펙 10장) */
@@ -181,7 +181,8 @@ export class ReportStore {
     const r = this.data.floors[floor]?.reports.find((x) => x.id === id) ?? this.data.floors[floor]?.archived.find((x) => x.id === id);
     if (!r) return false;
     r.state = state;
-    if (state !== "pending") r.decidedAt = this.now();
+    if (state === "pending") delete r.decidedAt;
+    else r.decidedAt = this.now();
     this.save();
     return true;
   }

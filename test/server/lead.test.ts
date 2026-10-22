@@ -9,6 +9,7 @@ import { ChannelHub } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { ReportStore } from "../../server/floors/reports";
 import { LEAD_KINDS, MAX_LEAD_TEXT, QUOTE_BEGIN, QUOTE_END, buildLead } from "../../server/floors/leadText";
+import { leadInstruct, verdictHeldGone } from "../../server/floors/lead";
 import { Logger, setLogger } from "../../server/log";
 import { makeMember, makeSession, makeSnapshot } from "../web/fixtures";
 
@@ -84,13 +85,19 @@ describe("buildLead — kind별 틀(스펙 2장)", () => {
     expect(buildLead({ kind: "report" }, ID, []).ok).toBe(true);
   });
 
-  it("휴업 중 보관 키(스펙 11장 a): kind별 하나, 같은 팀원의 퇴근·출근은 같은 키, 답은 질문마다", () => {
+  it("휴업 중 보관 키(스펙 12장 l): kind와 대상별 하나 — 결재는 보고서마다(승인·수정 요청이 서로 대체), 팀원 지시는 팀원마다, 답은 질문마다, 보고 요청은 층마다", () => {
     const key = (b: object) => {
       const r = buildLead(b, ID, TEAM);
       return r.ok ? r.holdKey : null;
     };
     expect(key({ kind: "report" })).toBe("lead:report");
-    expect(key({ kind: "approve", reportId: "r-11111111" })).toBe("lead:approve");
+    expect(key({ kind: "approve", reportId: "r-11111111" })).toBe("lead:verdict:r-11111111");
+    expect(key({ kind: "revise", reportId: "r-11111111", text: "x" })).toBe("lead:verdict:r-11111111");
+    expect(key({ kind: "approve", reportId: "r-22222222" })).not.toBe(key({ kind: "approve", reportId: "r-11111111" }));
+    expect(key({ kind: "retire", member: "a" })).toBe("lead:retire:a");
+    expect(key({ kind: "retire", member: "b" })).not.toBe(key({ kind: "retire", member: "a" }));
+    expect(key({ kind: "rehire", member: "a", handoverId: "r-22222222" })).toBe("lead:rehire:a");
+    expect(key({ kind: "rehire", member: "b", handoverId: "r-22222222" })).toBe("lead:rehire:b");
     expect(key({ kind: "offduty", member: "a" })).toBe(key({ kind: "onduty", member: "a" }));
     expect(key({ kind: "offduty", member: "a" })).not.toBe(key({ kind: "offduty", member: "b" }));
     expect(key({ kind: "reply", questionId: "q-33333333", text: "x" })).toBe("lead:reply:q-33333333");
@@ -282,8 +289,39 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     const rid = JSON.parse((await post("/api/floors/s1/lead", { kind: "report" })).body).requestId as string;
     reports.take(rid, "s1", "report");
     reports.add("s1", { id: rid, kind: "report", title: "주간", from: "team-lead", body: "b" });
+    // 휴업 중 결재는 "보관됨"(스펙 12장 l). 보관함에서 지우면 대기로
     expect((await post("/api/floors/s1/lead", { kind: "approve", reportId: rid })).status).toBe(200);
-    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "approved", from: "team-lead", decidedAt: expect.any(String) });
+    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "held", from: "team-lead" });
+    expect(hub.dropHeld("s1", hub.held("s1").find((h) => h.key === `lead:verdict:${rid}`)!.id)).toBe(true);
+    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "pending" });
+    expect(JSON.parse((await get()).body).reports[0].decidedAt).toBeUndefined();
+  });
+
+  it("연결된 층에 바로 보낸 결재는 그 자리에서 도장(승인됨·수정 요청), 보관이면 보관됨", () => {
+    const store = new ReportStore();
+    store.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
+    const hub = (state: "sent" | "held") => ({ instruct: () => ({ ok: true as const, id: "i", state }) });
+    leadInstruct(hub("sent"), "s1", false, { kind: "revise", reportId: "r-11111111", text: "고쳐 주세요" }, [], store);
+    expect(store.find("s1", "r-11111111")!.state).toBe("revise");
+    leadInstruct(hub("held"), "s1", true, { kind: "approve", reportId: "r-11111111" }, [], store);
+    expect(store.find("s1", "r-11111111")!.state).toBe("held");
+    leadInstruct(hub("sent"), "s1", false, { kind: "approve", reportId: "r-11111111" }, [], store);
+    expect(store.find("s1", "r-11111111")!.state).toBe("approved");
+  });
+
+  it("보관한 결재가 실제로 나가면 그 결재의 도장(승인됨·수정 요청), 지우면 대기 — 결재가 아닌 보관 지시는 건드리지 않는다", () => {
+    const store = new ReportStore();
+    store.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
+    const meta = (kind: "approve" | "revise" | "report") => ({ floor: "s1", kind, requestId: "r-99999999", reportId: "r-11111111" });
+    store.setState("s1", "r-11111111", "held");
+    verdictHeldGone(store, meta("revise"), true);
+    expect(store.find("s1", "r-11111111")!.state).toBe("revise");
+    verdictHeldGone(store, meta("approve"), true);
+    expect(store.find("s1", "r-11111111")!.state).toBe("approved");
+    verdictHeldGone(store, meta("approve"), false);
+    expect(store.find("s1", "r-11111111")!.state).toBe("pending");
+    verdictHeldGone(store, meta("report"), true);
+    expect(store.find("s1", "r-11111111")!.state).toBe("pending");
   });
 
   it("지시 id는 요청마다 새로", async () => {

@@ -23,6 +23,8 @@ interface DeskProps {
   floorId?: string;
   /** 리드 책상의 서류철 수(Phase 6b designer SPEC §2.2) */
   folder?: { pending: number; total: number };
+  /** 퇴사 중이면 channel 연결이 없음을 알린다(스펙 12장 m) */
+  retireWait?: boolean;
 }
 
 /** 남은 시간이 60초 이하이면 ?를 급함 팔레트로(디자인 phase2 §1.3, Phase 1 6장). deadline이 있을 때만 매초 다시 본다 */
@@ -36,7 +38,7 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folder }: DeskProps) {
+export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false }: DeskProps) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
@@ -173,7 +175,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
 
   // 이름표 아래 한 줄 자리(§2.6): 모든 책상에 둔다(비어 있어도 — 바닥선을 맞춘다). 리드는 결재 칩, 팀원은 상태 줄 하나
   const pending = folder?.pending ?? 0;
-  const status = member.retiring ? { text: CMD_TEXT.statusRetiring, cls: "desk-status pink" } : member.duty === "requested" ? { text: CMD_TEXT.statusOffRequested, cls: "desk-status" } : member.longIdle && !offDuty ? { text: CMD_TEXT.statusLongIdle, cls: "desk-status" } : null;
+  const status = member.retiring ? { text: retireWait ? `${CMD_TEXT.statusRetiring} · ${CMD_TEXT.retireResume}` : CMD_TEXT.statusRetiring, cls: "desk-status pink" } : member.duty === "requested" ? { text: CMD_TEXT.statusOffRequested, cls: "desk-status" } : member.longIdle && !offDuty ? { text: CMD_TEXT.statusLongIdle, cls: "desk-status" } : null;
   const extra = (
     <span className="desk-extra" data-testid="extra-line">
       {pending > 0 ? <span className="desk-folder">{CMD_TEXT.deskFolder(pending)}</span> : status && <span className={status.cls}>{status.text}</span>}

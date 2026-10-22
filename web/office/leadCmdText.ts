@@ -29,6 +29,8 @@ export const CMD_TEXT = {
   predecessorsAria: (n: number) => `전임자 ${n}명`,
   period: "일한 기간",
   retiredAt: "퇴사",
+  /** 퇴사 중인데 channel 연결이 없을 때 책상 줄 옆(스펙 12장 m) */
+  retireResume: "연결되면 이어 갑니다",
   // 알림(W26)
   announce: {
     approve: "승인을 리드에게 보냈습니다",

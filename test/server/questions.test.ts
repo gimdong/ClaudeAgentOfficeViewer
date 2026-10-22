@@ -28,14 +28,16 @@ beforeEach(() => {
 const board = (lastText?: string | null) => new QuestionBoard({ lastText: async () => lastText ?? null, onChange: () => void pokes++ });
 
 describe("QuestionBoard — 해제(B308)와 주인(11장 b)", () => {
-  it("CLEAR 1·2: 팀리더 본인의 UserPromptSubmit·PreToolUse가 지운다(팀원 책상 질문도)", async () => {
-    for (const name of ["UserPromptSubmit", "PreToolUse"]) {
-      const b = board();
-      b.ask("c1", LEAD, "리드 질문", []);
-      b.ask("c1", TESTER, "팀원 질문", []);
-      await b.onEvent(ev(name, {}, { tool_name: "Bash" }));
-      expect(b.list("c1"), name).toEqual([]);
-    }
+  it("CLEAR 1·2(스펙 12장 k): 팀리더 본인의 UserPromptSubmit은 모두 지우고, PreToolUse는 Stop 경로(답을 기다립니다)만 지운다 — ask_user는 남는다", async () => {
+    const b = board("배포를 오늘 할까요?");
+    b.ask("c1", TESTER, "팀원 질문", []);
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1").map((q) => q.source).sort()).toEqual(["ask", "await"]);
+    await b.onEvent(ev("PreToolUse", {}, { tool_name: "Bash" }));
+    expect(b.list("c1").map((q) => [q.source, q.owner])).toEqual([["ask", "tester"]]);
+    b.ask("c1", LEAD, "리드 질문", []);
+    await b.onEvent(ev("UserPromptSubmit"));
+    expect(b.list("c1")).toEqual([]);
   });
 
   it("KEEP 1·2·3: 팀원·서브에이전트의 이벤트로는 지우지 않는다", async () => {
@@ -211,9 +213,9 @@ describe("app — 옛 /hooks/event로 온 팀리더 이벤트는 질문을 지�
       req.on("error", reject);
       req.end(body);
     });
-  it("같은 팀리더 PreToolUse라도 옛 입구는 그대로, v2는 지운다", async () => {
+  it("같은 팀리더 UserPromptSubmit이라도 옛 입구는 그대로, v2는 지운다(ask_user는 PreToolUse로 지우지 않음, 12장 k)", async () => {
     b.ask("c1", LEAD, "q", []);
-    const pre = { hook_event_name: "PreToolUse", session_id: "c1", tool_name: "Bash", tool_input: {} };
+    const pre = { hook_event_name: "UserPromptSubmit", session_id: "c1", prompt: "다음" };
     expect(await post("/hooks/event", JSON.stringify(pre))).toBe(200);
     expect(b.list("c1")).toHaveLength(1);
     expect(await post("/hooks/v2", sealed(pre))).toBe(200);

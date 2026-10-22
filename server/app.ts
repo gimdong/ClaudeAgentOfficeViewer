@@ -21,7 +21,7 @@ import { HOOK_V2, openRequest, sealResponse, type HookKeys, type ReplayWindow } 
 import type { HeldResponse } from "./decisions/queue";
 import type { ReopenMode, ReopenResult } from "./floors/reopen";
 import { validateLaunch, type LaunchInput } from "./floors/launch";
-import { leadInstruct, type LeadSent } from "./floors/lead";
+import { leadInstruct, verdictHeldGone, type LeadSent } from "./floors/lead";
 import { DutyBoard } from "./floors/duty";
 import { PairingBook } from "./floors/pairing";
 import { ReportStore, folderView } from "./floors/reports";
@@ -179,7 +179,9 @@ export function createApp(
   opts.channels?.hub.onHeldGone((key, sent, meta) => {
     questions.heldGone(key, sent);
     // 보관한 팀리더 지시가 실제로 나갔을 때 퇴근·퇴사를 기록한다(11장 a)
-    if (sent && meta && typeof meta === "object" && "kind" in meta) duty.onSent(meta as LeadSent);
+    if (!meta || typeof meta !== "object" || !("kind" in meta)) return;
+    verdictHeldGone(reports, meta as LeadSent, sent);
+    if (sent) duty.onSent(meta as LeadSent);
   });
 
   app.use((req, res, next) => {

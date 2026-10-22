@@ -13,7 +13,7 @@ type LastText = string | null | { behind: true };
  * 대화 질문(Phase 6b 스펙 4장·11장 b c·12장 d e). 책상(주인 이름)마다 하나 — 새 질문이 오면 옛것을 대체한다.
  * - ask_user: 주인은 PreToolUse 짝짓기(B311), 서브에이전트가 부르면 리드 책상, hook 없이 제출만 오면 리드
  * - Stop 대체 경로: 팀리더 본인(sub 아님)의 /hooks/v2 Stop만, 마지막 글은 서버가 아는 그 대화 기록 뒤쪽에서(이벤트 글·경로는 쓰지 않음)
- * - 해제: 팀리더 본인의 UserPromptSubmit·PreToolUse(v2), 또는 대시보드 답이 실제로 보내졌을 때(B308). 휴업 중 답은 "held"로 두고
+ * - 해제: 팀리더 본인의 UserPromptSubmit(v2), PreToolUse(v2)는 Stop 경로(source "await")만(스펙 12장 k), 또는 대시보드 답이 실제로 보내졌을 때(B308). 휴업 중 답은 "held"로 두고
  *   실제로 보낼 때 지우며, 보관한 답을 지우면 다시 "open"(B309). 메모리에만 — 대시보드를 다시 켜면 사라진다
  * 키는 대화 키(conv, hook의 정규화된 session_id) — 스냅샷이 층의 이벤트를 찾는 키와 같다
  * - B324 I-B: 대화마다 마지막으로 지운(답한) 질문 글을 기억해 Stop이 같은 글을 다시 읽으면 띄우지 않는다
@@ -54,7 +54,7 @@ export class QuestionBoard {
     if (ev === "UserPromptSubmit" || ev === "PreToolUse") {
       const desks = this.byConv.get(conv);
       let n = 0;
-      for (const [k, q] of desks ?? []) if (q.state === "open") desks!.delete(k), this.lastGone.set(conv, q.text), n++;
+      for (const [k, q] of desks ?? []) if (q.state === "open" && (ev === "UserPromptSubmit" || q.source === "await")) desks!.delete(k), this.lastGone.set(conv, q.text), n++;
       if (n) this.changed();
       return;
     }

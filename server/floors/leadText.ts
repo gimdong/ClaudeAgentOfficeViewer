@@ -63,12 +63,15 @@ const TEMPLATES: Record<LeadKind, (id: string, f: Record<string, string>) => str
 };
 
 /**
- * holdKey: 휴업 중 보관에서 같은 키는 새것이 옛것을 대체한다(스펙 11장 a). kind마다 하나, 같은 팀원의 퇴근·출근은 한 키, 답은 질문마다
+ * holdKey: 휴업 중 보관에서 같은 키는 새것이 옛것을 대체한다(스펙 11장 a·12장 l). kind와 대상별 하나 — 결재는 보고서마다(승인·수정 요청이 한 키),
+ * 같은 팀원의 퇴근·출근은 한 키, 퇴사·새 팀원은 팀원마다, 답은 질문마다, 보고 요청은 층마다(보관 목록이 층마다라 kind만)
  */
 export type LeadBuild = { ok: true; kind: LeadKind; id: string; text: string; holdKey: string } | { ok: false; error: "kind" | "body" | "text" | "member" | "ref" | "choice" };
 
 function holdKeyOf(k: LeadKind, f: Record<string, string>): string {
   if (k === "offduty" || k === "onduty") return `lead:duty:${f.member}`;
+  if (k === "retire" || k === "rehire") return `lead:${k}:${f.member}`;
+  if (k === "approve" || k === "revise") return `lead:verdict:${f.reportId}`;
   if (k === "reply") return `lead:reply:${f.questionId}`;
   return `lead:${k}`;
 }

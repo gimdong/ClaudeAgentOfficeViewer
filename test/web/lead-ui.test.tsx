@@ -55,6 +55,20 @@ describe("책상 표시(§2)", () => {
     expect(line({ longIdle: true, duty: "requested", retiring: { since: "x" } })).toBe(CMD_TEXT.statusRetiring);
   });
 
+  it("스펙 12장 m: 퇴사 중인데 channel 연결이 없으면 옆에 '연결되면 이어 갑니다'", () => {
+    render(<Desk member={makeMember({ name: "tester", retiring: { since: "x" } })} retireWait />);
+    expect(screen.getByTestId("extra-line").textContent).toBe(`${CMD_TEXT.statusRetiring} · ${CMD_TEXT.retireResume}`);
+    cleanup();
+    render(<Desk member={makeMember({ name: "tester" })} retireWait />);
+    expect(screen.getByTestId("extra-line").textContent).toBe("");
+    cleanup();
+    render(<Floor session={makeSession({ members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester", retiring: { since: "x" } })] })} />);
+    expect(screen.getAllByTestId("extra-line")[1].textContent).toContain(CMD_TEXT.retireResume);
+    cleanup();
+    render(<Floor session={makeSession({ channel: { connected: true, tmux: "co-1", held: 0 }, members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester", retiring: { since: "x" } })] })} />);
+    expect(screen.getAllByTestId("extra-line")[1].textContent).toBe(CMD_TEXT.statusRetiring);
+  });
+
   it("리드 책상: 결재 대기가 있으면 '결재 {n}' 칩과 서류철 그림(노랑), 보고서만 있으면 그림만", () => {
     render(<Desk member={makeMember({ name: "team-lead", role: "lead" })} folder={{ pending: 2, total: 3 }} />);
     expect(screen.getByTestId("extra-line").textContent).toBe(CMD_TEXT.deskFolder(2));

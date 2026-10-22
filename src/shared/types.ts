@@ -260,7 +260,8 @@ export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: 
 /** 팀리더 지시 통로 상태(Phase 6b 화면, designer SPEC §1.2) */
 export type LeadChannel = "ok" | "not-launched" | "not-connected";
 /** 보고서 도장(started: 인수인계로 새 팀원을 시작함) */
-export type ReportState = "pending" | "approved" | "revise" | "started";
+/** held: 휴업 중 보관한 결재(실제로 나가면 approved·revise, 보관함에서 지우면 pending — 스펙 12장 l) */
+export type ReportState = "pending" | "held" | "approved" | "revise" | "started";
 /** 서류철 한 장(GET /api/floors/:id/reports). 시각은 ISO */
 export interface ReportView {
   id: string;
