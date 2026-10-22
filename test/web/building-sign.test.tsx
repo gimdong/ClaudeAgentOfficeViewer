@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySum } from "../../src/shared/tokens";
 import { Building } from "../../web/building/Building";
 import { BUILDING_TEXT } from "../../web/building/BuildingInfo";
-import { remainingOf } from "../../web/hud/remaining";
+import { BAR_EMPTY, remainingOf } from "../../web/hud/remaining";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
 
 if (!HTMLDialogElement.prototype.showModal) {
@@ -69,6 +69,8 @@ describe("빌딩 정보 PLAN 이유 줄(스펙 12장 j W33, qa #627 F)", () => {
     expect(BUILDING_TEXT.planWhyOff).toBe("PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. 이 설치본은 상태줄 연결이 꺼져 있어 받지 못합니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.");
     expect(plan("on")).toContain(BUILDING_TEXT.planNone + BUILDING_TEXT.planWhyOn);
     expect(BUILDING_TEXT.planWhyOn).toBe("PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 계정에는 오지 않습니다.");
-    expect(plan("unsupported")).toContain(BUILDING_TEXT.planNone + BUILDING_TEXT.planWhy);
+    // B331: Windows는 같은 사실(HUD와 같은 상수) + 한 줄 이유
+    expect(BUILDING_TEXT.planUnsupported).toBe(BAR_EMPTY.planUnsupported);
+    expect(plan("unsupported")).toContain(BUILDING_TEXT.planUnsupported + BUILDING_TEXT.planWhyUnsupported);
   });
 });

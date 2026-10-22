@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { CH_TEXT } from "../floors/ChannelDialogs";
 import { formatTokens } from "../format";
 import type { Snapshot } from "../../src/shared/types";
-import { BAR_EMPTY } from "../hud/remaining";
+import { BAR_EMPTY, planEmptyText } from "../hud/remaining";
 import { graphemes } from "../report/text";
 
 export const NAME_MAX = 40;
@@ -28,11 +28,14 @@ export const BUILDING_TEXT = {
   needSetup: BAR_EMPTY.needSetup,
   planNone: BAR_EMPTY.planNone,
   planOff: BAR_EMPTY.planOff,
+  planUnsupported: BAR_EMPTY.planUnsupported,
   // W33 보류: 상태줄 연결(statusline tap)을 설치 때 넣을지 사용자 결정 대기 — 결정이 나면 이 상수 하나만 바꾼다
   planWhy: "PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 배포판은 아직 상태줄 연결을 설치하지 않습니다.",
   // 스펙 12장 j(qa #627 F): statusline 연결 상태별 이유. 위 planWhy는 Windows·옛 서버(상태를 모름)에만 남는다
   planWhyOff: "PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. 이 설치본은 상태줄 연결이 꺼져 있어 받지 못합니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.",
   planWhyOn: "PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 계정에는 오지 않습니다.",
+  // B331(qa 검토 전): Windows
+  planWhyUnsupported: "PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Windows에서는 상태줄 연결을 지원하지 않아 받지 못합니다.",
   floors: "층·팀원",
   floorsValue: (f: number, m: number) => `${f}층 · 팀원 ${m}명`,
   version: "버전",
@@ -97,7 +100,7 @@ export function BuildingInfo(p: {
     [T.last7d, <>{formatTokens(p.usage.last7d)}<small>{T.estimated}</small></>],
     [T.five, pct(p.remaining.five, T.needSetup)],
     [T.week, pct(p.remaining.week, T.needSetup)],
-    [T.plan, p.remaining.plan === null ? <>{p.statusline === "off" ? T.planOff : T.planNone}<span className="bi-why">{p.statusline === "off" ? T.planWhyOff : p.statusline === "on" ? T.planWhyOn : T.planWhy}</span></> : pct(p.remaining.plan, T.planNone)],
+    [T.plan, p.remaining.plan === null ? <>{planEmptyText(p)}<span className="bi-why">{p.statusline === "off" ? T.planWhyOff : p.statusline === "on" ? T.planWhyOn : p.statusline === "unsupported" ? T.planWhyUnsupported : T.planWhy}</span></> : pct(p.remaining.plan, T.planNone)],
     [T.floors, T.floorsValue(p.floors, p.members)],
     [T.version, T.versionValue(p.serverVersion, p.appVersion)],
   ];

@@ -116,5 +116,10 @@ describe("PLAN 빈 문구(스펙 12장 j W33, qa #627 E)", () => {
     cleanup();
     render(<Hud snapshot={makeSnapshot({ statusline: "on" })} live />);
     expect(screen.getByText(BAR_EMPTY.planNone)).toBeTruthy();
+    // B331: Windows(unsupported)
+    cleanup();
+    expect(BAR_EMPTY.planUnsupported).toBe("-- Windows에서는 statusline 연결을 지원하지 않음");
+    render(<Hud snapshot={makeSnapshot({ statusline: "unsupported" })} live />);
+    expect(screen.getByText(BAR_EMPTY.planUnsupported)).toBeTruthy();
   });
 });
