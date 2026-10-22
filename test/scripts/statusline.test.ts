@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -120,9 +120,40 @@ describe("statusline-setup.mjs", () => {
     for (const f of [...rootFiles, ...officeFiles]) expect(f).not.toMatch(/\.tmp-/);
   });
 
-  it("백업 없이 remove하면 종료 코드 1", async () => {
-    await h.write("settings.json", {});
-    expect(() => execFileSync("node", [SETUP, "remove"], { env, stdio: "pipe" })).toThrow();
+  it("B326 ②: 백업이 없어도 remove는 0 — 우리 tap이 아니면 그대로 두고, 우리 tap이면 original-statusline.sh의 명령으로(없으면 키를 지움)", async () => {
+    await h.write("settings.json", { theme: "dark" });
+    execFileSync("node", [SETUP, "remove"], { env, stdio: "pipe" });
+    expect(await json("settings.json")).toEqual({ theme: "dark" });
+    for (const [orig, want] of [["echo O", { type: "command", command: "echo O" }], ["", undefined]] as const) {
+      await h.write("settings.json", { theme: "dark", statusLine: { type: "command", command: "echo O" } });
+      execFileSync("node", [SETUP, "install"], { env, stdio: "pipe" });
+      await h.write("claude-office/original-statusline.sh", `#!/bin/sh\n${orig}\n`);
+      for (const f of await readdir(h.path("claude-office"))) if (f.startsWith("settings.backup")) await rm(h.path(`claude-office/${f}`));
+      execFileSync("node", [SETUP, "remove"], { env, stdio: "pipe" });
+      expect((await json("settings.json")).statusLine, orig).toEqual(want);
+    }
+  });
+
+  it("B328 Minor-10: 다시 install할 때 지금 값이 우리 tap이 아니면 백업을 새로 만든다", async () => {
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo A" } });
+    execFileSync("node", [SETUP, "install"], { env });
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo B" } }); // 백업이 남은 채 사용자가 바꿈
+    execFileSync("node", [SETUP, "install"], { env });
+    execFileSync("node", [SETUP, "remove"], { env });
+    expect((await json("settings.json")).statusLine.command).toBe("echo B");
+  });
+
+  it("status는 on·off·other(우리가 연결했던 흔적이 있는데 다른 statusline으로 바뀜)를 낸다", async () => {
+    const status = () => execFileSync("node", [SETUP, "status"], { env, encoding: "utf8" }).trim();
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo A" } });
+    expect(status()).toBe("off");
+    execFileSync("node", [SETUP, "install"], { env });
+    expect(status()).toBe("on");
+    const s = await json("settings.json");
+    await h.write("settings.json", { ...s, statusLine: { type: "command", command: "echo B" } });
+    expect(status()).toBe("other");
+    execFileSync("node", [SETUP, "remove"], { env });
+    expect(status()).toBe("off");
   });
 
   // director 검토 관점(미리 알림): 깨진 settings.json이면 건드리지 않고 실패.
@@ -147,6 +178,12 @@ describe("statusline-setup.mjs", () => {
     const result = spawnSync("node", [SETUP, "install"], { env });
     expect(result.status).toBe(0);
     expect(result.stderr.toString()).toContain("비어 보일 수");
+    // 설치본(--installed)은 설치본에 있는 되돌리기 명령만 안내한다(qa #627 D)
+    await h.write("settings.json", { theme: "dark" });
+    execFileSync("node", [SETUP, "remove"], { env });
+    const installed = spawnSync("node", [SETUP, "install", "--installed"], { env });
+    expect(installed.stderr.toString()).toContain("claude-office uninstall");
+    expect(installed.stderr.toString()).not.toContain("npm run");
   });
 
   it("기존 command가 있으면 안내를 출력하지 않는다", async () => {
@@ -162,7 +199,7 @@ describe("statusline-setup.mjs", () => {
     const winEnv = { ...env, STATUSLINE_PLATFORM: "win32" };
     const result = spawnSync("node", [SETUP, "install"], { env: winEnv });
     expect(result.status).toBe(0);
-    expect(result.stdout.toString()).toContain("Windows에서는 아직 지원하지 않습니다");
+    expect(result.stdout.toString().trim()).toBe("PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다."); // qa #627 C: 약속 단어 없이
     expect(await json("settings.json")).toEqual({ statusLine: { type: "command", command: "echo hi" } });
   });
 

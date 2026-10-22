@@ -56,3 +56,19 @@ describe("remainingOf", () => {
     expect(r.planHint).toBe("WEEK");
   });
 });
+
+describe("빌딩 정보 PLAN 이유 줄(스펙 12장 j W33, qa #627 F)", () => {
+  const plan = (statusline: "on" | "off" | "unsupported") => {
+    cleanup();
+    render(<Building sessions={sessions} snapshot={{ ...snap, statusline }} />);
+    fireEvent.click(screen.getByRole("button", { name: /빌딩 정보 열기/ }));
+    return screen.getByRole("dialog").textContent!;
+  };
+  it("꺼짐이면 켜는 법, 연결됐는데 없으면 요금제 사실", () => {
+    expect(plan("off")).toContain(BUILDING_TEXT.planOff + BUILDING_TEXT.planWhyOff);
+    expect(BUILDING_TEXT.planWhyOff).toBe("PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. 이 설치본은 상태줄 연결이 꺼져 있어 받지 못합니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.");
+    expect(plan("on")).toContain(BUILDING_TEXT.planNone + BUILDING_TEXT.planWhyOn);
+    expect(BUILDING_TEXT.planWhyOn).toBe("PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 계정에는 오지 않습니다.");
+    expect(plan("unsupported")).toContain(BUILDING_TEXT.planNone + BUILDING_TEXT.planWhy);
+  });
+});

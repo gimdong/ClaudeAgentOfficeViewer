@@ -139,6 +139,8 @@ describe("npm run package:beta", () => {
       "app/web/index.html",
       "app/node_modules/express/package.json",
       "app/package.json",
+      "app/statusline-setup.mjs", // 스펙 12장 j: 설치·제거가 설치본 경로로 부른다
+      "app/statusline-tap.sh",
       "plugin/.claude-plugin/marketplace.json",
       "plugin/plugins/claude-office/hooks/hooks.json",
       "plugin/plugins/claude-office/hooks/relay.cjs",

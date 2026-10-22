@@ -74,6 +74,8 @@ function main() {
   mkdirSync(join(releaseDir, "app"), { recursive: true });
   cpSync(r("dist/server/server.mjs"), join(releaseDir, "app/server.mjs"));
   cpSync(r("dist/web"), join(releaseDir, "app/web"), { recursive: true });
+  // statusline 연결 도우미(스펙 12장 j): install.sh·uninstall이 설치본 경로(app/)로 부르고, tap은 그 경로로 statusLine에 들어간다
+  for (const f of ["statusline-setup.mjs", "statusline-tap.sh"]) cpSync(r("scripts", f), join(releaseDir, "app", f));
 
   // 4. 운영 의존성만 복사한다(Ruling B4는 `npm ls express --all --parseable`을 제안했지만, 이 npm
   // 버전(11.6.0)에서는 그 명령이 express 자신만 돌려주고 하위 의존 트리를 안 보여준다(직접 확인).

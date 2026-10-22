@@ -153,7 +153,7 @@ function installLogLines(prefix: string): string[] {
  */
 function expectValidInstallLog(lines: string[], tempMarker: string) {
   // 시각은 로컬+오프셋(%z, 예: +0900)으로 바뀌어 자릿수가 고정이 아니다(director 지시 #52.h) — \S+로 느슨하게 받는다.
-  const re = /^\S+ (node|copy|token|hookkey|hooks|path|plugin|doctor|done) (ok|fail|skip)( .*)?$/;
+  const re = /^\S+ (node|copy|token|hookkey|hooks|path|plugin|statusline|doctor|done) (ok|fail|skip)( .*)?$/;
   for (const line of lines) {
     expect(line, line).toMatch(re);
     if (!line.includes("/")) continue;
@@ -210,6 +210,10 @@ describe("packaging/install.sh, claude-office.sh", () => {
       expectValidInstallLog(lines, basename(dirname(rig.home)));
       const steps = lines.map((l) => l.split(" ")[1]);
       for (const step of ["node", "copy", "plugin", "done"]) expect(steps, lines.join("\n")).toContain(step);
+      // B325: --yes만으로는 statusline을 켜지 않고, 묻지 않고 건너뛴 사실과 켜는 법을 한 줄로 알린다(qa #627 B)
+      expect(r.stdout).toContain("statusline 연결은 묻지 않고 건너뛰었습니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.");
+      expect(lines.find((l) => l.split(" ")[1] === "statusline")).toContain(" skip ");
+      expect(existsSync(join(rig.home, ".claude", "settings.json"))).toBe(false);
       // 비밀값·환경변수 값은 안 남는다(경로는 됨) — STUB_LOG 값 같은 건 절대 안 보여야 한다.
       for (const line of lines) expect(line).not.toContain(rig.stubLog);
     } finally {

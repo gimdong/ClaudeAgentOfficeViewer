@@ -11,7 +11,7 @@ import { HeartBar } from "./HeartBar";
 import { PolicyChip } from "./PolicyChip";
 import { ExperimentalChip } from "./ExperimentalChip";
 import { PluginChip } from "./PluginChip";
-import { BAR_EMPTY, remainingOf } from "./remaining";
+import { BAR_EMPTY, planEmptyText, remainingOf } from "./remaining";
 import { TokenCounter } from "./TokenCounter";
 
 export function Hud({
@@ -73,7 +73,7 @@ export function Hud({
       <TokenCounter label="WEEK" value={usage.last7d.total} hint="추정" />
       <HeartBar label="5H" remaining={five} emptyText={BAR_EMPTY.needSetup} />
       <HeartBar label="WEEK" remaining={week} emptyText={BAR_EMPTY.needSetup} />
-      <HeartBar label="PLAN" remaining={plan} emptyText={BAR_EMPTY.planNone} hint={planHint} />
+      <HeartBar label="PLAN" remaining={plan} emptyText={planEmptyText(snapshot)} hint={planHint} />
       <DecisionChip snapshot={snapshot} onOpen={onOpenDecision} />
       {snapshot.experimental && <ExperimentalChip exp={snapshot.experimental} />}
       <PluginChip snapshot={snapshot} />

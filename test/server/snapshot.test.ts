@@ -601,3 +601,16 @@ describe("SnapshotBuilder + 퇴사(Phase 6b B323)", () => {
     expect(s1.predecessors).toEqual([{ name: "developer", retiredAt: new Date(NOW).toISOString(), startedAt: new Date(joined).toISOString() }]);
   });
 });
+
+describe("SnapshotBuilder + statusline 연결(스펙 12장 j)", () => {
+  it("우리 tap이면 on, 아니면(다른 statusline이 덮음 포함) off, Windows는 unsupported", async () => {
+    const st = async (platform?: NodeJS.Platform) => (await new SnapshotBuilder({ claudeHome: h.home, config, ...(platform ? { platform } : {}) }).build(NOW)).statusline;
+    expect(await st()).toBe("off");
+    await h.write("settings.json", { statusLine: { type: "command", command: "sh '/p/app/statusline-tap.sh'" } });
+    expect(await st()).toBe("on");
+    await h.write("settings.json", { statusLine: { type: "command", command: "echo mine" } });
+    await h.write("claude-office/settings.backup.json", {});
+    expect(await st()).toBe("off");
+    expect(await st("win32")).toBe("unsupported");
+  });
+});

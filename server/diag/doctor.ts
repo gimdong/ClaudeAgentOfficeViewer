@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HookStatsView } from "../events/stats";
 import type { OfficePaths } from "../paths";
+import { readStatusline } from "../collectors/limits";
 import { PolicyStore } from "../policy/store";
 import type { DoctorItem, DoctorStatus } from "../../src/shared/types";
 
@@ -354,16 +355,20 @@ const checks: Check[] = [
     return { ...base, status: base.status === "fail" ? "fail" : uid.status, detail: `${base.detail}. ${uid.detail}` };
   },
   async (d) => {
+    // 스펙 12장 j(qa #627 G): 상태만 보이고 statusLine 명령 글자는 내지 않는다(B328 Minor-12). 선택 기능이라 연결 안 됨은 ok
     const title = "요금제 한도(선택)";
+    if ((d.platform ?? process.platform) === "win32") return item("statusline", "ok", title, "Windows에서는 지원하지 않음");
+    const state = await readStatusline(d.claudeHome);
+    if (state === "off") return item("statusline", "ok", title, "연결 안 됨", "PLAN 바를 쓰려면 설치 스크립트를 --statusline을 붙여 다시 실행해 주세요.");
+    if (state === "other") return item("statusline", "warn", title, "다른 statusline이 설정되어 연결이 빠졌습니다", "설치 스크립트를 --statusline을 붙여 다시 실행하면, 지금 쓰는 statusline은 그대로 보이면서 다시 연결됩니다.");
     let mtime: number;
     try {
       mtime = (await stat(join(d.claudeHome, "claude-office", "limits.json"))).mtimeMs;
     } catch {
-      // Ruling B12: PLAN 바는 베타에서 지원하지 않는다. 없는 것이 보통이라 경고하지 않는다(정보)
-      return item("statusline", "ok", title, "없음", "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다");
+      return item("statusline", "ok", title, "연결됨(아직 받은 값 없음)");
     }
     return d.now() - mtime <= 3_600_000
-      ? item("statusline", "ok", title, "최근 1시간 안에 갱신됨")
+      ? item("statusline", "ok", title, "연결됨(최근 1시간 안에 갱신됨)")
       : item("statusline", "warn", title, "1시간 넘게 갱신되지 않음", "Claude Code 세션을 열면 다시 갱신됩니다.");
   },
 ];

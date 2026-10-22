@@ -342,16 +342,23 @@ describe("runDoctor", () => {
     expect(uidOk).toMatchObject({ status: "warn", detail: "최근 10분 4건. 다른 계정의 접속 1건을 막았습니다. 여러 사람이 쓰는 컴퓨터라면 정상입니다." });
   });
 
-  it("statusline: limits.json 없음(베타 미지원, ok)·최근·오래됨", async () => {
-    expect(await item("statusline")).toMatchObject({
-      status: "ok",
-      detail: "없음",
-      fix: "PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다. 회사 좌석에서는 대부분 표시되지 않습니다",
-    });
+  it("statusline(스펙 12장 j, qa #627 G): 연결 안 됨(ok)·다른 statusline이 덮음(warn)·Windows, 명령 글자는 내지 않는다(B328 Minor-12)", async () => {
+    expect(await item("statusline")).toMatchObject({ status: "ok", detail: "연결 안 됨", fix: "PLAN 바를 쓰려면 설치 스크립트를 --statusline을 붙여 다시 실행해 주세요." });
+    await h.write(".claude/settings.json", { statusLine: { type: "command", command: "echo FAKE_USER_CMD" } });
+    await h.write(".claude/claude-office/settings.backup.json", {});
+    const other = await item("statusline");
+    expect(other).toMatchObject({ status: "warn", detail: "다른 statusline이 설정되어 연결이 빠졌습니다", fix: "설치 스크립트를 --statusline을 붙여 다시 실행하면, 지금 쓰는 statusline은 그대로 보이면서 다시 연결됩니다." });
+    expect(JSON.stringify(other)).not.toContain("FAKE_USER_CMD");
+    expect(await item("statusline", { platform: "win32" })).toMatchObject({ status: "ok", detail: "Windows에서는 지원하지 않음", fix: "" });
+  });
+
+  it("statusline 연결됨: 받은 값 없음(ok)·최근(ok)·오래됨(warn)", async () => {
+    await h.write(".claude/settings.json", { statusLine: { type: "command", command: "sh '/x/app/statusline-tap.sh'" } });
+    expect(await item("statusline")).toMatchObject({ status: "ok", detail: "연결됨(아직 받은 값 없음)" });
     await h.write(".claude/claude-office/limits.json", {});
     const t = new Date(NOW - 10 * 60_000);
     await utimes(h.path(".claude/claude-office/limits.json"), t, t);
-    expect((await item("statusline")).status).toBe("ok");
+    expect(await item("statusline")).toMatchObject({ status: "ok", detail: "연결됨(최근 1시간 안에 갱신됨)" });
     const old = new Date(NOW - 3 * 3_600_000);
     await utimes(h.path(".claude/claude-office/limits.json"), old, old);
     expect((await item("statusline")).status).toBe("warn");

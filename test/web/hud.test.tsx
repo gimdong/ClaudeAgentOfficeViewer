@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { barLevel, HeartBar } from "../../web/hud/HeartBar";
 import { Hud } from "../../web/hud/Hud";
+import { BAR_EMPTY } from "../../web/hud/remaining";
 import { emptySum } from "../../src/shared/tokens";
 import { makeSnapshot } from "./fixtures";
 
@@ -107,3 +108,13 @@ describe("Hud", () => {
   });
 });
 
+describe("PLAN 빈 문구(스펙 12장 j W33, qa #627 E)", () => {
+  it("statusline 연결이 꺼져 있으면 '연결이 꺼져 있음', 연결됐는데 값이 없으면 '요금제가 알려 주지 않음'", () => {
+    expect(BAR_EMPTY.planOff).toBe("-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)");
+    render(<Hud snapshot={makeSnapshot({ statusline: "off" })} live />);
+    expect(screen.getByText(BAR_EMPTY.planOff)).toBeTruthy();
+    cleanup();
+    render(<Hud snapshot={makeSnapshot({ statusline: "on" })} live />);
+    expect(screen.getByText(BAR_EMPTY.planNone)).toBeTruthy();
+  });
+});

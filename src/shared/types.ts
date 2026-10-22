@@ -214,6 +214,8 @@ export interface UsageSummary {
 export interface Snapshot {
   /** 빌딩 설정(Phase 6b 스펙 12장 f) — 지붕 간판 `{userName}의 회사` */
   building?: { userName: string };
+  /** statusline 연결(스펙 12장 j): PLAN 바가 빈 이유를 고른다. on이면 "요금제가 알려 주지 않음", off면 "연결이 꺼져 있음"(다른 statusline이 덮은 것 포함) */
+  statusline?: "on" | "off" | "unsupported";
   generatedAt: string;
   /** 이 스냅샷을 만든 서버의 버전(FB-7). beta.4 이전 서버는 싣지 않으므로 화면은 "없음"도 불일치로 본다 */
   serverVersion?: string;

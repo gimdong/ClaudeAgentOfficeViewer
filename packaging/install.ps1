@@ -9,6 +9,8 @@ param(
   [switch]$Yes,
   [switch]$NoPath,
   [switch]$NoOpen,
+  # install.sh --statusline과 짝(스펙 12장 j). Windows는 statusline 연결을 지원하지 않아 사실 한 줄만 낸다(B327)
+  [switch]$StatusLine,
   # 끝의 doctor가 볼 포트(Phase 6a §5, install.sh --port와 같음). 시험 설치가 사용자 대시보드(4317)에 묻지 않게 한다
   [string]$Port = ""
 )
@@ -261,6 +263,9 @@ if ($claude) {
   Write-Host "  claude plugin install claude-office@claude-office --scope user"
   Write-Host "  claude plugin update claude-office@claude-office --scope user"
 }
+
+# 4-1. statusline 연결(B327): Windows에서는 켜지 않고 묻지도 않는다
+if ($StatusLine) { Write-Output "PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다." }
 
 # 5. doctor
 if ($Port -ne "") { & (Join-Path $Prefix "bin\claude-office.cmd") doctor --port $Port } else { & (Join-Path $Prefix "bin\claude-office.cmd") doctor }

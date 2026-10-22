@@ -201,8 +201,17 @@ case "$cmd" in
       fi
     done
 
+    # statusline 연결 되돌리기(B326 ②): 도우미가 든 app을 지우기 전에, 설치 때 남긴 설정 폴더에서.
+    # 우리 tap일 때만 되돌리고(사용자가 바꾼 것은 그대로), 백업이 없어도 tap을 가리킨 채 남기지 않는다
+    if [ -f "$PREFIX/app/statusline-setup.mjs" ]; then
+      (
+        if [ -f "$PREFIX/statusline-config" ]; then CLAUDE_CONFIG_DIR=$(cat "$PREFIX/statusline-config"); export CLAUDE_CONFIG_DIR; fi
+        node "$PREFIX/app/statusline-setup.mjs" remove
+      ) || echo "statusline 설정을 되돌리지 못했습니다. Claude Code 설정의 statusLine을 확인해 주세요." >&2
+    fi
+
     # token(대시보드 열쇠)·hook.key(hook relay 열쇠), state.json(층 예산), policy.json(권한 정책)과 그 .broken도 프로그램 파일로 함께 지운다(요약 문구는 그대로)
-    rm -rf "$PREFIX/app" "$PREFIX/plugin" "$PREFIX/bin" "$PREFIX/VERSION" "$PREFIX/사용설명서.html" "$PREFIX/manual-en.html" "$PREFIX/token" "$PREFIX/state.json" "$PREFIX/policy.json" "$PREFIX/policy.json.broken" "$PREFIX/hook.key"
+    rm -rf "$PREFIX/app" "$PREFIX/plugin" "$PREFIX/bin" "$PREFIX/VERSION" "$PREFIX/사용설명서.html" "$PREFIX/manual-en.html" "$PREFIX/token" "$PREFIX/state.json" "$PREFIX/policy.json" "$PREFIX/policy.json.broken" "$PREFIX/hook.key" "$PREFIX/statusline-config"
     logs_removed=0
     if ask_u "로그와 진단 파일도 지울까요?"; then
       rm -rf "$PREFIX/logs" "$PREFIX/diagnostics"

@@ -124,10 +124,13 @@ describe("packaging/install.ps1, claude-office.ps1/.cmd (Task 8, 베타 미검�
     expect(text).toContain("claude-office.ps1");
   });
 
-  it("statusline을 다루지 않는다(B12, 베타 미지원)", () => {
-    for (const f of [INSTALL_PS1, LAUNCHER_PS1, LAUNCHER_CMD]) {
-      expect(readFileSync(f, "utf8").toLowerCase(), f).not.toContain("statusline");
-    }
+  it("B327: statusline을 켜지 않는다 — 묻지 않고, -StatusLine을 주면 지원하지 않는다는 사실 한 줄만(약속 단어 없이)", () => {
+    const text = readFileSync(INSTALL_PS1, "utf8");
+    expect(text).toContain("[switch]$StatusLine");
+    expect(text).toContain('if ($StatusLine) { Write-Output "PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다." }');
+    expect(text).not.toContain("아직");
+    expect(text).not.toContain("statusline-setup");
+    for (const f of [LAUNCHER_PS1, LAUNCHER_CMD]) expect(readFileSync(f, "utf8").toLowerCase(), f).not.toContain("statusline");
   });
 
   // #59(Ruling B13): T7의 uninstall 안전장치를 install.ps1/claude-office.ps1에도 처음부터 넣는다.

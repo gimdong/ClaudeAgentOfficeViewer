@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Limits } from "../../src/shared/types";
@@ -41,6 +42,22 @@ function windowPct(w: Obj, now: number): { pct: number | undefined; raw: number 
     return { pct: undefined, raw: undefined, resetsAt: undefined };
   }
   return { pct: pct(w), raw: rawPct(w), resetsAt };
+}
+
+/**
+ * statusline 연결 상태(스펙 12장 j). on: settings.json의 statusLine이 우리 tap, other: 연결했던 흔적(백업)이 있는데 다른 statusline,
+ * off: 그 밖. settings.json에서는 statusLine.command만 보고 다른 값(환경변수 등)은 이 함수 밖으로 내지 않는다
+ */
+export type StatuslineState = "on" | "off" | "other";
+export async function readStatusline(claudeHome: string): Promise<StatuslineState> {
+  let cmd: unknown;
+  try {
+    cmd = (JSON.parse(await readFile(join(claudeHome, "settings.json"), "utf8")) as { statusLine?: { command?: unknown } } | null)?.statusLine?.command;
+  } catch {
+    // 없거나 깨짐 — 연결 안 됨으로 본다
+  }
+  if (typeof cmd === "string" && cmd.includes("statusline-tap.sh")) return "on";
+  return existsSync(join(claudeHome, "claude-office", "settings.backup.json")) ? "other" : "off";
 }
 
 export async function readLimits(claudeHome: string, now = Date.now()): Promise<Limits | null> {

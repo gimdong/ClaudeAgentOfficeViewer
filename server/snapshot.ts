@@ -9,7 +9,7 @@ import type { DecisionQueue } from "./decisions/queue";
 import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
 import type { EventStore } from "./events/store";
-import { readLimits } from "./collectors/limits";
+import { readLimits, readStatusline } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
 import { readSubagents, type SubagentTracker } from "./collectors/subagents";
@@ -44,6 +44,8 @@ export interface BuilderOptions {
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
   /** 빌딩 설정(Phase 6b Task 10) */
   building?: { userName(): string };
+  /** 테스트용(statusline 연결 상태의 Windows 판정). 기본은 process.platform */
+  platform?: NodeJS.Platform;
   /** 서류철 수(Phase 6b) — 층 id로 */
   folder?: { counts(floor: string): { pending: number; total: number; overdue?: true } | undefined };
   /** 퇴근·오래 쉼·퇴사(Phase 6b) — 층 id로 */
@@ -175,6 +177,7 @@ export class SnapshotBuilder {
     // readLimits에 now를 넘겨, 스냅샷이 판단하는 "현재 시각"과 rate limit 창의 만료 판정 기준을 맞춘다
     // (Task 7 fix round 1에서 readLimits가 now를 받아 이미 지난 창을 걸러내도록 바뀌었다).
     const limits = await readLimits(claudeHome, now).catch((e) => (warnCaught("snapshot", "limits collect failed", e), null));
+    const statusline: Snapshot["statusline"] = (this.opts.platform ?? process.platform) === "win32" ? "unsupported" : (await readStatusline(claudeHome)) === "on" ? "on" : "off";
     this.opts.events?.prune(now);
     this.opts.subagents?.prune(now);
 
@@ -231,7 +234,7 @@ export class SnapshotBuilder {
     const unreadable = p?.store.unreadable() ?? false;
     const policy = Object.keys(targets).length || Object.keys(counts).length || unreadable ? { policy: { targets, counts, ...(unreadable ? { unreadable: true as const } : {}) } } : {};
 
-    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0, ...this.experimentalField(), ...this.buildingField() };
+    return { ...emptySnapshot(now, config), ...this.versionField(), usage: this.usage.summary(now), limits, sessions: views, decisionCount, decisions: [...(decisions ?? []), ...teamItems], ...(defaultBudgetTokens !== undefined ? { defaultBudgetTokens } : {}), ...policy, hiddenFloors: floors?.hiddenCount() ?? 0, ...this.experimentalField(), ...this.buildingField(), statusline };
   }
 
   /** 마지막 빌드의 세션 레코드(Phase 4a B114·B117). 종료 API가 pid·procStart를 이것으로 검사한다. 스냅샷에는 싣지 않는다 */

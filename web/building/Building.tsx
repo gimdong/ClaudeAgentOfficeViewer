@@ -95,6 +95,7 @@ export function Building({
           floors={sessions.length}
           members={sessions.reduce((n, s) => n + s.members.length, 0)}
           serverVersion={snapshot.serverVersion}
+          statusline={snapshot.statusline}
           appVersion={__APP_VERSION__}
           onSave={(name) => (onSaveName ? onSaveName(name) : Promise.resolve(false))}
           onClose={() => {

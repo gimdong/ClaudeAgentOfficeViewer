@@ -2,7 +2,7 @@
 # claude-office 설치 스크립트. 패키지 폴더 안에서 실행한다($(dirname "$0") 기준).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-PREFIX="$HOME/.claude-office"; YES=0; NOPATH=0; NOOPEN=0; PORT=""
+PREFIX="$HOME/.claude-office"; YES=0; NOPATH=0; NOOPEN=0; PORT=""; SL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --prefix)
@@ -11,6 +11,8 @@ while [ $# -gt 0 ]; do
     --yes) YES=1; shift ;;
     --no-path) NOPATH=1; shift ;;
     --no-open) NOOPEN=1; shift ;;
+    # statusline 연결을 묻지 않고 켠다(스펙 12장 j, B325 — --yes만으로는 켜지 않는다)
+    --statusline) SL=1; shift ;;
     # 끝의 doctor가 볼 포트(Phase 6a §5). 시험 설치가 사용자 대시보드(4317)에 묻지 않게 한다(B279)
     --port)
       case "${2:-}" in
@@ -210,6 +212,28 @@ else
   echo "  claude plugin marketplace add \"$PREFIX/plugin\""
   echo "  claude plugin install claude-office@claude-office --scope user"
   echo "  claude plugin update claude-office@claude-office --scope user"
+fi
+
+# 4-1. statusline 연결(스펙 12장 j, B325): PLAN 바의 값을 받는다. Claude Code 설정의 statusLine을 바꾸므로
+# ask()(--yes면 무조건 y)를 쓰지 않는다 — --statusline이거나, 터미널에서 직접 y라고 답했을 때만 켠다.
+# 이미 켜져 있으면 새 설치본 경로로 다시 맞춘다. 제거할 때 같은 설정 폴더를 되돌리도록 그 경로를 남긴다(B328)
+SL_JS="$PREFIX/app/statusline-setup.mjs"
+sl_on() {
+  ( umask 077; printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" > "$PREFIX/statusline-config" )
+  if node "$SL_JS" install --installed; then log statusline ok "statusline 연결 켬"; else log statusline fail "statusline 연결 실패(설치는 계속함)"; fi
+}
+if [ ! -f "$SL_JS" ]; then
+  log statusline skip "도우미 없음"
+elif [ "$(node "$SL_JS" status 2>/dev/null || true)" = on ] || [ "$SL" = 1 ]; then
+  sl_on
+elif [ "$STDIN_TTY" = 1 ] && [ "$YES" = 0 ]; then
+  SL_FILE=${CLAUDE_CONFIG_DIR:-"~/.claude"}/settings.json
+  printf '%s [y/N] ' "Claude Code 상태줄(statusline)에 연결할까요? PLAN 바(남은 사용량 %)를 채우려면 필요합니다. Claude Code 설정($SL_FILE)의 statusLine을 바꾸고, 원래 설정은 백업하며, 쓰던 상태줄은 그대로 보입니다."
+  read -r a || a=""
+  if [ "$a" = y ] || [ "$a" = Y ]; then sl_on; else log statusline skip "사용자가 거절함"; fi
+else
+  echo "statusline 연결은 묻지 않고 건너뛰었습니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요."
+  log statusline skip "묻지 않음(--yes 또는 터미널 아님)"
 fi
 
 # 5. doctor
