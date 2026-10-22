@@ -1101,14 +1101,21 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
   it("상태줄 연결(Task 11)이 설치 스크립트·doctor·HUD·빌딩 정보 글자와 같다", () => {
     const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
     const sh = read("packaging/install.sh");
+    const doctor = read("server/diag/doctor.ts");
     const q = /printf '%s \[y\/N\] ' "(Claude Code 상태줄[^"]+)"/.exec(sh)![1].replace("$SL_FILE", "~/.claude/settings.json");
     expect(prose).toContain(`<dt><code>${q} [y/N]</code></dt>`);
     const skip = /echo "(statusline 연결은 묻지 않고 건너뛰었습니다[^"]+)"/.exec(sh)![1];
     expect(prose).toContain(`<code>${skip}</code>`);
     expect(sh).toContain("--statusline) SL=1");
     expect(read("packaging/install.ps1")).not.toContain("상태줄(statusline)에 연결할까요");
-    for (const t of [BAR_EMPTY.planOff, BAR_EMPTY.planNone, BUILDING_TEXT.planWhyOff, BUILDING_TEXT.planWhyOn]) expect(prose, t).toContain(`<code>${t}</code>`);
-    const doctor = read("server/diag/doctor.ts");
+    for (const t of [BAR_EMPTY.planOff, BAR_EMPTY.planNone, BAR_EMPTY.planUnsupported, BUILDING_TEXT.planWhyOff, BUILDING_TEXT.planWhyOn, BUILDING_TEXT.planWhyUnsupported]) expect(prose, t).toContain(`<code>${t}</code>`);
+    expect(read("packaging/install.ps1")).toContain('"PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다."');
+    // doctor 다섯 상태(6장)
+    for (const d of ["연결됨(최근 1시간 안에 갱신됨)", "연결됨(아직 받은 값 없음)", "연결 안 됨", "다른 statusline이 설정되어 연결이 빠졌습니다", "1시간 넘게 갱신되지 않음", "Windows에서는 지원하지 않음"]) {
+      expect(doctor, d).toContain(`title, "${d}"`);
+      expect(prose, d).toMatch(new RegExp(`요금제 한도\\(선택\\): ${d.replace(/[()]/g, "\\$&")}</code>`));
+    }
+    expect(prose).toContain("<code>CLAUDE_CONFIG_DIR</code>를 정했으면 그 폴더");
     expect(doctor).toContain('item("statusline", "ok", title, "연결됨(아직 받은 값 없음)")');
     expect(prose).toContain("✅ 요금제 한도(선택): 연결됨(아직 받은 값 없음)");
     const setup = read("scripts/statusline-setup.mjs");

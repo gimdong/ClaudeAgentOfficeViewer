@@ -213,7 +213,7 @@
   <dt><code>Claude Code 플러그인(claude-office)을 설치할까요? 도구 사용 기록을 이 PC의 뷰어로 보내고, 대시보드에서 답한 허용·거부를 Claude Code에 돌려줍니다. [y/N]</code></dt>
   <dd><kbd>y</kbd>를 권장합니다. 플러그인은 Claude Code에 붙이는 작은 추가 기능이고, 말풍선과 손들기를 보여 주고, 대시보드에서 답하려면 필요합니다. 플러그인은 Claude Code의 소식을 대시보드로 보내고, 여러분이 대시보드에서 답하면 그 답을 Claude Code에 전합니다. 스스로 허용하거나 거부하지는 않고, 같은 열쇠 파일을 쓰는 이 컴퓨터의 대시보드가 보낸 답만 전합니다(<a href="#hook-risk">대시보드가 꺼져 있을 때</a>).</dd>
   <dt><code>Claude Code 상태줄(statusline)에 연결할까요? PLAN 바(남은 사용량 %)를 채우려면 필요합니다. Claude Code 설정(~/.claude/settings.json)의 statusLine을 바꾸고, 원래 설정은 백업하며, 쓰던 상태줄은 그대로 보입니다. [y/N]</code></dt>
-  <dd><p>위쪽 막대의 PLAN 바(요금제 한도)를 쓰려면 <kbd>y</kbd>를 누릅니다. Claude Code가 상태줄에 넘겨 주는 사용 한도를 대시보드가 받도록, Claude Code 설정의 <code>statusLine</code> 한 곳을 바꿉니다. 원래 설정은 백업하고, 쓰던 상태줄은 그대로 보입니다. 실제 화면에는 설정 파일이 전체 경로로 나옵니다. 지울 때(7장) 되돌립니다.</p><p>이 질문은 <code>--yes</code>로는 켜지지 않습니다. 묻지 않고 켜려면 <code>--statusline</code>을 붙입니다. 묻지 않고 넘어가면 <code>statusline 연결은 묻지 않고 건너뛰었습니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.</code>가 나옵니다. Windows에서는 묻지 않습니다(지원하지 않음).</p></dd>
+  <dd><p>위쪽 막대의 PLAN 바(요금제 한도)를 쓰려면 <kbd>y</kbd>를 누릅니다. Claude Code가 상태줄에 넘겨 주는 사용 한도를 대시보드가 받도록, Claude Code 설정의 <code>statusLine</code> 한 곳을 바꿉니다. 원래 설정은 백업하고, 쓰던 상태줄은 그대로 보입니다. 실제 화면에는 설정 파일이 전체 경로로 나옵니다. 지울 때(7장) 되돌립니다.</p><p>이 질문은 <code>--yes</code>로는 켜지지 않습니다. 묻지 않고 켜려면 <code>--statusline</code>을 붙입니다. 묻지 않고 넘어가면 <code>statusline 연결은 묻지 않고 건너뛰었습니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.</code>가 나옵니다. Windows에서는 묻지 않고, <code>-StatusLine</code>을 붙이면 <code>PLAN 바(statusline 연결)는 Windows에서 지원하지 않습니다.</code>가 나옵니다.</p></dd>
 </dl>
 <p>설치가 끝나면 환경 점검(doctor) 결과가 나옵니다.</p>
 <figure class="fig" data-fig="fig-install-ok">
@@ -707,7 +707,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <ul>
   <li><strong>이름</strong>: 1~40자로 바꾸고 <strong>저장</strong>을 누르면 간판이 바뀝니다(예: <code>Acme</code>로 저장하면 <code>Acme의 회사</code>). 이 이름은 대시보드 설정이고, 컴퓨터 계정 이름과는 관계가 없습니다. 설치 폴더의 <code>building.json</code>(본인만 읽을 수 있는 파일)에 저장합니다.</li>
   <li><strong>정보</strong>: 위쪽 막대와 같은 숫자(오늘 토큰과 캐시 읽기, 최근 5시간·최근 7일 토큰, 5H·WEEK·PLAN 잔여), 층과 팀원 수, 서버와 화면 버전을 한곳에 모아 보여 줍니다.</li>
-  <li><strong>PLAN 잔여가 비어 있으면</strong> 그 아래에 이유가 한 줄 보입니다. 상태줄 연결을 켜지 않았으면 <code>PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. 이 설치본은 상태줄 연결이 꺼져 있어 받지 못합니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.</code>, 연결했지만 값이 오지 않으면 <code>PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 계정에는 오지 않습니다.</code>입니다.</li>
+  <li><strong>PLAN 잔여가 비어 있으면</strong> 그 아래에 이유가 한 줄 보입니다. 상태줄 연결을 켜지 않았으면 <code>PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. 이 설치본은 상태줄 연결이 꺼져 있어 받지 못합니다. 켜려면 설치 스크립트를 --statusline을 붙여 다시 실행하세요.</code>, 연결했지만 값이 오지 않으면 <code>PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Pro·Max 요금제나 지출 한도가 있는 gateway에서만 오고, 이 계정에는 오지 않습니다.</code>, Windows에서는 <code>PLAN 잔여는 Claude Code가 상태줄에 넘겨 주는 값입니다. Windows에서는 상태줄 연결을 지원하지 않아 받지 못합니다.</code>입니다.</li>
 </ul>
 
 <h3>위쪽 막대의 숫자</h3>
@@ -716,7 +716,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li><strong>에이전트마다 모델과 토큰</strong>: 캐릭터 이름표 아래에 그 에이전트가 마지막으로 답한 모델(<code>Opus 5.5</code>)과 쓴 토큰 합계(<code>1.20M</code>)가 두 줄로 늘 보입니다. 캐릭터를 누르면 열리는 패널의 <strong>모델·토큰</strong> 절에서 입력·출력·캐시 쓰기·캐시 읽기로 나눈 값과, 세션 중에 모델을 바꿨다면 모델별 합계를 볼 수 있습니다. 합계에는 캐시 읽기를 넣지 않습니다.</li>
   <li><strong>결정 대기 N</strong>: 대시보드에서 답을 기다리는 결정 수입니다. 누르면 가장 오래 기다린 결정의 보고서가 열립니다.</li>
   <li><strong>권한 정책 N</strong>: 정해 둔 권한 정책의 대상 수입니다. 누르면 정책 목록이 열립니다(위 "권한 정책").</li>
-  <li><strong>PLAN 바</strong>: 요금제 사용 한도 가운데 남은 %를 보여 줍니다. Claude Code가 상태줄에 넘겨 주는 값이라, 설치할 때 상태줄 연결을 켜야 채워집니다(<a href="#s3">3장</a>). 연결을 켜지 않았으면 <code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code>, 연결했지만 요금제가 값을 주지 않으면 <code>-- 요금제가 알려 주지 않음</code>으로 보입니다. 값은 Pro·Max 요금제나 지출 한도가 있는 gateway에서만 옵니다. Windows에서는 상태줄 연결을 지원하지 않습니다.</li>
+  <li><strong>PLAN 바</strong>: 요금제 사용 한도 가운데 남은 %를 보여 줍니다. Claude Code가 상태줄에 넘겨 주는 값이라, 설치할 때 상태줄 연결을 켜야 채워집니다(<a href="#s3">3장</a>). 연결을 켜지 않았으면 <code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code>, 연결했지만 요금제가 값을 주지 않으면 <code>-- 요금제가 알려 주지 않음</code>으로 보입니다. 값은 Pro·Max 요금제나 지출 한도가 있는 gateway에서만 옵니다. Windows에서는 상태줄 연결을 지원하지 않아 <code>-- Windows에서는 statusline 연결을 지원하지 않음</code>으로 보입니다.</li>
 </ul>
 
 <!-- ───────────────────────────── 6 ───────────────────────────── -->
@@ -836,6 +836,16 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <pre class="out">⚠️ hook 전달: 최근 24시간 실패 3건</pre>
 <p>플러그인이 대시보드의 답을 확인하지 못한 횟수입니다. 다른 설치본의 대시보드가 켜져 있으면 늘어납니다. 그 대시보드를 끄고 이 설치본의 <code>claude-office</code>로 다시 켭니다. 그래도 늘어나면 같은 압축 파일로 다시 설치합니다. 이때 <code>⚠️ 실시간 이벤트: 다른 설치본의 대시보드가 켜져 있어 확인하지 못했습니다(열쇠가 다름)</code>도 함께 나올 수 있습니다.</p>
 <p>설치 스크립트가 <code>플러그인 hook 설정(node·열쇠 경로)을 쓰지 못해 설치를 멈춥니다</code>로 끝났다면, 압축 파일을 새 폴더에 다시 풀고 그 폴더에서 설치 스크립트를 다시 실행합니다. 그래도 같으면 진단 파일을 만들어 보내 주세요(바로 아래 줄 <code>자세한 기록: …</code>의 기록 파일이 함께 들어갑니다). 이 단계는 플러그인을 Claude Code에 등록하기 전이라 Claude Code 쪽은 바뀌지 않았습니다. 전에 설치한 플러그인이 있으면 그 플러그인이 그대로 돕니다.</p>
+
+<h3 id="statusline-doctor">doctor의 "요금제 한도(선택)" 줄</h3>
+<p>PLAN 바에 쓰는 상태줄(statusline) 연결의 상태입니다. 선택 기능이라 연결하지 않아도 실패로 나오지 않습니다.</p>
+<ul>
+  <li><code>✅ 요금제 한도(선택): 연결됨(최근 1시간 안에 갱신됨)</code> 또는 <code>✅ 요금제 한도(선택): 연결됨(아직 받은 값 없음)</code>: 연결되어 있습니다. 값은 Claude Code 세션을 열면 들어옵니다.</li>
+  <li><code>✅ 요금제 한도(선택): 연결 안 됨</code>: 설치할 때 연결을 켜지 않았습니다. PLAN 바를 쓰려면 설치 스크립트를 <code>--statusline</code>을 붙여 다시 실행합니다.</li>
+  <li><code>⚠️ 요금제 한도(선택): 다른 statusline이 설정되어 연결이 빠졌습니다</code>: 설치 뒤 다른 프로그램이나 여러분이 상태줄을 바꿨습니다. 설치 스크립트를 <code>--statusline</code>을 붙여 다시 실행하면, 지금 쓰는 상태줄은 그대로 보이면서 다시 연결됩니다.</li>
+  <li><code>⚠️ 요금제 한도(선택): 1시간 넘게 갱신되지 않음</code>: Claude Code 세션을 열면 다시 갱신됩니다.</li>
+  <li>Windows에서는 <code>✅ 요금제 한도(선택): Windows에서는 지원하지 않음</code>으로 나옵니다.</li>
+</ul>
 
 <h3 id="same-user">"같은 사용자 계정의 프로그램만 접속할 수 있습니다"가 떠요(Linux)</h3>
 <p>Linux에서는 대시보드가 <strong>같은 사용자 계정</strong>의 프로그램이 보낸 접속만 받습니다. 여러 사람이 함께 쓰는 컴퓨터(서버)에서 다른 계정의 프로그램이 가짜 권한 요청을 띄우거나 여러분의 답을 받아 가지 못하게 하려는 것입니다. 다른 계정으로 접속하면 브라우저나 프로그램에 아래 글이 보이고 거절됩니다.</p>
@@ -1114,7 +1124,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
 <h2 id="s9">9. 부록 B: 베타에서 알려진 제한</h2>
 <ul>
   <li><strong>Windows와 Linux는 충분히 검증하지 못했습니다.</strong> 베타는 macOS에서 확인했습니다. 다른 운영체제에서 문제가 생기면 진단 파일을 보내 주세요.</li>
-  <li><strong>PLAN 바(요금제 한도)는 상태줄 연결을 켠 경우에만 채워집니다(회사 좌석은 대부분 해당 데이터가 오지 않음).</strong> 연결하지 않았으면 <code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code>, 값이 오지 않으면 <code>-- 요금제가 알려 주지 않음</code>으로 보입니다. Windows에서는 지원하지 않습니다.</li>
+  <li><strong>PLAN 바(요금제 한도)는 상태줄 연결을 켠 경우에만 채워집니다(회사 좌석은 대부분 해당 데이터가 오지 않음).</strong> 연결하지 않았으면 <code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code>, 값이 오지 않으면 <code>-- 요금제가 알려 주지 않음</code>으로 보입니다. Windows에서는 지원하지 않습니다(<code>-- Windows에서는 statusline 연결을 지원하지 않음</code>).</li>
   <li><strong>코드 서명이 없습니다.</strong> 그래서 macOS에서는 드물게 "확인되지 않은 개발자" 경고가 나올 수 있고, Windows에서는 실행 정책에 막힐 수 있습니다. 대처법은 <a href="#s3">3장</a>과 <a href="#s6">6장</a>에 있습니다.</li>
   <li><strong>회사 관리자 정책</strong>(<code>allowManagedHooksOnly</code> 등)이 켜져 있으면, 관리자가 <a href="#s8">부록 A</a>대로 설정하기 전까지 말풍선과 손들기가 보이지 않고 대시보드에서 답할 수도 없습니다. 빌딩, 층, 토큰 숫자는 그대로 보입니다.</li>
   <li><strong>대시보드에서 답하기의 한계</strong>: 대시보드가 꺼져 있으면 Claude Code 창에서만 묻습니다. 권한 모드가 auto인 창은 일반 권한 요청이 대시보드에 드물게 뜹니다(예산 도달은 모드와 관계없이 뜸). 계획 승인과 팀원의 <code>[결정 필요]</code>는 대시보드에서 보기만 하고 Claude Code 창에서 답합니다. 대시보드의 결정은 10분(화면은 9:50부터) 뒤 Claude Code 창으로 넘어갑니다. 허용은 되돌릴 수 없습니다. Claude Code 창에서 먼저 답해도 대시보드에 요청이 잠깐 남을 수 있고, 그때 대시보드에서 누른 답은 화면에 어떻게 보이든 적용되지 않습니다.</li>
@@ -1139,6 +1149,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;사용자 이름&g
   <li><strong>원격 Linux에서 터널로 열기</strong>: 4장 "원격에서 보기"대로 원격 Linux 컴퓨터의 대시보드를 터널로 엽니다. 기대: <code>같은 사용자 계정의 프로그램만 접속할 수 있습니다</code> 없이 대시보드가 열립니다.</li>
   <li><strong>먼저 답했을 때의 기록</strong>: <code>claude --debug</code>로 Claude Code를 켜고 3번을 다시 해 봅니다. 기대: 기록의 <code>Hooks:</code> 줄에 그 hook이 <code>cancelled</code>로 끝났다고 나오고, 대시보드의 손들기가 사라집니다.</li>
 </ol>
+<p class="note">상태줄(statusline) 연결은 상태줄이 그려질 때의 Claude Code 설정 폴더(<code>CLAUDE_CONFIG_DIR</code>를 정했으면 그 폴더, 아니면 <code>~/.claude</code>)에서 원래 상태줄을 찾습니다. 설치할 때와 다른 설정 폴더로 Claude Code를 쓰면 원래 상태줄이 빈 채로 보일 수 있습니다. 그런 경우가 있으면 함께 알려 주세요.</p>
 <p>정책이 막을 때 Claude Code 창에 붙는 앞말(<code>PreToolUse:Bash hook error: </code> 등, <a href="#policy">5장</a>)은 beta.14에서 다르게 보일 수 있습니다. 1번을 할 때 실제로 보인 글을 함께 알려 주세요.</p>
 
 <!-- ───────────────────────────── 11 ───────────────────────────── -->
