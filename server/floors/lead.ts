@@ -12,9 +12,10 @@ import { getLogger } from "../log";
 export interface LeadSent { floor: string; kind: LeadKind; member?: string; requestId: string; handoverId?: string; reportId?: string }
 
 /** 보관한 결재가 실제로 나가면 그 도장(승인됨·수정 요청), 보관함에서 지우면 대기로(스펙 12장 l) */
-export function verdictHeldGone(reports: Pick<ReportStore, "setState">, meta: LeadSent, sent: boolean): void {
+export function verdictHeldGone(reports: Pick<ReportStore, "setState" | "setHeld">, meta: LeadSent, sent: boolean): void {
   if ((meta.kind !== "approve" && meta.kind !== "revise") || !meta.reportId) return;
-  reports.setState(meta.floor, meta.reportId, !sent ? "pending" : meta.kind === "approve" ? "approved" : "revise");
+  if (sent) reports.setState(meta.floor, meta.reportId, meta.kind === "approve" ? "approved" : "revise");
+  else reports.setHeld(meta.floor, meta.reportId, undefined);
 }
 
 /**
@@ -28,7 +29,7 @@ export function leadInstruct(
   paused: boolean,
   body: unknown,
   members: readonly string[],
-  reports?: Pick<ReportStore, "expect" | "find" | "asked" | "setState">,
+  reports?: Pick<ReportStore, "expect" | "find" | "asked" | "setState" | "setHeld">,
   onSent?: (s: LeadSent) => void,
 ): { status: number; body: object } {
   const b = (body ?? {}) as { kind?: unknown; member?: unknown; handoverId?: unknown };
@@ -47,8 +48,8 @@ export function leadInstruct(
   // 제출 도구가 쓸 요청 id를 건다(스펙 3장): 보고 요청·수정 요청 → submit_report, 퇴사 → submit_handover(그 팀원 이름으로만, 12장 b)
   if (built.kind === "report" || built.kind === "revise") reports?.expect(built.id, floorId, "report");
   if (built.kind === "report") reports?.asked(floorId);
-  // 결재: 보냈으면 바로 도장, 휴업 중 보관이면 "보관됨" — 실제로 나갈 때 바꾼다(verdictHeldGone, 스펙 12장 l)
-  if (r.state === "held" && sent.reportId && (built.kind === "approve" || built.kind === "revise")) reports?.setState(floorId, sent.reportId, "held");
+  // 결재: 보냈으면 바로 도장, 휴업 중 보관이면 held 표시("보관됨") — 실제로 나갈 때 도장을 바꾼다(verdictHeldGone, 스펙 12장 l)
+  if (r.state === "held" && sent.reportId && (built.kind === "approve" || built.kind === "revise")) reports?.setHeld(floorId, sent.reportId, built.kind);
   else if (r.state === "sent" && reports) verdictHeldGone(reports, sent, true);
   if (built.kind === "retire") reports?.expect(built.id, floorId, "handover", b.member as string);
   if (r.state === "sent") onSent?.(sent);

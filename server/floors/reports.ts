@@ -27,7 +27,7 @@ export type ReportKind = "report" | "handover";
 /** started: 인수인계 메모로 새 팀원을 시작함(rehire) */
 export type ReportState = "pending" | "held" | "approved" | "revise" | "started";
 /** from: 제출한 에이전트 이름(짝짓기 주인), decidedAt: 결재·새 팀원 시작 시각 */
-export interface Report { id: string; kind: ReportKind; title?: string; member?: string; from?: string; body: string; at: number; state: ReportState; decidedAt?: number }
+export interface Report { id: string; kind: ReportKind; title?: string; member?: string; from?: string; body: string; at: number; state: ReportState; decidedAt?: number; held?: "approve" | "revise" }
 /** 보고 요청 뒤 이만큼 보고서가 없으면 화면에 알린다(스펙 10장) */
 export const REPORT_OVERDUE_MS = 10 * 60_000;
 /** 퇴사 진행(스펙 7장·11장 e): 시작 시각을 남겨 다시 켜도 이어 간다. nudged: 5분 뒤 "대신 써 달라"를 보냈음 */
@@ -181,10 +181,19 @@ export class ReportStore {
     const r = this.data.floors[floor]?.reports.find((x) => x.id === id) ?? this.data.floors[floor]?.archived.find((x) => x.id === id);
     if (!r) return false;
     r.state = state;
-    if (state === "pending") delete r.decidedAt;
-    else r.decidedAt = this.now();
+    delete r.held;
+    if (state !== "pending") r.decidedAt = this.now();
     this.save();
     return true;
+  }
+  /** 휴업 중 보관한 결재(스펙 12장 l): state "held" + 무엇을. undefined면 대기로 되돌린다 */
+  setHeld(floor: string, id: string, held: "approve" | "revise" | undefined): void {
+    const r = this.find(floor, id);
+    if (!r) return;
+    if (held) (r.state = "held"), (r.held = held);
+    else if (r.state === "held") (r.state = "pending"), delete r.held;
+    else return;
+    this.save();
   }
   /**
    * 스냅샷 빌드마다: 살아 있는 층의 lastSeenAt을 새로 하고, 7일 넘게 보이지 않은 층을 정리한다.
@@ -216,6 +225,7 @@ const viewOf = (r: Report): ReportView => ({
   body: r.body,
   at: iso(r.at),
   state: r.state,
+  ...(r.held ? { held: r.held } : {}),
   ...(r.decidedAt !== undefined ? { decidedAt: iso(r.decidedAt) } : {}),
 });
 /** 서류철 화면 모양(GET /api/floors/:id/reports) */

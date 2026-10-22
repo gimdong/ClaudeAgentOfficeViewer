@@ -291,10 +291,11 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     reports.add("s1", { id: rid, kind: "report", title: "주간", from: "team-lead", body: "b" });
     // 휴업 중 결재는 "보관됨"(스펙 12장 l). 보관함에서 지우면 대기로
     expect((await post("/api/floors/s1/lead", { kind: "approve", reportId: rid })).status).toBe(200);
-    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "held", from: "team-lead" });
+    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "held", held: "approve", from: "team-lead" });
     expect(hub.dropHeld("s1", hub.held("s1").find((h) => h.key === `lead:verdict:${rid}`)!.id)).toBe(true);
-    expect(JSON.parse((await get()).body).reports[0]).toMatchObject({ id: rid, state: "pending" });
-    expect(JSON.parse((await get()).body).reports[0].decidedAt).toBeUndefined();
+    const after = JSON.parse((await get()).body).reports[0];
+    expect(after).toMatchObject({ id: rid, state: "pending" });
+    expect(after.held).toBeUndefined();
   });
 
   it("연결된 층에 바로 보낸 결재는 그 자리에서 도장(승인됨·수정 요청), 보관이면 보관됨", () => {
@@ -304,24 +305,29 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     leadInstruct(hub("sent"), "s1", false, { kind: "revise", reportId: "r-11111111", text: "고쳐 주세요" }, [], store);
     expect(store.find("s1", "r-11111111")!.state).toBe("revise");
     leadInstruct(hub("held"), "s1", true, { kind: "approve", reportId: "r-11111111" }, [], store);
-    expect(store.find("s1", "r-11111111")!.state).toBe("held");
+    expect([store.find("s1", "r-11111111")!.state, store.find("s1", "r-11111111")!.held]).toEqual(["held", "approve"]);
     leadInstruct(hub("sent"), "s1", false, { kind: "approve", reportId: "r-11111111" }, [], store);
     expect(store.find("s1", "r-11111111")!.state).toBe("approved");
+    expect(store.find("s1", "r-11111111")!.held).toBeUndefined();
   });
 
   it("보관한 결재가 실제로 나가면 그 결재의 도장(승인됨·수정 요청), 지우면 대기 — 결재가 아닌 보관 지시는 건드리지 않는다", () => {
     const store = new ReportStore();
     store.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
     const meta = (kind: "approve" | "revise" | "report") => ({ floor: "s1", kind, requestId: "r-99999999", reportId: "r-11111111" });
-    store.setState("s1", "r-11111111", "held");
+    const r = () => store.find("s1", "r-11111111")!;
+    store.setHeld("s1", "r-11111111", "revise");
     verdictHeldGone(store, meta("revise"), true);
-    expect(store.find("s1", "r-11111111")!.state).toBe("revise");
-    verdictHeldGone(store, meta("approve"), true);
-    expect(store.find("s1", "r-11111111")!.state).toBe("approved");
+    expect([r().state, r().held]).toEqual(["revise", undefined]);
+    store.setState("s1", "r-11111111", "pending");
+    store.setHeld("s1", "r-11111111", "approve");
     verdictHeldGone(store, meta("approve"), false);
-    expect(store.find("s1", "r-11111111")!.state).toBe("pending");
-    verdictHeldGone(store, meta("report"), true);
-    expect(store.find("s1", "r-11111111")!.state).toBe("pending");
+    expect([r().state, r().held]).toEqual(["pending", undefined]);
+    store.setHeld("s1", "r-11111111", "approve");
+    verdictHeldGone(store, meta("report"), false);
+    expect([r().state, r().held]).toEqual(["held", "approve"]);
+    verdictHeldGone(store, meta("approve"), true);
+    expect([r().state, r().held]).toEqual(["approved", undefined]);
   });
 
   it("지시 id는 요청마다 새로", async () => {

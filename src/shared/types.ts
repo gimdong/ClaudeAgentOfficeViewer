@@ -276,6 +276,8 @@ export interface ReportView {
   state: ReportState;
   /** 승인·수정 요청·새 팀원 시작 시각 */
   decidedAt?: string;
+  /** state "held"일 때 무엇을 보관했는지(스펙 12장 l) */
+  held?: "approve" | "revise";
 }
 /** 최신 먼저. archived는 넘쳐서 보관함으로 옮긴 대기 보고서(스펙 11장 g) */
 export interface FolderView {
