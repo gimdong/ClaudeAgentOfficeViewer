@@ -10,7 +10,7 @@ import { channelWhy, LEAD_MAX, LEAD_TEXT as T, shortTime, type FolderView, type 
  */
 const heldOf = (r: ReportView): "approve" | "revise" | "any" | null => (r.state === "held" ? (r.held ?? "any") : null);
 const stampClass = (r: ReportView) => (heldOf(r) ? "held" : r.state === "approved" || r.state === "started" ? "ok" : r.state === "revise" ? "rev" : "wait");
-const stampText = (r: ReportView) => (heldOf(r) ? T.stampHeld : r.kind === "handover" && r.state === "pending" ? T.stampHandoverPending : T.stamp[r.state]);
+const stampText = (r: ReportView) => (r.state === "held" ? T.stampHeld : r.kind === "handover" && r.state === "pending" ? T.stampHandoverPending : T.stamp[r.state]);
 const titleOf = (r: ReportView) => (r.kind === "handover" ? T.handoverTitle(r.member ?? r.from) : r.title?.trim() || T.untitled);
 const subOf = (r: ReportView) => (r.kind === "handover" ? T.kindHandover(r.member ?? r.from, shortTime(r.at)) : T.kindReport(shortTime(r.at)));
 
