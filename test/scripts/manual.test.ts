@@ -81,8 +81,9 @@ describe("사용설명서(docs/manual/index.html)", () => {
     expect(html).toContain("<code>powershell -ExecutionPolicy Bypass -File install.ps1</code></pre><button class=\"copy\"");
     expect(html).toContain("코드 서명이 없습니다.");
     expect(html).toContain("Windows에서는 실행 정책에 막힐 수 있습니다");
-    // Ruling B12
-    expect(html).toContain("PLAN 바(요금제 한도)는 베타에서 지원하지 않습니다(회사 좌석은 대부분 해당 데이터가 오지 않음)");
+    // Phase 6b Task 11(스펙 12장 j): PLAN 바는 상태줄 연결을 켰을 때만(옛 Ruling B12 "베타에서 지원하지 않음"은 끝남)
+    expect(html).toContain("PLAN 바(요금제 한도)는 상태줄 연결을 켠 경우에만 채워집니다(회사 좌석은 대부분 해당 데이터가 오지 않음)");
+    expect(html).not.toContain("베타에서 지원하지 않습니다");
     // 옛 statusline fix 문구가 본문에도 그림에도 없다
     expect(html).not.toContain("요금제 한도 설정을 따라");
   });
@@ -1094,9 +1095,27 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(b).toContain(`<strong>${BUILDING_TEXT.title}</strong>`);
     // HUD PLAN 빈 글(Task 10 B322)이 설명서 5장·부록 B와 같다
     expect(BAR_EMPTY.planNone).toBe(BUILDING_TEXT.planNone);
-    expect(prose.split(`"${BAR_EMPTY.planNone}"으로 보입니다`).length - 1).toBe(2);
     expect(prose).not.toContain("데이터 없음");
     for (const t of ["오늘 토큰", "캐시 읽기", "최근 5시간", "최근 7일"]) expect(Object.values(BUILDING_TEXT).some((v) => typeof v === "string" ? v.includes(t) : v.toString().includes(t)), t).toBe(true);
+  });
+  it("상태줄 연결(Task 11)이 설치 스크립트·doctor·HUD·빌딩 정보 글자와 같다", () => {
+    const read = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const sh = read("packaging/install.sh");
+    const q = /printf '%s \[y\/N\] ' "(Claude Code 상태줄[^"]+)"/.exec(sh)![1].replace("$SL_FILE", "~/.claude/settings.json");
+    expect(prose).toContain(`<dt><code>${q} [y/N]</code></dt>`);
+    const skip = /echo "(statusline 연결은 묻지 않고 건너뛰었습니다[^"]+)"/.exec(sh)![1];
+    expect(prose).toContain(`<code>${skip}</code>`);
+    expect(sh).toContain("--statusline) SL=1");
+    expect(read("packaging/install.ps1")).not.toContain("상태줄(statusline)에 연결할까요");
+    for (const t of [BAR_EMPTY.planOff, BAR_EMPTY.planNone, BUILDING_TEXT.planWhyOff, BUILDING_TEXT.planWhyOn]) expect(prose, t).toContain(`<code>${t}</code>`);
+    const doctor = read("server/diag/doctor.ts");
+    expect(doctor).toContain('item("statusline", "ok", title, "연결됨(아직 받은 값 없음)")');
+    expect(prose).toContain("✅ 요금제 한도(선택): 연결됨(아직 받은 값 없음)");
+    const setup = read("scripts/statusline-setup.mjs");
+    for (const t of ["statusline 설정을 원래대로 되돌렸습니다.", "다른 statusline으로 바뀌어 있어 그대로 둡니다."]) {
+      expect(setup, t).toContain(t);
+      expect(prose, t).toContain(`<code>${t}</code>`);
+    }
   });
   it("부록 D 실제 세션 확인 9항목(스펙 11장 f·12장 g)", () => {
     const d = html.slice(html.indexOf('<h2 id="s11">'), html.indexOf("</main>"));
