@@ -250,7 +250,7 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
 <ul>
   <li><code>-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)</code> ("status line connection is off; can be turned on when reinstalling"): run the installer again with <code>--statusline</code> (macOS / Linux).</li>
   <li><code>-- 요금제가 알려 주지 않음</code> ("the plan does not report it"): connected, but the value comes only on Pro / Max plans or behind a gateway with a spend limit. This account does not get it.</li>
-  <!-- Windows의 PLAN 빈 글(B331)은 developer #630 커밋 뒤 코드 글자로 넣는다 -->
+  <li><code>-- Windows에서는 statusline 연결을 지원하지 않음</code> ("the statusline connection is not supported on Windows"): on Windows the PLAN bar stays empty.</li>
 </ul>
 <p><code>claude-office doctor</code> shows the connection on its <strong>요금제 한도(선택)</strong> (plan limits, optional) line: <code>연결됨(최근 1시간 안에 갱신됨)</code> (connected, updated within the last hour), <code>연결됨(아직 받은 값 없음)</code> (connected, no value received yet), <code>연결 안 됨</code> (not connected), <code>⚠️ … 다른 statusline이 설정되어 연결이 빠졌습니다</code> (another status line was set, so the connection was dropped: run the installer again with <code>--statusline</code>; the status line you use keeps showing), or <code>Windows에서는 지원하지 않음</code> (not supported on Windows).</p>
 
