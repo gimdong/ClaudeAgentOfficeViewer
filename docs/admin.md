@@ -33,7 +33,7 @@ Reports, approvals, chat questions and sending teammates off duty use the same c
 
 ### What the PLAN bar shows
 
-The PLAN bar in the top bar uses the rate limits that Claude Code passes to the status line. On macOS and Linux the installer connects to the status line only if the user answers yes in a terminal or runs it with `--statusline` (it changes `statusLine` in the user's `~/.claude/settings.json`, keeps a backup, and `claude-office uninstall` restores it). Without that connection the bar shows `-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)` ("status line connection is off; can be turned on when reinstalling"). Windows does not support the connection. The table shows what each account provides when connected.
+The PLAN bar in the top bar uses the rate limits that Claude Code passes to the status line. On macOS and Linux the installer connects to the status line only if the user answers yes in a terminal or runs it with `--statusline` (it changes `statusLine` in the user's `~/.claude/settings.json`, keeps the original settings backup and the values received from the status line in `~/.claude/claude-office`, and `claude-office uninstall` restores it). Without that connection the bar shows `-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)` ("status line connection is off; can be turned on when reinstalling"). Windows does not support the connection. The table shows what each account provides when connected.
 
 | Account | 5-hour / weekly bar | Spend-limit bar | Budget |
 |---|---|---|---|
@@ -75,7 +75,7 @@ Claude Agent Office는 그 컴퓨터 안에서만 도는 대시보드입니다. 
 
 ### PLAN 바에 보이는 것
 
-위쪽 막대의 PLAN 바는 Claude Code가 상태줄에 넘겨 주는 사용 한도를 씁니다. macOS·Linux에서 설치 스크립트는 사용자가 터미널에서 y라고 답하거나 `--statusline`을 붙였을 때만 상태줄에 연결합니다(그 사용자의 `~/.claude/settings.json`의 `statusLine`을 바꾸고 백업하며, `claude-office uninstall`이 되돌립니다). 연결하지 않으면 `-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)`으로 보입니다. Windows에서는 연결을 지원하지 않습니다. 아래 표는 연결했을 때 계정마다 보여 줄 수 있는 것입니다.
+위쪽 막대의 PLAN 바는 Claude Code가 상태줄에 넘겨 주는 사용 한도를 씁니다. macOS·Linux에서 설치 스크립트는 사용자가 터미널에서 y라고 답하거나 `--statusline`을 붙였을 때만 상태줄에 연결합니다(그 사용자의 `~/.claude/settings.json`의 `statusLine`을 바꾸고, 원래 설정의 백업과 상태줄에서 받은 값을 `~/.claude/claude-office`에 두며, `claude-office uninstall`이 되돌립니다). 연결하지 않으면 `-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)`으로 보입니다. Windows에서는 연결을 지원하지 않습니다. 아래 표는 연결했을 때 계정마다 보여 줄 수 있는 것입니다.
 
 | 계정 | 5시간·주간 바 | 지출 한도 바 | 예산 |
 |---|---|---|---|

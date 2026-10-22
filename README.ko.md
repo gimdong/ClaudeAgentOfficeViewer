@@ -77,7 +77,7 @@ PLAN 바 값은 `npm run setup:statusline`으로 statusline tap을 설치해야 
 
   모르는 프로그램이 4317을 쓰고 있다면 다른 포트로 켜지 말고, 무엇인지 확인한 뒤 비워질 때까지 플러그인을 꺼 두세요. 다른 프로그램이 포트를 쓰면 `claude-office doctor`가 `❌ 포트: 다른 프로그램이 4317을 쓰고 있습니다`로 알려 줍니다.
 - **대시보드는 `~/.claude`를 읽기만 합니다.** 설치는 동의한 경우에만 Claude Code의 `claude plugin` 명령으로 플러그인 설정을 기록하고, 셸 설정 파일에 PATH 한 줄을 더합니다.
-- **상태줄은 동의했을 때만 바꿉니다(macOS·Linux).** PLAN 바를 채우려고 설치 스크립트가 Claude Code 상태줄(statusline)에 연결할 수 있습니다. 터미널에서 y라고 답하거나 `--statusline`을 붙였을 때만 `~/.claude/settings.json`의 `statusLine`을 바꾸고 원래 설정은 백업합니다(쓰던 상태줄은 그대로 보입니다). `--yes`만으로는 켜지 않습니다. `claude-office uninstall`은 상태줄이 설치 때 바꾼 그대로일 때만 되돌리고, 그 뒤 사용자가 바꾼 상태줄은 그대로 둡니다. Windows에서는 지원하지 않습니다.
+- **상태줄은 동의했을 때만 바꿉니다(macOS·Linux).** PLAN 바를 채우려고 설치 스크립트가 Claude Code 상태줄(statusline)에 연결할 수 있습니다. 터미널에서 y라고 답하거나 `--statusline`을 붙였을 때만 `~/.claude/settings.json`의 `statusLine`을 바꾸고 원래 설정은 백업합니다(쓰던 상태줄은 그대로 보입니다). `--yes`만으로는 켜지 않습니다. 상태줄을 연결하면 원래 설정의 백업과 상태줄에서 받은 값을 Claude Code 설정 폴더 안의 `claude-office` 폴더(`~/.claude/claude-office`)에 둡니다. `claude-office uninstall`은 상태줄이 설치 때 바꾼 그대로일 때만 되돌리고, 그 뒤 사용자가 바꾼 상태줄은 그대로 둡니다. Windows에서는 지원하지 않습니다.
 - **층 제어는 고른 Claude Code 프로세스에 신호를 보냅니다.** 보내기 전에 세션 기록의 pid와 시작 시각을 확인하고, Windows에서는 보내지 않습니다.
 
 ## 글꼴
