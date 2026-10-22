@@ -108,3 +108,4 @@
 .counter .value { grid-row: 2; line-height: 24px; font-variant-numeric: tabular-nums; }
 .counter .sub { grid-row: 3; line-height: 14px; white-space: nowrap; }
 .rf-archive-note { margin: 0 6px 6px; font-family: var(--font-text); font-size: 11px; color: var(--muted); word-break: keep-all; }
+.rf-stamp.held { color: var(--muted); border-style: dashed; }
