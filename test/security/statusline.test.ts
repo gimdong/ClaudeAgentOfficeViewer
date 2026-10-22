@@ -120,3 +120,46 @@ describe.skipIf(process.platform === "win32")("install.sh의 statusline 질문(B
     for (const f of existsSync(logs) ? readdirSync(logs) : []) expect(readFileSync(join(logs, f), "utf8")).not.toContain(FAKE_SECRET);
   });
 });
+
+
+describe.skipIf(process.platform === "win32")("제거 명령의 되돌리기(B326 ②)", () => {
+  function pkg() {
+    const p = join(base, "pkg");
+    for (const d of ["app", "scripts", "plugin/plugins/claude-office/hooks"]) mkdirSync(join(p, d), { recursive: true });
+    for (const [s, d] of [["packaging/install.sh", "install.sh"], ["packaging/fill-hooks.cjs", "fill-hooks.cjs"], ["packaging/claude-office.sh", "claude-office.sh"], ["plugins/claude-office/hooks/hooks.json", "plugin/plugins/claude-office/hooks/hooks.json"]]) copyFileSync(join(ROOT, s), join(p, d));
+    for (const f of ["statusline-setup.mjs", "statusline-tap.sh"]) for (const d of ["app", "scripts"]) copyFileSync(join(ROOT, "scripts", f), join(p, d, f));
+    writeFileSync(join(p, "app/server.mjs"), "process.exit(0)\n");
+    writeFileSync(join(p, "VERSION"), "0.0.0-test\n");
+    chmodSync(join(p, "install.sh"), 0o755);
+    chmodSync(join(p, "claude-office.sh"), 0o755);
+    return p;
+  }
+  const prefix = () => join(base, "prefix");
+  const run = (file: string, args: string[]) => spawnSync("sh", [file, ...args], { input: "", env: { ...env(), SHELL: "/bin/sh" }, encoding: "utf8" });
+  const installOn = () => run(join(pkg(), "install.sh"), ["--prefix", prefix(), "--no-path", "--no-open", "--port", "4391", "--yes", "--statusline"]);
+
+  it("uninstall은 app을 지우기 전에 원래 statusLine으로 되돌린다", () => {
+    expect(installOn().status).toBe(0);
+    const r = run(join(prefix(), "bin/claude-office"), ["uninstall", "--yes"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(settings()).toEqual(SETTINGS);
+  });
+
+  it("백업이 없어도 지금 값이 우리 tap이면 statusLine 키를 지운다(없는 파일을 가리키는 statusline을 남기지 않음)", () => {
+    expect(installOn().status).toBe(0);
+    for (const f of readdirSync(join(cc, "claude-office"))) if (f.startsWith("settings.backup")) rmSync(join(cc, "claude-office", f));
+    run(join(prefix(), "bin/claude-office"), ["uninstall", "--yes"]);
+    const s = settings();
+    expect(s.statusLine?.command ?? "").not.toContain("statusline-tap.sh");
+    expect(s.env).toEqual(SETTINGS.env);
+  });
+
+  it("사용자가 설치 뒤 statusLine을 바꿨으면 uninstall도 그것을 그대로 둔다", () => {
+    expect(installOn().status).toBe(0);
+    const s = settings();
+    s.statusLine = { type: "command", command: "echo USER_NEWER" };
+    writeFileSync(join(cc, "settings.json"), JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
+    run(join(prefix(), "bin/claude-office"), ["uninstall", "--yes"]);
+    expect(settings().statusLine).toEqual({ type: "command", command: "echo USER_NEWER" });
+  });
+});
