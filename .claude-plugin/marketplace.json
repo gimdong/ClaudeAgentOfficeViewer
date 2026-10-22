@@ -6,7 +6,7 @@
       "name": "claude-office",
       "source": "./plugins/claude-office",
       "description": "Claude Agent Office Viewer에 hook 이벤트를 보내는 플러그인",
-      "version": "2.0.0-beta.14"
+      "version": "2.0.0-beta.15"
     }
   ]
 }
