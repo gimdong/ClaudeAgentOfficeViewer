@@ -96,6 +96,17 @@ describe("퇴사(스펙 7장·11장 e f)", () => {
     expect(sentTexts[0]).toMatch(/^\[대시보드 지시 r-[0-9a-f]{8}\] /);
   });
 
+  it("B324 I-C: 다시 켠 뒤(메모리의 요청 id가 사라짐) 재촉은 저장된 requestId를 다시 걸어 그 팀원 인수인계를 한 번만 받는다", () => {
+    sent("retire");
+    const again = new ReportStore({ file: join(dir, "reports.json"), now: () => clock });
+    const board = new DutyBoard({ reports: again, now: () => clock });
+    expect(again.peek("r-11111111", "s1", "handover")).toBeNull();
+    clock += RETIRE_NUDGE_MS + 1;
+    board.sweep(new Set(["s1"]), hub().h);
+    expect(again.take("r-11111111", "s1", "handover")).toMatchObject({ member: "tester" });
+    expect(again.take("r-11111111", "s1", "handover")).toBeNull();
+  });
+
   it("인수인계가 이미 왔으면 재촉하지 않는다", () => {
     sent("retire");
     reports.add("s1", { id: "r-11111111", kind: "handover", member: "tester", body: "메모" });

@@ -12,7 +12,8 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 export function cleanUserName(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
-  if (!t || /\p{Cc}/u.test(t)) return null;
+  // Cc와 Cf(bidi 제어 U+202E 등, B324 m1). 이모지에 쓰는 ZWNJ·ZWJ·태그 문자(깃발)는 Cf지만 둔다
+  if (!t || /\p{Cc}|(?![\u200C\u200D\u{E0020}-\u{E007F}])\p{Cf}/u.test(t)) return null;
   let n = 0;
   for (const _ of segmenter.segment(t)) if (++n > MAX_USER_NAME) return null;
   return t;

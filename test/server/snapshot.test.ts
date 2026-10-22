@@ -9,6 +9,8 @@ import { EventStore } from "../../server/events/store";
 import { getLogger } from "../../server/log";
 import { PolicyGate } from "../../server/policy/gate";
 import { FloorControl } from "../../server/floors/control";
+import { DutyBoard } from "../../server/floors/duty";
+import { ReportStore } from "../../server/floors/reports";
 import { BudgetGate } from "../../server/budget/gate";
 import { BudgetStore } from "../../server/budget/store";
 import { PolicyStore } from "../../server/policy/store";
@@ -581,5 +583,21 @@ describe("SnapshotBuilder + 층 관리(Phase 4a 스펙 4.4·5.2·6)", () => {
     expect(sweep).toHaveBeenCalledTimes(2);
     const text = JSON.stringify(snap);
     expect([text.includes('"pid"'), text.includes("procStart"), text.includes(PS)]).toEqual([false, false, false]);
+  });
+});
+
+describe("SnapshotBuilder + 퇴사(Phase 6b B323)", () => {
+  it("퇴사 중 팀 설정 joinedAt을 넘기고, 전임자 startedAt·retiredAt을 ISO로 낸다", async () => {
+    await seed();
+    const joined = NOW - 3_600_000;
+    await h.write("teams/t/config.json", { name: "t", leadSessionId: "s1", members: [{ name: "team-lead", agentType: "team-lead" }, { name: "developer", agentType: "general-purpose", joinedAt: joined }] });
+    const reports = new ReportStore({ now: () => NOW });
+    const duty = new DutyBoard({ reports, now: () => NOW });
+    const builder = new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, duty });
+    duty.onSent({ floor: "s1", kind: "retire", member: "developer", requestId: "r-11111111" });
+    await builder.build(NOW);
+    duty.onSent({ floor: "s1", kind: "rehire", member: "developer", requestId: "r-22222222" });
+    const s1 = (await builder.build(NOW)).sessions.find((s) => s.id === "s1")!;
+    expect(s1.predecessors).toEqual([{ name: "developer", retiredAt: new Date(NOW).toISOString(), startedAt: new Date(joined).toISOString() }]);
   });
 });

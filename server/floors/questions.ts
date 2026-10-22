@@ -5,6 +5,9 @@ import { agentOf, type AgentRef } from "../events/summarize";
 import { errInfo, getLogger } from "../log";
 
 interface Q extends ChatQuestionView { conv: string; at: number }
+/** Stop 때 이번 턴 글이 아직 기록되지 않았으면(behind) 이만큼 기다려 한 번 더 읽는다(B324 I-B) */
+export const STOP_REREAD_MS = 500;
+type LastText = string | null | { behind: true };
 
 /**
  * 대화 질문(Phase 6b 스펙 4장·11장 b c·12장 d e). 책상(주인 이름)마다 하나 — 새 질문이 오면 옛것을 대체한다.
@@ -13,10 +16,12 @@ interface Q extends ChatQuestionView { conv: string; at: number }
  * - 해제: 팀리더 본인의 UserPromptSubmit·PreToolUse(v2), 또는 대시보드 답이 실제로 보내졌을 때(B308). 휴업 중 답은 "held"로 두고
  *   실제로 보낼 때 지우며, 보관한 답을 지우면 다시 "open"(B309). 메모리에만 — 대시보드를 다시 켜면 사라진다
  * 키는 대화 키(conv, hook의 정규화된 session_id) — 스냅샷이 층의 이벤트를 찾는 키와 같다
+ * - B324 I-B: 대화마다 마지막으로 지운(답한) 질문 글을 기억해 Stop이 같은 글을 다시 읽으면 띄우지 않는다
  */
 export class QuestionBoard {
   private readonly byConv = new Map<string, Map<string, Q>>();
-  constructor(private readonly o: { lastText?: (conv: string) => Promise<string | null>; onChange?: () => void; now?: () => number } = {}) {}
+  private readonly lastGone = new Map<string, string>();
+  constructor(private readonly o: { lastText?: (conv: string) => Promise<LastText>; onChange?: () => void; now?: () => number } = {}) {}
 
   private changed(): void {
     try {
@@ -49,15 +54,21 @@ export class QuestionBoard {
     if (ev === "UserPromptSubmit" || ev === "PreToolUse") {
       const desks = this.byConv.get(conv);
       let n = 0;
-      for (const [k, q] of desks ?? []) if (q.state === "open") desks!.delete(k), n++;
+      for (const [k, q] of desks ?? []) if (q.state === "open") desks!.delete(k), this.lastGone.set(conv, q.text), n++;
       if (n) this.changed();
       return;
     }
     if (ev !== "Stop" || !this.o.lastText) return;
-    const text = await this.o.lastText(conv).catch(() => null);
-    if (!text) return;
+    const read = () => this.o.lastText!(conv).catch(() => null);
+    let text = await read();
+    if (typeof text === "object" && text) {
+      await new Promise((r) => setTimeout(r, STOP_REREAD_MS));
+      text = await read();
+    }
+    if (typeof text !== "string" || !text) return;
     const d = detectAsk(text);
-    if (d.asks) this.put(conv, { source: "await", owner: "team-lead", ownerIsLead: true, text: tailText(text), options: d.options });
+    const shown = tailText(text);
+    if (d.asks && shown !== this.lastGone.get(conv)) this.put(conv, { source: "await", owner: "team-lead", ownerIsLead: true, text: shown, options: d.options });
   }
 
   private find(id: string): Q | undefined {
@@ -66,6 +77,7 @@ export class QuestionBoard {
   }
   private drop(q: Q): void {
     this.byConv.get(q.conv)?.delete(q.owner);
+    this.lastGone.set(q.conv, q.text);
     this.changed();
   }
   /** 대시보드 답(reply) 결과 */

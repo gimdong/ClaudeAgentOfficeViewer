@@ -4,12 +4,12 @@ import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../server/app";
 import { ChannelHub } from "../../server/floors/channels";
-import { QuestionBoard } from "../../server/floors/questions";
+import { QuestionBoard, STOP_REREAD_MS } from "../../server/floors/questions";
 import { ReplayWindow, deriveKeys } from "../../server/hooks/v2";
-import { readLastAssistantText } from "../../server/lib/jsonlTail";
+import { readLastAssistantText, readLastAssistantTurn } from "../../server/lib/jsonlTail";
 import { Logger, setLogger } from "../../server/log";
 import { MAX_AWAIT_TEXT } from "../../server/events/askHeuristic";
 import { makeSnapshot } from "../web/fixtures";
@@ -107,6 +107,45 @@ describe("QuestionBoard — Stop 대체 경로(스펙 4장·12장 d e·h)", () =
   });
 });
 
+describe("B324 I-B: Stop 순간 앞 턴 글로 다시 뜨지 않는다", () => {
+  it("지운(또는 답한) 질문과 같은 글이 Stop에 다시 오면 띄우지 않고, 다른 글이면 띄운다", async () => {
+    let text = "배포를 오늘 할까요?";
+    const b = new QuestionBoard({ lastText: async () => text });
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toHaveLength(1);
+    await b.onEvent(ev("UserPromptSubmit"));
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toEqual([]);
+    text = "테스트도 돌릴까요?";
+    await b.onEvent(ev("Stop"));
+    const [q] = b.list("c1");
+    expect(q.text).toBe(text);
+    b.onReply(q.id, "sent");
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toEqual([]);
+  });
+
+  it(`읽은 마지막 assistant가 Stop보다 앞(뒤에 user 항목)이면 ${STOP_REREAD_MS}ms 뒤 한 번만 더 읽고, 그래도 앞이면 띄우지 않는다`, async () => {
+    vi.useFakeTimers();
+    try {
+      for (const [seq, shown] of [[[{ behind: true }, "새 질문 할까요?"], 1], [[{ behind: true }, { behind: true }], 0]] as const) {
+        const reads = [...seq];
+        let n = 0;
+        const b = new QuestionBoard({ lastText: async () => (n++, reads.shift() ?? null) });
+        const p = b.onEvent(ev("Stop"));
+        await vi.advanceTimersByTimeAsync(STOP_REREAD_MS - 1);
+        expect(n).toBe(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await p;
+        expect(n).toBe(2);
+        expect(b.list("c1")).toHaveLength(shown);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("readLastAssistantText — 대화 기록 끝의 마지막 assistant 글", () => {
   let dir: string;
   beforeEach(() => (dir = mkdtempSync(join(tmpdir(), "co-q-"))));
@@ -120,6 +159,17 @@ describe("readLastAssistantText — 대화 기록 끝의 마지막 assistant 글
     expect(await readLastAssistantText(f)).toBeNull();
     writeFileSync(f, "");
     expect(await readLastAssistantText(f)).toBeNull();
+  });
+
+  it("B324: 마지막 assistant 뒤에 user 항목(사용자 글·도구 결과)이 있으면 behind — isMeta user는 보지 않는다", async () => {
+    const f = join(dir, "c1.jsonl");
+    const a = line({ type: "assistant", message: { content: [{ type: "text", text: "옛 질문 할까요?" }] } });
+    writeFileSync(f, a + line({ type: "user", message: { content: "다음 일" } }));
+    expect(await readLastAssistantTurn(f)).toEqual({ text: "옛 질문 할까요?", behind: true });
+    writeFileSync(f, line({ type: "user", message: { content: "처음" } }));
+    expect(await readLastAssistantTurn(f)).toEqual({ text: null, behind: true });
+    writeFileSync(f, a + line({ type: "user", isMeta: true, message: { content: "caveat" } }) + line({ type: "system", content: "x" }));
+    expect(await readLastAssistantTurn(f)).toEqual({ text: "옛 질문 할까요?", behind: false });
   });
 });
 

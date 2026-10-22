@@ -76,6 +76,8 @@ export class DutyBoard {
       if (r.nudged || now - r.startedAt < RETIRE_NUDGE_MS || !visible.has(r.floor) || !hub.connected(r.floor)) continue;
       // 인수인계가 이미 왔으면 재촉하지 않는다
       if (this.o.reports.find(r.floor, r.requestId)?.kind === "handover") continue;
+      // 다시 켠 뒤면 메모리의 요청 id가 없다 — 저장된 requestId를 다시 걸어야 재촉에 따른 제출이 409로 막히지 않는다(B324 I-C)
+      if (!this.o.reports.peek(r.requestId, r.floor, "handover")) this.o.reports.expect(r.requestId, r.floor, "handover", r.member);
       const id = `r-${randomBytes(4).toString("hex")}`;
       const res = hub.instruct(r.floor, retireNudgeText(id, r.member, r.requestId), isPaused?.(r.floor) ?? false, `lead:retire-nudge:${r.member}`);
       if (res.ok) {

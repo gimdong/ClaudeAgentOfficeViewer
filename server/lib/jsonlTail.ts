@@ -87,21 +87,31 @@ export async function readLastEntry(path: string, maxBytes = 65536): Promise<unk
  * Stop 대체 경로(Phase 6b 스펙 4장·12장 d)가 서버가 이미 아는 그 세션의 대화 기록에서만 읽는다
  */
 export async function readLastAssistantText(path: string, maxBytes = 512 * 1024): Promise<string | null> {
+  return (await readLastAssistantTurn(path, maxBytes)).text;
+}
+
+/**
+ * readLastAssistantText + behind: 그 assistant 뒤에 user 항목(사용자 글·도구 결과, isMeta 제외)이 있으면 true —
+ * 이번 턴의 마지막 글이 아직 기록되지 않아 앞 턴 글을 읽은 것이다(B324 I-B)
+ */
+export async function readLastAssistantTurn(path: string, maxBytes = 512 * 1024): Promise<{ text: string | null; behind: boolean }> {
   const { size } = await stat(path);
-  if (size === 0) return null;
+  if (size === 0) return { text: null, behind: false };
   const buf = await readRange(path, Math.max(0, size - maxBytes), size);
   const lines = buf.toString("utf8").split("\n");
+  let behind = false;
   for (let i = lines.length - 1; i >= 0; i--) {
-    let e: { type?: unknown; message?: { content?: unknown } };
+    let e: { type?: unknown; isMeta?: unknown; message?: { content?: unknown } };
     try {
       e = JSON.parse(lines[i]);
     } catch {
       continue; // 창 앞의 잘린 줄·빈 줄
     }
+    if (e?.type === "user" && e.isMeta !== true) behind = true;
     if (e?.type !== "assistant") continue;
     const content = e.message?.content;
     const text = typeof content === "string" ? content : Array.isArray(content) ? content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text as string).join("\n") : "";
-    return text.trim() ? text : null;
+    return { text: text.trim() ? text : null, behind };
   }
-  return null;
+  return { text: null, behind };
 }

@@ -29,11 +29,12 @@ describe("BuildingStore", () => {
     expect(new BuildingStore({ file }).userName()).toBe("김 팀장");
   });
 
-  it(`1~${MAX_USER_NAME}자(낱자 기준 — 이모지·결합 문자 하나는 한 자), 빈 값·제어 문자·글자가 아닌 값은 거절`, () => {
+  it(`1~${MAX_USER_NAME}자(낱자 기준 — 이모지·결합 문자 하나는 한 자), 빈 값·제어 문자(Cc·bidi 같은 Cf, 이모지 ZWJ는 허용)·글자가 아닌 값은 거절`, () => {
     const s = new BuildingStore({ file });
     expect(s.set("가".repeat(MAX_USER_NAME)).ok).toBe(true);
+    expect(s.set("\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F} 팀").ok).toBe(true); // 태그 문자(Cf) 깃발
     expect(s.set("👩‍💻".repeat(MAX_USER_NAME)).ok).toBe(true);
-    for (const v of ["", "   ", "가".repeat(MAX_USER_NAME + 1), "a\nb", "a\u0000b", "a\tb", 3, null]) expect(s.set(v as string), JSON.stringify(v)).toEqual({ ok: false });
+    for (const v of ["", "   ", "가".repeat(MAX_USER_NAME + 1), "a\nb", "a\u0000b", "a\tb", "a\u202Eb", "\u200Fx", "a\u2066b", 3, null]) expect(s.set(v as string), JSON.stringify(v)).toEqual({ ok: false });
     expect(s.userName()).toBe("👩‍💻".repeat(MAX_USER_NAME));
   });
 

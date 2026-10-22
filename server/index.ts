@@ -34,7 +34,7 @@ import { ReportStore } from "./floors/reports";
 import { BuildingStore } from "./building";
 import { QuestionBoard } from "./floors/questions";
 import { DutyBoard } from "./floors/duty";
-import { readLastAssistantText } from "./lib/jsonlTail";
+import { readLastAssistantTurn } from "./lib/jsonlTail";
 import type { Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
 
@@ -360,7 +360,9 @@ async function main(): Promise<void> {
   const questions = new QuestionBoard({
     lastText: async (conv) => {
       const f = builder.transcriptOf(conv);
-      return f ? readLastAssistantText(f) : null;
+      if (!f) return null;
+      const t = await readLastAssistantTurn(f);
+      return t.behind ? { behind: true as const } : t.text;
     },
     onChange: () => hub.poke(),
   });
