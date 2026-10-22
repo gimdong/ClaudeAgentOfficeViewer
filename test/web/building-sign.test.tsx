@@ -72,5 +72,11 @@ describe("빌딩 정보 PLAN 이유 줄(스펙 12장 j W33, qa #627 F)", () => {
     // B331: Windows는 같은 사실(HUD와 같은 상수) + 한 줄 이유
     expect(BUILDING_TEXT.planUnsupported).toBe(BAR_EMPTY.planUnsupported);
     expect(plan("unsupported")).toContain(BUILDING_TEXT.planUnsupported + BUILDING_TEXT.planWhyUnsupported);
+    // B332: 상태를 모르는 옛 서버는 off와 같다("아직" 문장은 없음)
+    cleanup();
+    render(<Building sessions={sessions} snapshot={{ ...snap, statusline: undefined }} />);
+    fireEvent.click(screen.getByRole("button", { name: /빌딩 정보 열기/ }));
+    expect(screen.getByRole("dialog").textContent).toContain(BUILDING_TEXT.planOff + BUILDING_TEXT.planWhyOff);
+    expect(Object.values(BUILDING_TEXT).some((v) => typeof v === "string" && v.includes("아직"))).toBe(false);
   });
 });

@@ -32,7 +32,7 @@ describe("HeartBar", () => {
 
 describe("Hud", () => {
   it("예산과 한도가 없으면 대체 문구를 보여준다", () => {
-    render(<Hud snapshot={makeSnapshot()} live={false} />);
+    render(<Hud snapshot={makeSnapshot({ statusline: "on" })} live={false} />);
     expect(screen.getAllByText("-- 설정 필요")).toHaveLength(2);
     // PLAN 빈 글(디자인 phase6b §11.4, W32)
     expect(screen.getByText("-- 요금제가 알려 주지 않음")).toBeTruthy();
@@ -121,5 +121,9 @@ describe("PLAN 빈 문구(스펙 12장 j W33, qa #627 E)", () => {
     expect(BAR_EMPTY.planUnsupported).toBe("-- Windows에서는 statusline 연결을 지원하지 않음");
     render(<Hud snapshot={makeSnapshot({ statusline: "unsupported" })} live />);
     expect(screen.getByText(BAR_EMPTY.planUnsupported)).toBeTruthy();
+    // B332: 상태를 모르는 옛 서버는 꺼짐과 같다
+    cleanup();
+    render(<Hud snapshot={makeSnapshot({ statusline: undefined })} live />);
+    expect(screen.getByText(BAR_EMPTY.planOff)).toBeTruthy();
   });
 });

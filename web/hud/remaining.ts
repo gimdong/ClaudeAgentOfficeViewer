@@ -3,8 +3,8 @@ import { remainingPct } from "../format";
 
 /** HUD 하트 바의 빈 글(디자인 phase6b §11.4). 빌딩 정보 창도 같은 글을 쓴다 */
 export const BAR_EMPTY = { needSetup: "-- 설정 필요", planNone: "-- 요금제가 알려 주지 않음", planOff: "-- statusline 연결이 꺼져 있음(다시 설치할 때 켤 수 있음)", planUnsupported: "-- Windows에서는 statusline 연결을 지원하지 않음" } as const;
-/** PLAN 바가 빌 때의 글(W33, 스펙 12장 j·B331): 연결이 꺼져 있음 / Windows는 지원하지 않음 / 그 밖은 요금제가 알려 주지 않음 */
-export const planEmptyText = (snapshot: Pick<Snapshot, "statusline">) => (snapshot.statusline === "off" ? BAR_EMPTY.planOff : snapshot.statusline === "unsupported" ? BAR_EMPTY.planUnsupported : BAR_EMPTY.planNone);
+/** PLAN 바가 빌 때의 글(W33, 스펙 12장 j·B331·B332): 연결됐는데 값 없음 / Windows는 지원하지 않음 / 그 밖(꺼짐·상태를 모르는 옛 서버)은 꺼져 있음 */
+export const planEmptyText = (snapshot: Pick<Snapshot, "statusline">) => (snapshot.statusline === "on" ? BAR_EMPTY.planNone : snapshot.statusline === "unsupported" ? BAR_EMPTY.planUnsupported : BAR_EMPTY.planOff);
 
 /**
  * 5H·WEEK(예산 대비)·PLAN(statusline 한도) 잔여 %. HUD와 빌딩 정보 창이 같은 값을 보이도록 한 곳에서 센다.

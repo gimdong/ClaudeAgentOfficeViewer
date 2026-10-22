@@ -248,8 +248,9 @@ describe("BuildingInfo", () => {
     expect(screen.getByText("1.24M")).toBeTruthy();
     expect(screen.getByText(BUILDING_TEXT.cacheRead("820.0k"))).toBeTruthy();
     expect(screen.getByText("43%")).toBeTruthy();
-    expect(screen.getByText(BUILDING_TEXT.planNone)).toBeTruthy();
-    expect(screen.getByText(BUILDING_TEXT.planWhy)).toBeTruthy();
+    // B332: statusline 상태를 모르면(옛 서버) 꺼짐과 같은 글
+    expect(screen.getByText(BUILDING_TEXT.planOff)).toBeTruthy();
+    expect(screen.getByText(BUILDING_TEXT.planWhyOff)).toBeTruthy();
     expect(screen.getByText(BUILDING_TEXT.floorsValue(3, 9))).toBeTruthy();
   });
 
