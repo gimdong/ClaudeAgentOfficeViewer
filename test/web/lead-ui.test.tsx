@@ -55,18 +55,27 @@ describe("책상 표시(§2)", () => {
     expect(line({ longIdle: true, duty: "requested", retiring: { since: "x" } })).toBe(CMD_TEXT.statusRetiring);
   });
 
-  it("스펙 12장 m: 퇴사 중인데 channel 연결이 없으면 옆에 '연결되면 이어 갑니다'", () => {
+  it("스펙 12장 m(SPEC §2.6 W2a): 퇴사 중인데 연결이 없으면 책상 줄은 그대로, title·aria에 ', 연결되면 이어 갑니다'", () => {
+    const tail = `, ${CMD_TEXT.retireResume}`;
     render(<Desk member={makeMember({ name: "tester", retiring: { since: "x" } })} retireWait />);
-    expect(screen.getByTestId("extra-line").textContent).toBe(`${CMD_TEXT.statusRetiring} · ${CMD_TEXT.retireResume}`);
+    expect(screen.getByTestId("extra-line").textContent).toBe(CMD_TEXT.statusRetiring);
+    expect(screen.getByTestId("extra-line").querySelector(".desk-status")!.getAttribute("title")).toBe(`${CMD_TEXT.statusRetiring}${tail}`);
+    expect(screen.getByTestId("desk-tester").getAttribute("aria-label")).toContain(tail);
     cleanup();
     render(<Desk member={makeMember({ name: "tester" })} retireWait />);
-    expect(screen.getByTestId("extra-line").textContent).toBe("");
+    expect(screen.getByTestId("desk-tester").getAttribute("aria-label")).not.toContain(tail);
     cleanup();
     render(<Floor session={makeSession({ members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester", retiring: { since: "x" } })] })} />);
-    expect(screen.getAllByTestId("extra-line")[1].textContent).toContain(CMD_TEXT.retireResume);
+    expect(screen.getByTestId("desk-tester").getAttribute("aria-label")).toContain(tail);
     cleanup();
     render(<Floor session={makeSession({ channel: { connected: true, tmux: "co-1", held: 0 }, members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester", retiring: { since: "x" } })] })} />);
-    expect(screen.getAllByTestId("extra-line")[1].textContent).toBe(CMD_TEXT.statusRetiring);
+    expect(screen.getByTestId("desk-tester").getAttribute("aria-label")).not.toContain(tail);
+  });
+
+  it("스펙 12장 m(SPEC §1.1): 패널 [퇴사 진행 중] 아래 이유 줄은 연결이 없으면 '연결되면 이어 갑니다'", () => {
+    const member = makeMember({ name: "tester", retiring: { since: "x" } });
+    render(<LeadCommands session={makeSession({ channel: { connected: false, tmux: "co-1", held: 0 }, members: [makeMember({ name: "team-lead", role: "lead" }), member] })} member={member} announce={() => {}} lead={opener()} />);
+    expect(screen.getByText(CMD_TEXT.retireResume)).toBeTruthy();
   });
 
   it("리드 책상: 결재 대기가 있으면 '결재 {n}' 칩과 서류철 그림(노랑), 보고서만 있으면 그림만", () => {

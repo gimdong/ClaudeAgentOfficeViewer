@@ -63,7 +63,9 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
   const denied = !!member.policyDenied;
   const locked = !!member.policy || denied;
   // 접근 이름 덧붙임(phase3 §8.7)
-  const marks = `${locked ? ", 권한 정책 있음" : ""}${denied ? ", 방금 정책으로 막힘" : ""}`;
+  // 퇴사 중인데 연결이 없으면 title·aria 꼬리만(SPEC §2.6 W2a — 92px 줄에는 넣지 않음, 「스펙」 12장 m)
+  const retireTail = member.retiring && retireWait ? `, ${CMD_TEXT.retireResume}` : "";
+  const marks = `${locked ? ", 권한 정책 있음" : ""}${denied ? ", 방금 정책으로 막힘" : ""}${retireTail}`;
 
   const svg = (
     <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
@@ -175,10 +177,10 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
 
   // 이름표 아래 한 줄 자리(§2.6): 모든 책상에 둔다(비어 있어도 — 바닥선을 맞춘다). 리드는 결재 칩, 팀원은 상태 줄 하나
   const pending = folder?.pending ?? 0;
-  const status = member.retiring ? { text: retireWait ? `${CMD_TEXT.statusRetiring} · ${CMD_TEXT.retireResume}` : CMD_TEXT.statusRetiring, cls: "desk-status pink" } : member.duty === "requested" ? { text: CMD_TEXT.statusOffRequested, cls: "desk-status" } : member.longIdle && !offDuty ? { text: CMD_TEXT.statusLongIdle, cls: "desk-status" } : null;
+  const status = member.retiring ? { text: CMD_TEXT.statusRetiring, cls: "desk-status pink", title: `${CMD_TEXT.statusRetiring}${retireTail}` } : member.duty === "requested" ? { text: CMD_TEXT.statusOffRequested, cls: "desk-status" } : member.longIdle && !offDuty ? { text: CMD_TEXT.statusLongIdle, cls: "desk-status" } : null;
   const extra = (
     <span className="desk-extra" data-testid="extra-line">
-      {pending > 0 ? <span className="desk-folder">{CMD_TEXT.deskFolder(pending)}</span> : status && <span className={status.cls}>{status.text}</span>}
+      {pending > 0 ? <span className="desk-folder">{CMD_TEXT.deskFolder(pending)}</span> : status && <span className={status.cls} title={"title" in status ? status.title : undefined}>{status.text}</span>}
     </span>
   );
   const folderMark = pending > 0 ? CMD_TEXT.aria.folder(pending) : "";

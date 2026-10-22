@@ -106,7 +106,8 @@ export function LeadCommands({ session, member, announce, lead }: { session: Ses
       <div className="ap-cmd-row">{buttons}</div>
       {why ? (
         <p id={whyId} className="ap-cmd-why">
-          {why}
+          {/* 퇴사는 다시 연결되면 이어 간다(SPEC §1.1 W2a, 「스펙」 12장 m) */}
+          {member.retiring && channel !== "ok" ? C.retireResume : why}
         </p>
       ) : (
         paused && <p className="ap-cmd-why">{CH_TEXT.instructPaused}</p>
