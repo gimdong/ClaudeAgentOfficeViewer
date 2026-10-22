@@ -4,13 +4,16 @@ import { Icon } from "../pixel/Icon";
 import { graphemes } from "../report/text";
 import { channelWhy, LEAD_MAX, LEAD_TEXT as T, shortTime, type FolderView, type LeadChannel, type ReportView } from "./leadText";
 
-const stampClass = (s: ReportView["state"]) => (s === "approved" || s === "started" ? "ok" : s === "revise" ? "rev" : "wait");
-const stampText = (r: ReportView) => (r.kind === "handover" && r.state === "pending" ? T.stampHandoverPending : T.stamp[r.state]);
+/** 휴업 중 보관된 결재(스펙 12장 l). shared ReportView에 held가 들어오기 전에도 읽을 수 있게 넓혀 둔다 */
+type Held = { held?: "approve" | "revise" };
+const heldOf = (r: ReportView) => (r.state === "pending" ? (r as ReportView & Held).held : undefined);
+const stampClass = (r: ReportView) => (heldOf(r) ? "held" : r.state === "approved" || r.state === "started" ? "ok" : r.state === "revise" ? "rev" : "wait");
+const stampText = (r: ReportView) => (heldOf(r) ? T.stampHeld : r.kind === "handover" && r.state === "pending" ? T.stampHandoverPending : T.stamp[r.state]);
 const titleOf = (r: ReportView) => (r.kind === "handover" ? T.handoverTitle(r.member ?? r.from) : r.title?.trim() || T.untitled);
 const subOf = (r: ReportView) => (r.kind === "handover" ? T.kindHandover(r.member ?? r.from, shortTime(r.at)) : T.kindReport(shortTime(r.at)));
 
 function Stamp({ r }: { r: ReportView }) {
-  return <span className={`rf-stamp ${stampClass(r.state)}`}>{stampText(r)}</span>;
+  return <span className={`rf-stamp ${stampClass(r)}`}>{stampText(r)}</span>;
 }
 
 function Row({ r, onOpen }: { r: ReportView; onOpen(id: string, el: HTMLElement): void }) {
@@ -116,6 +119,7 @@ export function ReportFolder(p: {
           </button>
         </>
       );
+    const held = heldOf(r);
     return (
       <>
         {off && (
@@ -123,6 +127,7 @@ export function ReportFolder(p: {
             {off}
           </p>
         )}
+        {held && !off && <p className="rf-help rf-held">{T.heldLine[held]}</p>}
         <button ref={reviseBtn} type="button" className="pbtn" aria-disabled={!!off || undefined} aria-describedby={off ? why : undefined} onClick={() => !off && setRevise(true)}>
           {T.reviseOpen}
         </button>
@@ -171,7 +176,7 @@ export function ReportFolder(p: {
             <p className="rf-meta">{`${open.from} · ${shortTime(open.at)}`}</p>
             <div className={`rf-paper${T.seal[open.state] ? " sealed" : ""}`} tabIndex={0} data-testid="rf-paper">
               {T.seal[open.state] && (
-                <span className={`rf-seal ${stampClass(open.state)}`} aria-hidden="true">
+                <span className={`rf-seal ${stampClass(open)}`} aria-hidden="true">
                   {T.seal[open.state]}
                 </span>
               )}

@@ -724,3 +724,5 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .predecessors .pd-head { font-size: 10px; color: var(--muted); }
 
 .ap-cmd-err { color: var(--red); }
+/* 휴업 중 보관된 결재 도장(디자인 phase6b §3.2, 스펙 12장 l): 아직 보내지 않음을 점선으로 */
+.rf-stamp.held { color: var(--muted); border-style: dashed; }
