@@ -1,9 +1,9 @@
-# Phase 7 — 테마 계약 (판 3 + 보충 1)
+# Phase 7 — 테마 계약 (판 3 + 보충 2)
 
 담당 designer(Phase 7 리드). **구현 전 계약 초안**입니다. 화면 글자는 모두 「안」이고 qa 검토 전입니다(규칙 9).
 
 입력:
-- designer-motion `design/p7-motion` a4b45bc(행 9·10 `walk_down`·`walk_up`까지): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
+- designer-motion `design/p7-motion` 104470b(행 9·10 `walk_down`·`walk_up`, 행 11·12 `ride`·`ride_lurch` 선택 행, 엘리베이터 상자 크기 office와 합의 c7f5d02): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
 - designer-themes `design/p7-themes` 1cf46fa(74ff0c2 + `--th-*` 이름 맞춤), 3a0b0bc `docs/design/phase7/office-exterior/`(오피스 바깥 시트·`extras.json`·`make-exterior.mjs`): `docs/design/phase7/themes/SPEC.md`(슬롯 대응표·팔레트·대비)
 - designer-office `design/p7-office` b2bfdd4(1ac7d29 + 칸 기준점·`--th-*` 값·포커스 제안): `docs/design/phase7/office/NOTES.md`(장면 칸·크기·움직임·대비), `mock/tokens.js`(낮·밤 색), `mock/contrast.cjs`(AA 검사)
 - 출발점: 본 트리 `docs/design/themes/SPEC.md`(79045fc, 4446d1a) §4·§5 초안. 이 문서가 그것을 대신하고, 그쪽은 더 고치지 않습니다. 그 파일 §3 걷기 띠는 참고로만 두고 시트 규칙은 MOTION.md 하나를 따릅니다.
@@ -78,7 +78,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `rest` | 필수 | office | 카페 층: 카운터 뒤·앞, 테이블 | 120×46 ×2 / 44×46. **바리스타 x53**(카운터 윗선 y28 뒤), **손님 x22**(테이블 윗선 y29 뒤, 앉아 `idle`). 장식 층, 데이터·층 번호 없음 |
 | `team-zone` | 필수 | office | 러그(바닥 띠를 덮음) + 칸막이 + 팻말 기둥 | 칸막이 34×26 가로 반복. 구역 = flex 항목 하나, 360폭은 팀 리드 한 줄 → 팀원 둘 한 줄, 팻말은 첫 줄만. 탕비실은 구역 밖(층 공용). 팻말 글자는 DOM |
 | `lobby` | 필수 | office | 출입문 70×88, 관리실 데스크 뒤·앞 66×88 ×2, 표지 40×14(글 없는 도형), 화분 24×50 | **경비 x33**, 데스크 윗선 y50(바닥에서 38칸). 로비 `2F ▲`만 칸 위치를 따라감(DOM) |
-| `elevator` | 필수 | office | 칸 3프레임(닫힘·반·열림) 22×40, 로비 문 22×42, 통로 폭 28칸, 옥상 기계실 24×34 | 통로 화면 폭은 공통(56px / 360폭 40px) |
+| `elevator` | 필수 | office | 상자 뒷벽(뒤) + 문짝·테두리(앞) 두 장, 문 3프레임(닫힘·반·열림), 로비 문, 옥상 기계실 24×34 | 상자 안쪽 **30×34**, 기준점 바닥 가운데 (15,32), 통로 폭 34칸(900폭 ×2 = 68px). 겹침: 뒷벽 → (탑승자) → 문짝·테두리 → 층수 표시(DOM). 문 100ms/프레임 `steps(3)`, 움직임 줄이기면 늘 닫힘(motion·office 합의 c7f5d02) |
 | `street` | 필수 | themes | 인도·연석·차도·차선·건너편 연석 + 가로등·가로수 | `street-<v>.png` 32×60 가로 반복(인도 y 0–21, 연석 22–24, 도로 25–56, 건너편 57–59). `street-props.png` 96×48(칸 24×48, 발 = 칸 아래 가운데, 낮·밤 칸). **경계: 건물 바닥선 = 인도 위 가장자리(y 0)** |
 | `extras` | 필수 | themes | 행인·카페 손님·경비 등(사람) | §2a: motion 층 시트 + `extras.json`(사람마다 `id`·`role`·`hair`·`glasses`·`cap`·`rows`·`palette`). 새 PNG 없음, 빌드 때 슬롯 색 바꾼 판(사람당 ~2KB). 낮·밤 팔레트 같음. 서는 x는 office 칸 좌표(카운터·테이블·관리실 데스크)를 받음. **이름표 없음, 누를 수 없음, `aria-hidden`** |
 | `vehicle` | 선택 | themes | 차(오피스: 승용차·택시·버스) | `vehicles.png` 320×72, 칸 80×24, 행 = 차 종류, 열 = 오른쪽 낮·밤·왼쪽 낮·밤(왼쪽 = 뒤집기). 바퀴 아래 = y 23. 정지 그림 + `translateX`만 |
@@ -87,7 +87,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 - 층 안 무늬(벽지·타일·차양)는 그림이 아니라 CSS 그라데이션입니다(거리·스카이라인은 PNG 반복 타일). 그래서 그 색만 CSS 토큰이고(§4), 나머지 장면 색은 그림 안에 들어갑니다.
 - 글 자리는 모두 DOM입니다(office NOTES §2.3): HUD, 옥상 간판, 층 이름표, 통로 층 번호(`2F`·`카페`·`로비`), 이름표, 말풍선, `!`, 점선 이름표(`탕비실 →`), `관리실`, `2F ▲`. 메뉴판·광고판은 글 없는 줄 그림.
-- 카페·로비·옥상은 HUD 엘리베이터 버튼에 넣지 않습니다(데이터 없는 층, office 안). 넣을지는 열린 질문(§10).
+- 카페·로비·옥상은 HUD 엘리베이터 버튼에 넣지 않습니다(team-lead 판정). **로비·카페에는 층 번호가 없습니다**(통로 표시는 `카페`·`로비` 낱말, 세션 층 번호가 밀리지 않게).
 - 쉬는 팀원은 카페가 아니라 **자기 층 `pantry`**로 갑니다(beta15 SPEC §6, §3 탕비실 판정).
 
 ### 2a. 칸 경계 — office와 themes (P7-6 원문)
@@ -98,6 +98,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 ### 2b. 엘리베이터·쉬는 곳(4446d1a §5에서)
 
+- **탑승자 없음(team-lead 판정):** 이번 오피스의 엘리베이터는 **빈 상자**로 움직입니다. 사람이 타 있으면 실제 데이터처럼 읽히기 때문입니다. motion의 `ride`·`ride_lurch`(행 11·12)는 계약에 선택 행으로 남기고, 실제로 층을 옮기는 사람(예: 사용자 아바타)이 생기면 씁니다.
 - 엘리베이터: HUD 층 바로가기를 누르면 장면의 엘리베이터 칸이 그 층까지 칸 단위로 움직이고(층당 0.12초, 최대 0.6초, `transform: translateY` + `steps`). 로비 `2F ▲`가 칸 위치를 따라 바뀝니다. 위층에는 줄(cable)이 보입니다, 문 열림 2프레임 뒤 그 층으로 스크롤합니다. 움직임 줄이기면 바로 그 층.
 - 쉬는 곳(`pantry`·`rest`·옥상): 어느 곳으로 갈지는 화면이 고르고 서버 데이터는 상태만 씁니다.
 - 로비 경비·행인·차는 장식이고 데이터와 무관합니다.
@@ -106,7 +107,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 ## 3. 캐릭터 시트 계약 (MOTION.md a4b45bc 그대로)
 
-- 칸 **26×30**(1배율), 기준점 **발 가운데 (13, 28)**. 시트 **104×330**(4열 × 11행). 행 순서가 계약입니다.
+- 칸 **26×30**(1배율), 기준점 **발 가운데 (13, 28)**. 시트 **104×390**(4열 × 13행). 행 순서가 계약입니다.
 
 | 행 | 이름 | 프레임 | 한 프레임 | 반복 | 움직임 줄이기 멈춤 |
 |---|---|---|---|---|---|
@@ -121,8 +122,10 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | 8 | `hand_up_stand` | 2 | 450ms | 무한 | 0 |
 | 9 | `walk_down` | 4 | 120ms | 무한 | 걷지 않음. 선택 행(4방향 테마) |
 | 10 | `walk_up` | 4 | 120ms | 무한 | 같음. 뒷모습(눈·입·안경 없음, 귀는 body 층) |
+| 11 | `ride` | 2 | 600ms | 무한 | 선택 행, 이번 Phase 미사용. 상자 안 앞모습 |
+| 12 | `ride_lurch` | 2 | 100ms | 한 번 | 선택 행, 이번 Phase 미사용. 출발·도착 때 무릎 굽힘 → `ride` |
 
-- 테마는 프레임 수만 늘릴 수 있습니다. **이름·행 순서·칸 크기·기준점은 바꾸지 않습니다.** 새 동작은 행 11부터 덧붙입니다. 행 9·10은 선택이고, 없으면 좌우 걷기로 대신합니다.
+- 테마는 프레임 수만 늘릴 수 있습니다. **이름·행 순서·칸 크기·기준점은 바꾸지 않습니다.** 새 동작은 행 13부터 덧붙입니다. 행 9–12는 선택이고, 9·10이 없으면 좌우 걷기로 대신합니다.
 - 층 여섯(아래 → 위): `body` → `outfit` → `hands` → `hair-*` → `glasses` → `prop`. 선택 층 `cap`(모자, 오피스 경비)은 `hair-*`와 `glasses` 사이에 끼웁니다(3a0b0bc `cap.png` 104×330, `hair-short`에서 뽑아 만듦). 모든 층 시트가 같은 크기·칸 배치라 요소 하나에 `background-image` 여러 장으로 겹칩니다.
 - 테마가 다시 그려도 되는 층: `outfit`(실루엣 칸 안: 앞 x 5–20 / y 14–28, 옆 x 5–19 / y 13–28), `glasses`(같은 칸), `prop`. 나머지는 팔레트만.
 - 외곽선: 자기 둘레에만, 아래 층이 칠한 칸에는 두지 않음(`make-sheet.mjs`의 `Fr.finish`). 머그만 예외.
@@ -213,7 +216,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 - 글자는 **언제나 불투명 판 위**(`--th-label-bg` 또는 공통 UI 판). 하늘·벽지·타일·차양·별밭·창 불빛·반투명 홀로 판 위에 바로 쓰지 않습니다. 이 규칙 하나로 테마마다 검사할 쌍이 아래 표로 줄어듭니다(office 1ac7d29 §3).
 - 글자/판 **4.5:1 이상**(WCAG AA). 판 테두리(`--th-label-border`)는 장식이라 글자색으로 쓰지 않습니다(office 낮 `#c9c0b0`/흰 1.8:1, 판타지 `#b07a46` 4.6:1).
-- 비텍스트(포커스 링 등) 3:1 이상. **포커스 링은 공통 두 겹**(office 제안 채택): `outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--panel)`. `--focus #3fd0ff` 하나만으로는 낮 벽·바닥 위에서 1.2–1.6:1이라 모자랍니다. 두 겹이면 낮은 바깥 `--panel` 링 13.1–17.6:1, 밤은 안쪽 `--focus` 링 7.0–9.3:1. 검사는 "두 겹 중 하나가 장면 색 모두에 ≥ 3:1".
+- 비텍스트(포커스 링 등) 3:1 이상. **포커스 링은 공통 두 겹**(office 제안, team-lead 판정): `outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--panel)`. `--focus #3fd0ff` 하나만으로는 낮 벽·바닥 위에서 1.2–1.6:1이라 모자랍니다. 두 겹이면 낮은 바깥 `--panel` 링 13.1–17.6:1, 밤은 안쪽 `--focus` 링 7.0–9.3:1. 검사는 "두 겹 중 하나가 장면 색 모두에 ≥ 3:1".
 - 상태는 색만으로 나타내지 않습니다: "!"·배지·말풍선 글자·모니터 그림 모양이 함께 바뀝니다.
 - 반투명 판 위에 실제 글(보고서 본문)을 올릴 때는 안쪽에 불투명 판을 하나 더 깝니다.
 
@@ -226,7 +229,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `--th-label-accent` / `--th-label-bg` | 로비 `2F ▲` | 5.36 | 14.83 |
 | `--th-paper-ink` / `--th-paper` | 보고서 1인칭 창 | 지금 값 | 지금 값 |
 
-**앱(공통 UI 두 벌)이 통과해야 할 쌍:** `--ink`/`--panel`(HUD), `--muted`/`--panel`, `--yellow-ink`/`--yellow`(결재 칩·`!`, office 낮 11.37 · 밤 16.99), `--pink`/`--panel`(오류), `--cyan`/`--panel`(링크).
+**앱(공통 UI 두 벌)이 통과해야 할 쌍:** 포커스 두 겹 링 / 장면 색(벽·바닥·러그·겉벽, 둘 중 하나 ≥ 3:1, 낮·밤 모두), `--ink`/`--panel`(HUD), `--muted`/`--panel`, `--yellow-ink`/`--yellow`(결재 칩·`!`, office 낮 11.37 · 밤 16.99), `--pink`/`--panel`(오류), `--cyan`/`--panel`(링크).
 
 **검사 원형:** office `docs/design/phase7/office/mock/contrast.cjs`(1ac7d29). 쌍 목록 `PAIRS`와 WCAG 휘도 계산 `ratio()`, AA 미만이면 exit 1. 구현 때 이것을 테스트로 옮깁니다: 각 테마 `tokens.css`에서 `--th-*` 값을 읽어 위 테마 쌍을, 공통 UI 두 벌에서 앱 쌍을 검사합니다. 목업의 참고 쌍 `muted`/`tile`(4.56, 아슬아슬)은 "판 없이 바닥 위 글"이라 이 계약에서는 금지이므로 검사에서 뺍니다.
 
@@ -256,7 +259,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | 역할 | 도구 | 결과 |
 |---|---|---|
 | **시트 생성**(실제 자산) | motion `make-sheet.mjs`(Node 표준 `zlib`만) | 캐릭터 층·팔레트 판·오라 PNG + 파일별 바이트 |
-| **장면 확인 렌더**(목업) | HTML(+`web/styles.css`, `<meta charset="utf-8">`) → `qlmanage -t -s 1400`, **또는 Playwright(headless Chromium)** | 900·360폭 PNG. qlmanage는 뷰포트 약 1020px 고정이라 360은 `.narrow` 래퍼. Playwright는 실제 `@media`·`prefers-reduced-motion`·`prefers-color-scheme`을 적용할 수 있어 낮·밤·360 확인에 낫습니다(office b2bfdd4). **저장소 밖 작업 폴더에만 설치**, 저장소 의존성에 넣지 않음 |
+| **장면 확인 렌더**(목업) | HTML(+`web/styles.css`, `<meta charset="utf-8">`) → `qlmanage -t -s 1400`, **또는 job tmp에 둔 Playwright(headless Chromium)** | 900·360폭 PNG. qlmanage는 뷰포트 약 1020px 고정이라 360은 `.narrow` 래퍼. Playwright는 실제 `@media`·`prefers-reduced-motion`·`prefers-color-scheme`을 적용할 수 있어 낮·밤·360 확인에 낫습니다(office b2bfdd4). **job tmp에만 설치**, 저장소 의존성에 넣지 않음. office 장면은 Playwright로 찍습니다 |
 | 장면 HTML 만들기 | 각자 생성기(themes `render.mjs`, office `mock/building.html` 등) 자유 | 단, 캐릭터는 `make-sheet.mjs` 시트를 `<img style="image-rendering:pixelated">` 정수배로 넣음(직접 그리지 않음) |
 
 - qlmanage는 자기 시간 제한을 겁니다: `perl -e 'alarm 150; exec @ARGV' qlmanage -t -s 1400 -o <out> <file>.html`. 생성 → `ls`로 HTML 확인 → 한 장씩 렌더 → PNG 확인.
