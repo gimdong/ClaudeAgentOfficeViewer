@@ -8,7 +8,7 @@ const { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync,
 const { connect } = require("node:net");
 const { dirname, join } = require("node:path");
 
-const PLUGIN_VERSION = "2.0.0-beta.15";
+const PLUGIN_VERSION = "2.0.0-beta.16";
 const C = {
   infoReq: "claude-office hook req v1",
   infoRes: "claude-office hook res v1",
