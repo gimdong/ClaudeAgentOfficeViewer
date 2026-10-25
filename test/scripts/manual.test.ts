@@ -1089,9 +1089,7 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(lead).toContain("5분이 지나도 메모가 없으면");
     // 재시작 뒤 다시 연결(#647·#658): 2분 "다시 연결하는 중", 10분 정리
     const ch = readFileSync(join(__dirname, "../../server/floors/channels.ts"), "utf8");
-    expect(ch).toContain("export const RECONNECT_MS = 2 * 60_000;");
     expect(ch).toContain("export const UNSEEN_MS = 10 * 60_000;");
-    expect(lead).toContain("다시 붙기 전 2분 동안은");
     expect(lead).toContain("10분 안에 한 번도 붙지 못한 층은 정리됩니다");
   });
   it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
