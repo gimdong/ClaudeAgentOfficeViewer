@@ -65,7 +65,9 @@ export class QuestionBoard {
       if (n) this.changed();
       return;
     }
-    if (ev !== "Stop" || !this.o.lastText || this.reported.has(conv)) return;
+    if (ev !== "Stop" || !this.o.lastText) return;
+    // 보고 턴의 Stop 하나만 건너뛴다 — 대시보드 지시로 시작한 턴은 UserPromptSubmit이 없을 수 있다(B337)
+    if (this.reported.delete(conv)) return;
     const read = () => this.o.lastText!(conv).catch(() => null);
     let text = await read();
     if (typeof text === "object" && text) {

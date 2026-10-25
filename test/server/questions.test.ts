@@ -157,11 +157,20 @@ describe("B335 ③: 리드가 그 턴에 submit_report를 냈으면 그 Stop은 
     await b.onEvent(ev("PreToolUse", {}, submit));
     await b.onEvent(ev("Stop"));
     expect(b.list("c1")).toEqual([]);
-    await b.onEvent(ev("Stop")); // 같은 턴 안의 두 번째 Stop도
-    expect(b.list("c1")).toEqual([]);
     await b.onEvent(ev("UserPromptSubmit"));
     await b.onEvent(ev("Stop"));
     expect(b.list("c1")).toHaveLength(1);
+  });
+
+  it("B337: 건너뛰는 것은 그 턴의 Stop 하나 — UserPromptSubmit 없이 이어진 다음 턴(channel 지시로 시작)의 물음 Stop은 띄운다", async () => {
+    let text = "보고서를 제출했습니다. 검토해 주시겠어요?";
+    const b = new QuestionBoard({ lastText: async () => text });
+    await b.onEvent(ev("PreToolUse", {}, submit));
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toEqual([]);
+    text = "다음 작업은 B로 갈까요?"; // UPS 없이 다음 턴
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1").map((q) => q.text)).toEqual([text]);
   });
 
   it("팀원·서브에이전트의 submit_report, 다른 도구, 다른 대화는 리드의 Stop 판정을 막지 않는다", async () => {
