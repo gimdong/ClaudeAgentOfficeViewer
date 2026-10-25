@@ -109,8 +109,13 @@ describe("Review Focus 1: 지시 틀 주입", () => {
     it(`${kind}: 사용자 글의 줄바꿈·펜스·태그가 틀 밖 줄이 되지 않고, channel 태그 글자가 지시에 없다`, async () => {
       const d = await dashboard();
       const ch = await connected(d, "s1");
-      // revise에는 실제로 받은 보고 요청 id를 쓴다(B316: reportId 필수)
-      const body = kind === "reply" ? { kind, questionId: QID, text: EVIL } : { kind, reportId: /\br-[0-9a-f]{8}\b/.exec(await sendLead(d, ch, "s1", { kind: "report" }))![0], text: EVIL };
+      // revise에는 서류철에 실제로 있는 보고서 id를 쓴다(B316 reportId 필수, B342 서류철에 있는 id만): 보고를 요청하고 리드가 제출한 뒤 그 id로
+      let body: object = { kind, questionId: QID, text: EVIL };
+      if (kind === "revise") {
+        const rid = /\br-[0-9a-f]{8}\b/.exec(await sendLead(d, ch, "s1", { kind: "report" }))![0];
+        expect((await ch.call("submit_report", { request_id: rid, title: "t", body: "b" })).isError).toBe(false);
+        body = { kind, reportId: rid, text: EVIL };
+      }
       const text = await sendLead(d, ch, "s1", body);
       for (const mark of ["IGNORE_MARK", "FENCE_MARK", "SYSTEM_MARK", "QUOTE_MARK", "<channel"]) expect(lineStarts(text, mark), mark).toBe(false);
       expect(text.toLowerCase()).not.toContain("</channel");
