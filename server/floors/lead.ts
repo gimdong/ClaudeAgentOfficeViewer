@@ -41,6 +41,9 @@ export function leadInstruct(
   }
   const built = buildLead(body, `r-${randomBytes(4).toString("hex")}`, members, { memo });
   if (!built.ok) return { status: 400, body: { error: built.error } };
+  // 결재는 그 층 서류철에 있는 보고서에만(qa #659 — 틀이 사실 아닌 승인을 만들지 않게). 형식(B316 400)을 먼저 본 뒤
+  const rid0 = (b as { reportId?: unknown }).reportId as string;
+  if ((built.kind === "approve" || built.kind === "revise") && reports && reports.find(floorId, rid0)?.kind !== "report") return { status: 404, body: { error: "report" } };
   const rid = (body as { reportId?: unknown }).reportId;
   const sent: LeadSent = { floor: floorId, kind: built.kind, requestId: built.id, ...(typeof b.member === "string" ? { member: b.member } : {}), ...(typeof b.handoverId === "string" ? { handoverId: b.handoverId } : {}), ...(typeof rid === "string" ? { reportId: rid } : {}) };
   const r = hub.instruct(floorId, built.text, paused, built.holdKey, sent);

@@ -298,6 +298,20 @@ describe("POST /api/floors/:id/lead(스펙 2장)", () => {
     expect(after.held).toBeUndefined();
   });
 
+  it("qa #659: 서류철에 없는 보고서 id·인수인계 id에 대한 결재는 404 report — 보내지 않는다(사실 아닌 승인을 만들지 않음)", () => {
+    const store = new ReportStore();
+    store.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
+    store.add("s1", { id: "r-22222222", kind: "handover", member: "a", body: "m" });
+    let sent = 0;
+    const hub = { instruct: () => (sent++, { ok: true as const, id: "i", state: "sent" as const }) };
+    for (const body of [{ kind: "approve", reportId: "r-00000000" }, { kind: "revise", reportId: "r-00000000", text: "x" }, { kind: "approve", reportId: "r-22222222" }]) {
+      expect(leadInstruct(hub, "s1", false, body, [], store), JSON.stringify(body)).toEqual({ status: 404, body: { error: "report" } });
+    }
+    expect(leadInstruct(hub, "s2", false, { kind: "approve", reportId: "r-11111111" }, [], store).status).toBe(404); // 다른 층의 보고서
+    expect(sent).toBe(0);
+    expect(leadInstruct(hub, "s1", false, { kind: "approve", reportId: "r-11111111" }, [], store).status).toBe(200);
+  });
+
   it("연결된 층에 바로 보낸 결재는 그 자리에서 도장(승인됨·수정 요청), 보관이면 보관됨", () => {
     const store = new ReportStore();
     store.add("s1", { id: "r-11111111", kind: "report", title: "t", from: "team-lead", body: "b" });
