@@ -62,6 +62,8 @@ Sending instructions to a running floor and starting a new floor from the dashbo
 
 **Working with the lead** (same experimental feature, only on floors with a channel connection): request reports from a floor's lead and approve them or send revisions, answer the lead's or a teammate's questions from the dashboard, send teammates off duty or let them go with a handover note. On floors you opened yourself in a terminal these buttons are dimmed. See the [manual](docs/manual/en.html#lead).
 
+When the dashboard restarts, floors it started reconnect on their own (usually within about 30 seconds). **Upgrading from beta.15 or earlier:** floors that were already running do not reconnect the first time; after they are cleaned up 10 minutes later, reconnect them with 작업 지시 켜기 (reopen).
+
 ## For administrators
 
 Managed settings to allow the plugin (and, for plugins from earlier versions, its local HTTP hook URL), and what the PLAN bar shows for each plan: [docs/admin.md](docs/admin.md).
