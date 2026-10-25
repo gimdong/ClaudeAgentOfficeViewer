@@ -1034,7 +1034,7 @@ describe("사용설명서(docs/manual/index.html)", () => {
   });
 
   it("Phase 6a: 부록 C 설치본 확인 8항목(스펙 9장) + 원격 Linux 터널(B296)", () => {
-    const c = html.slice(html.indexOf('<h2 id="s10">'), html.indexOf("</main>"));
+    const c = html.slice(html.indexOf('<h2 id="s10">'), html.indexOf('<h2 id="s11">'));
     const items = c.slice(c.indexOf('<ol class="install-checks">'), c.indexOf("</ol>")).match(/<li>/g) ?? [];
     expect(items.length).toBe(9);
     for (const s of ["정책이 막는지", "허용·거부가 그대로 적용되는지", "먼저 답하면 손들기가 닫히는지", "대시보드를 끄면 평소처럼 묻는지", "다른 hook과 함께 쓸 때", "작업 폴더와 프로젝트", "대화에 글이 끼어들지 않는지", "<code>claude --debug</code>", "<code>cancelled</code>", `<code>${UID_REJECT_BODY}</code>`]) expect(c, s).toContain(s);
@@ -1068,7 +1068,7 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
       LEAD_TEXT.notLaunched, LEAD_TEXT.failed, CH_TEXT.instructPaused, CH_TEXT.briefMemory, LEAD_TEXT.archiveNote, LEAD_TEXT.optionsHelp, LEAD_TEXT.memberNote("developer"),
       LEAD_TEXT.held, LEAD_TEXT.answeredTerminal, LEAD_TEXT.replyOff, LEAD_TEXT.retireBody("designer"), LEAD_TEXT.chipAwait,
       LEAD_TEXT.stamp.pending, LEAD_TEXT.stamp.approved, LEAD_TEXT.stamp.revise, LEAD_TEXT.stampHandoverPending,
-      LEAD_TEXT.stampHeld, LEAD_TEXT.heldLine.approve, LEAD_TEXT.heldLine.revise, CMD_TEXT.retiring, CMD_TEXT.retireResume, LEAD_TEXT.notLaunchedRestart, CMD_TEXT.replyFolder(2),
+      LEAD_TEXT.stampHeld, LEAD_TEXT.heldLine.approve, LEAD_TEXT.heldLine.revise, CMD_TEXT.retiring, CMD_TEXT.retireResume, LEAD_TEXT.notLaunchedRestart, CMD_TEXT.replyFolder(2), LEAD_TEXT.reconnecting, CH_TEXT.notConnected,
     ]) expect(lead, t).toContain(`<code>${t}</code>`);
     for (const t of [LEAD_TEXT.reviseOpen, LEAD_TEXT.reviseSend, LEAD_TEXT.approve, LEAD_TEXT.rehire, LEAD_TEXT.options, LEAD_TEXT.free, LEAD_TEXT.send, LEAD_TEXT.retireGo]) expect(lead, t).toContain(`<strong>${t}</strong>`);
     expect(lead).toContain(`${LEAD_MAX.toLocaleString("en-US")}자까지`);
@@ -1087,6 +1087,12 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(lead).toContain("마지막 활동이 1시간 넘은 팀원");
     expect(n(/RETIRE_NUDGE_MS = (\d+) \* 60_000/)).toBe(5);
     expect(lead).toContain("5분이 지나도 메모가 없으면");
+    // 재시작 뒤 다시 연결(#647·#658): 2분 "다시 연결하는 중", 10분 정리
+    const ch = readFileSync(join(__dirname, "../../server/floors/channels.ts"), "utf8");
+    expect(ch).toContain("export const RECONNECT_MS = 2 * 60_000;");
+    expect(ch).toContain("export const UNSEEN_MS = 10 * 60_000;");
+    expect(lead).toContain("다시 붙기 전 2분 동안은");
+    expect(lead).toContain("10분 안에 한 번도 붙지 못한 층은 정리됩니다");
   });
   it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
     const b = sec('<h3 id="building-info">', "<h3>위쪽 막대의 숫자</h3>");
@@ -1124,9 +1130,9 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
       expect(prose, t).toContain(`<code>${t}</code>`);
     }
   });
-  it("부록 D 실제 세션 확인 9항목(스펙 11장 f·12장 g)", () => {
+  it("부록 D 실제 세션 확인 10항목(스펙 11장 f·12장 g, 올린 직후 층)", () => {
     const d = html.slice(html.indexOf('<h2 id="s11">'), html.indexOf("</main>"));
-    expect((d.slice(d.indexOf('<ol class="lead-checks">'), d.indexOf("</ol>")).match(/<li>/g) ?? []).length).toBe(9);
+    expect((d.slice(d.indexOf('<ol class="lead-checks">'), d.indexOf("</ol>")).match(/<li>/g) ?? []).length).toBe(10);
     for (const s of ["새 팀원이 옛 기억을 모르는지", "팀원이 channel에 따로 연결하지 않는지", "Claude Code 2.1.304에서 확인했습니다"]) expect(d, s).toContain(s);
     // 판별 인자 세 개가 channel 서버의 TEAMMATE_FLAGS와 같다(f02a6d0)
     const flags = /const TEAMMATE_FLAGS = \[([^\]]*)\]/.exec(readFileSync(join(__dirname, "../../plugins/claude-office/channel/server.mjs"), "utf8"))![1].match(/"([^"]+)"/g)!.map((x) => x.slice(1, -1));
