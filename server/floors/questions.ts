@@ -3,6 +3,7 @@ import type { ChatQuestionView } from "../../src/shared/types";
 import { detectAsk, tailText } from "../events/askHeuristic";
 import { agentOf, type AgentRef } from "../events/summarize";
 import { errInfo, getLogger } from "../log";
+import { CHANNEL_TOOL_PREFIX } from "./control";
 
 interface Q extends ChatQuestionView { conv: string; at: number }
 /** Stop 때 이번 턴 글이 아직 기록되지 않았으면(behind) 이만큼 기다려 한 번 더 읽는다(B324 I-B) */
@@ -17,10 +18,14 @@ type LastText = string | null | { behind: true };
  *   실제로 보낼 때 지우며, 보관한 답을 지우면 다시 "open"(B309). 메모리에만 — 대시보드를 다시 켜면 사라진다
  * 키는 대화 키(conv, hook의 정규화된 session_id) — 스냅샷이 층의 이벤트를 찾는 키와 같다
  * - B324 I-B: 대화마다 마지막으로 지운(답한) 질문 글을 기억해 Stop이 같은 글을 다시 읽으면 띄우지 않는다
+ * - B335 ③: 그 턴(마지막 UserPromptSubmit 뒤)에 리드 본인이 submit_report를 불렀으면 그 턴의 Stop은 판정하지 않는다 — 보고 뒤 "검토해 주시겠어요?"가
+ *   서류철 대신 답 칸으로 사용자를 보내지 않게
  */
 export class QuestionBoard {
   private readonly byConv = new Map<string, Map<string, Q>>();
   private readonly lastGone = new Map<string, string>();
+  /** 이번 턴에 리드가 보고서를 낸 대화 */
+  private readonly reported = new Set<string>();
   constructor(private readonly o: { lastText?: (conv: string) => Promise<LastText>; onChange?: () => void; now?: () => number } = {}) {}
 
   private changed(): void {
@@ -51,6 +56,8 @@ export class QuestionBoard {
     const agent = agentOf(input);
     if (typeof conv !== "string" || !agent || agent.name !== "team-lead" || agent.sub) return;
     const ev = input.hook_event_name;
+    if (ev === "UserPromptSubmit") this.reported.delete(conv);
+    else if (ev === "PreToolUse" && input.tool_name === `${CHANNEL_TOOL_PREFIX}submit_report`) this.reported.add(conv);
     if (ev === "UserPromptSubmit" || ev === "PreToolUse") {
       const desks = this.byConv.get(conv);
       let n = 0;
@@ -58,7 +65,7 @@ export class QuestionBoard {
       if (n) this.changed();
       return;
     }
-    if (ev !== "Stop" || !this.o.lastText) return;
+    if (ev !== "Stop" || !this.o.lastText || this.reported.has(conv)) return;
     const read = () => this.o.lastText!(conv).catch(() => null);
     let text = await read();
     if (typeof text === "object" && text) {

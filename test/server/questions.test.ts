@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../server/app";
 import { ChannelHub } from "../../server/floors/channels";
 import { QuestionBoard, STOP_REREAD_MS } from "../../server/floors/questions";
+import { CHANNEL_TOOL_PREFIX } from "../../server/floors/control";
 import { ReplayWindow, deriveKeys } from "../../server/hooks/v2";
 import { readLastAssistantText, readLastAssistantTurn } from "../../server/lib/jsonlTail";
 import { Logger, setLogger } from "../../server/log";
@@ -144,6 +145,32 @@ describe("B324 I-B: Stop 순간 앞 턴 글로 다시 뜨지 않는다", () => {
       }
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe("B335 ③: 리드가 그 턴에 submit_report를 냈으면 그 Stop은 '답을 기다립니다'를 만들지 않는다", () => {
+  const submit = { tool_name: `${CHANNEL_TOOL_PREFIX}submit_report`, tool_input: { request_id: "r-11111111", title: "t", body: "b" } };
+  it("UserPromptSubmit 뒤 리드 본인의 submit_report가 있으면 그 턴의 Stop은 건너뛰고, 다음 턴(UserPromptSubmit 뒤)에는 다시 판정한다", async () => {
+    const b = board("보고서를 제출했습니다. 검토 후 승인해 주시겠어요?");
+    await b.onEvent(ev("UserPromptSubmit"));
+    await b.onEvent(ev("PreToolUse", {}, submit));
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toEqual([]);
+    await b.onEvent(ev("Stop")); // 같은 턴 안의 두 번째 Stop도
+    expect(b.list("c1")).toEqual([]);
+    await b.onEvent(ev("UserPromptSubmit"));
+    await b.onEvent(ev("Stop"));
+    expect(b.list("c1")).toHaveLength(1);
+  });
+
+  it("팀원·서브에이전트의 submit_report, 다른 도구, 다른 대화는 리드의 Stop 판정을 막지 않는다", async () => {
+    for (const [agent, extra, conv] of [[MATE("reviewer"), submit, "c1"], [SUB, submit, "c1"], [{}, { tool_name: `${CHANNEL_TOOL_PREFIX}ask_user`, tool_input: {} }, "c1"], [{}, submit, "c2"]] as const) {
+      const b = board("다음으로 진행할까요?");
+      await b.onEvent(ev("UserPromptSubmit"));
+      await b.onEvent({ ...ev("PreToolUse", agent, extra), session_id: conv });
+      await b.onEvent(ev("Stop"));
+      expect(b.list("c1"), JSON.stringify([agent, extra.tool_name, conv])).toHaveLength(1);
     }
   });
 });
