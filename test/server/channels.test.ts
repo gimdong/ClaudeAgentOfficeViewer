@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, RECONNECT_MS, UNSEEN_MS } from "../../server/floors/channels";
+import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, UNSEEN_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -465,9 +465,10 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number) }] });
   });
 
-  it(`#658: 복원했지만 아직 다시 붙지 않은(증명 성공 전) 층은 ${RECONNECT_MS / 60_000}분 동안 reconnecting — 증명에 성공해 붙거나 시간이 지나면 없다(hello만으로는 남음). 새로 띄운 층은 처음부터 없다`, () => {
+  it(`#658: 복원했지만 아직 다시 붙지 않은(증명 성공 전) 층은 ${UNSEEN_MS / 60_000}분 동안 reconnecting(B341 — 2분·5분에도) — 증명에 성공해 붙거나 시간이 지나면 없다(hello만으로는 남음). 새로 띄운 층은 처음부터 없다`, () => {
     const keyDir = join(tmp, "floors");
-    let t = 1_800_000_000_000;
+    const t0 = 1_800_000_000_000;
+    let t = t0;
     const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, now: () => t });
     const h = mk();
     h.load();
@@ -477,8 +478,10 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     const again = mk();
     again.load();
     expect(again.view("s1")?.reconnecting).toBe(true);
-    t += RECONNECT_MS - 1;
-    expect(again.view("s2")?.reconnecting).toBe(true);
+    for (const min of [2, 5]) {
+      t = t0 + min * 60_000;
+      expect(again.view("s2")?.reconnecting, `${min}분`).toBe(true);
+    }
     // hello만 오고 증명이 틀리면 표시는 남는다 — 증명이 성공해 붙었을 때만 끈다(team-lead 판정)
     const kid = createHmac("sha256", key).update("kid").digest("hex");
     const nonce = "ab".repeat(32);
@@ -493,7 +496,9 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     close(); // 한 번 붙은 뒤 끊기면 "다시 연결하는 중"이 아니라 연결 없음
     expect(again.view("s1")).toMatchObject({ connected: false });
     expect(again.view("s1")?.reconnecting).toBeUndefined();
-    t += 2;
+    t = t0 + UNSEEN_MS;
+    expect(again.view("s2")?.reconnecting).toBe(true);
+    t = t0 + UNSEEN_MS + 1;
     expect(again.view("s2")?.reconnecting).toBeUndefined();
   });
 

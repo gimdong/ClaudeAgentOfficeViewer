@@ -69,7 +69,7 @@ describe("ReportFolder", () => {
     fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
     expect(screen.getByText(LEAD_TEXT.reconnecting)).toBeTruthy();
     expect(screen.getByRole("button", { name: LEAD_TEXT.approve }).getAttribute("aria-disabled")).toBe("true");
-    expect(document.body.textContent).not.toContain("옮겨 열기");
+    expect(document.body.textContent).not.toContain(LEAD_TEXT.notLaunchedRestart);
   });
 
   it("channel 없음: 결재 버튼 비활성 + 이유, 눌러도 부르지 않음", () => {
@@ -156,7 +156,7 @@ describe("ReplyDialog", () => {
   it("#658: 다시 연결하는 중이면 답 칸도 그 이유만(옮겨 열기 권유 없음)", () => {
     render(<ReplyDialog {...replyProps(q(), { channel: "reconnecting" })} />);
     expect(document.querySelector(".rd-off")!.textContent).toBe(LEAD_TEXT.reconnecting);
-    expect(document.body.textContent).not.toContain("옮겨 열기");
+    expect(document.body.textContent).not.toContain(LEAD_TEXT.replyOff);
   });
 
   it("제안된 선택지: 번호를 붙여 보이고, 고른 번호만 보낸다", () => {

@@ -170,13 +170,14 @@ describe("B335 — 답을 기다립니다 글자·서류철 따로 열기", () =
 describe("#658 다시 연결하는 중", () => {
   const recon = { channel: { connected: false, tmux: "co-1", held: 0, reconnecting: true } } satisfies Partial<SessionView>;
   it("채널 상태는 reconnecting — 패널 지시 절은 버튼을 끄고 '다시 연결하는 중' 이유만(옮겨 열기·확인 창 안내 없음)", () => {
-    expect(LEAD_TEXT.reconnecting).toBe("다시 연결하는 중입니다 — 잠시 뒤 저절로 쓸 수 있습니다");
+    expect(LEAD_TEXT.reconnecting).toBe("다시 연결하는 중입니다 — 잠시 뒤 저절로 쓸 수 있습니다. 10분이 지나도 안 되면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요."); // B341 qa 확정
     expect(channelOf(recon)).toBe("reconnecting");
     const s = makeSession({ ...recon, members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester" })] });
     render(<LeadCommands session={s} member={s.members[1]} announce={() => {}} lead={opener()} />);
     expect(document.querySelector(".ap-cmd-why")!.textContent).toBe(LEAD_TEXT.reconnecting);
     expect(screen.getByRole("button", { name: CMD_TEXT.offduty }).getAttribute("aria-disabled")).toBe("true");
-    expect(document.body.textContent).not.toContain("옮겨 열기");
+    // 곧바로 옮겨 열기를 권하는 글(W3)·확인 창 글은 없다 — 10분 뒤의 조건부 안내만(B341)
+    expect(document.body.textContent).not.toContain(LEAD_TEXT.notLaunched);
     expect(document.body.textContent).not.toContain(CH_TEXT.notConnected);
   });
 });
