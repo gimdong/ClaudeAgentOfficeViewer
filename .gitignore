@@ -5,3 +5,4 @@ claude-office.config.json
 .logs/
 release/
 beta-feedback/
+.DS_Store
