@@ -20,7 +20,7 @@ export interface ChannelView {
   tmux: string;
   held: number;
   last?: "sent" | "delivered";
-  /** 재시작 때 등록 파일에서 복원했고 아직 hello가 없음(복원 뒤 RECONNECT_MS 안, #658) */
+  /** 재시작 때 등록 파일에서 복원했고 아직 다시 붙지 않음(증명 성공 전, 복원 뒤 RECONNECT_MS 안, #658) */
   reconnecting?: true;
 }
 /** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
@@ -31,7 +31,7 @@ export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
-/** restoredAt: 복원 뒤 hello 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음(UNSEEN_MS 뒤 정리, #658) */
+/** restoredAt: 복원 뒤 아직 증명 성공 전(다시 연결하는 중 표시, RECONNECT_MS까지), restored: 복원 뒤 한 번도 연결하지 않음(UNSEEN_MS 뒤 정리, #658) */
 interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
@@ -39,7 +39,7 @@ const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
-/** 복원한 층이 이 시간 안에 hello를 보내지 않으면 "다시 연결하는 중"을 거두고 연결 없음으로 보인다(#658) */
+/** 복원한 층이 이 시간 안에 다시 붙지 않으면 "다시 연결하는 중"을 거두고 연결 없음으로 보인다(#658) */
 export const RECONNECT_MS = 2 * 60_000;
 /** 등록 파일(스펙 12장 n): 열쇠 폴더 안. 층마다 {sessionId, tmux, at}만 — 열쇠·핸드셰이크 상태·보관 지시는 쓰지 않는다 */
 const REGISTRY = "registry.json";
@@ -269,7 +269,6 @@ export class ChannelHub {
   hello(kid: string, nonce: string): { snonce: string; proof: string } | null {
     const f = this.byKid(kid)?.[1];
     if (!f) return null;
-    delete f.restoredAt; // 복원한 층의 channel이 돌아왔다(#658)
     const now = (this.o.now ?? Date.now)();
     f.pending = f.pending.filter((p) => now - p.at <= PENDING_MS);
     if (f.pending.length >= MAX_PENDING) f.pending.shift();
@@ -302,7 +301,9 @@ export class ChannelHub {
     }
     f.busyLogged = false;
     f.conn = res;
+    // 복원한 층이 증명에 성공해 붙었다 — "다시 연결하는 중"과 10분 정리 기준을 함께 끈다(#658, team-lead 판정: hello만으로는 끄지 않음)
     delete f.restored;
+    delete f.restoredAt;
     f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
     f.ackToken = randomBytes(32).toString("hex");
     f.nonces = new Set();

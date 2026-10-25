@@ -465,7 +465,7 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number) }] });
   });
 
-  it(`#658: 복원했지만 아직 hello가 없는 층은 ${RECONNECT_MS / 60_000}분 동안 reconnecting — hello가 오거나 시간이 지나면 없다. 새로 띄운 층은 처음부터 없다`, () => {
+  it(`#658: 복원했지만 아직 다시 붙지 않은(증명 성공 전) 층은 ${RECONNECT_MS / 60_000}분 동안 reconnecting — 증명에 성공해 붙거나 시간이 지나면 없다(hello만으로는 남음). 새로 띄운 층은 처음부터 없다`, () => {
     const keyDir = join(tmp, "floors");
     let t = 1_800_000_000_000;
     const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, now: () => t });
@@ -479,7 +479,19 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(again.view("s1")?.reconnecting).toBe(true);
     t += RECONNECT_MS - 1;
     expect(again.view("s2")?.reconnecting).toBe(true);
-    again.hello(createHmac("sha256", key).update("kid").digest("hex"), "ab".repeat(32));
+    // hello만 오고 증명이 틀리면 표시는 남는다 — 증명이 성공해 붙었을 때만 끈다(team-lead 판정)
+    const kid = createHmac("sha256", key).update("kid").digest("hex");
+    const nonce = "ab".repeat(32);
+    const hi = again.hello(kid, nonce)!;
+    let close = () => {};
+    const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false } as never;
+    expect(again.attach({ kid, snonce: hi.snonce, proof: "0".repeat(64) }, res)).toBeNull();
+    expect(again.view("s1")?.reconnecting).toBe(true);
+    const hi2 = again.hello(kid, nonce)!;
+    expect(again.attach({ kid, snonce: hi2.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi2.snonce}`).digest("hex") }, res)).toMatchObject({ id: "s1" });
+    expect(again.view("s1")?.reconnecting).toBeUndefined();
+    close(); // 한 번 붙은 뒤 끊기면 "다시 연결하는 중"이 아니라 연결 없음
+    expect(again.view("s1")).toMatchObject({ connected: false });
     expect(again.view("s1")?.reconnecting).toBeUndefined();
     t += 2;
     expect(again.view("s2")?.reconnecting).toBeUndefined();

@@ -3,7 +3,7 @@ import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk } from "../office/Desk";
 import { CMD_TEXT } from "../office/leadCmdText";
-import { shortTime } from "../office/leadText";
+import { LEAD_TEXT, shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { Icon } from "../pixel/Icon";
@@ -165,7 +165,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             noteId={noteId}
             reopening={reopening}
             onReopen={() => openReopen(session)}
-            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: CH_TEXT.notConnected, onClick: () => {} }}
+            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: ch.reconnecting ? LEAD_TEXT.reconnecting : CH_TEXT.notConnected, onClick: () => {} }}
           />
           {(sw.error ?? hider.error) && (
             <span className="fc-err" role="alert">

@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: true
 vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import("../../web/useSnapshot")>()), useSnapshot: () => state.value }));
 
 import { App } from "../../web/App";
+import { LEAD_TEXT } from "../../web/office/leadText";
 import { CH_TEXT } from "../../web/floors/ChannelDialogs";
 
 const DIAG = { doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" };
@@ -81,6 +82,10 @@ describe("작업 지시(스펙 6장)", () => {
     rerender(<App />);
     expect(instructBtn().getAttribute("title")).toBe(CH_TEXT.notConnected);
     expect(screen.getByTestId("channel-chip").textContent).toBe("대시보드가 띄움 · 연결 전");
+    // B339: 다시 연결하는 중(재시작 뒤 복원)이면 패널·서류철과 같은 글
+    show([floorOf({ channel: { connected: false, tmux: "co-1", held: 0, reconnecting: true } })]);
+    rerender(<App />);
+    expect(instructBtn().getAttribute("title")).toBe(LEAD_TEXT.reconnecting);
   });
 
   it("연결된 층: 창에서 보내면 POST instruct, 작업 중이면 안내 한 줄, 칩은 전달됨", async () => {
