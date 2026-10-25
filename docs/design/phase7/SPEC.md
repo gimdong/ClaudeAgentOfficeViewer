@@ -1,10 +1,10 @@
-# Phase 7 — 테마 계약 (판 2)
+# Phase 7 — 테마 계약 (판 3)
 
 담당 designer(Phase 7 리드). **구현 전 계약 초안**입니다. 화면 글자는 모두 「안」이고 qa 검토 전입니다(규칙 9).
 
 입력:
 - designer-motion `design/p7-motion` a4b45bc(행 9·10 `walk_down`·`walk_up`까지): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
-- designer-themes `design/p7-themes` 1cf46fa(74ff0c2 + `--th-*` 이름 맞춤): `docs/design/phase7/themes/SPEC.md`(슬롯 대응표·팔레트·대비)
+- designer-themes `design/p7-themes` 1cf46fa(74ff0c2 + `--th-*` 이름 맞춤), 3a0b0bc `docs/design/phase7/office-exterior/`(오피스 바깥 시트·`extras.json`·`make-exterior.mjs`): `docs/design/phase7/themes/SPEC.md`(슬롯 대응표·팔레트·대비)
 - designer-office `design/p7-office` 1ac7d29: `docs/design/phase7/office/NOTES.md`(장면 칸·크기·움직임·대비), `mock/tokens.js`(낮·밤 색), `mock/contrast.cjs`(AA 검사)
 - 출발점: 본 트리 `docs/design/themes/SPEC.md`(79045fc, 4446d1a) §4·§5 초안. 이 문서가 그것을 대신하고, 그쪽은 더 고치지 않습니다. 그 파일 §3 걷기 띠는 참고로만 두고 시트 규칙은 MOTION.md 하나를 따릅니다.
 
@@ -56,7 +56,8 @@ themes/<id>/
 
 - `contract`가 앱이 아는 값보다 크면 그 테마를 끄고 오피스로 그립니다.
 - `words`가 빠진 칸은 오피스 낱말을 씁니다. 낱말은 **이름만** 바꿉니다. 버튼·안내·오류 문장은 테마가 바꾸지 않습니다(§5).
-- `variants`는 하나 이상. 변형마다 `ui`(공통 UI 벌, §4.1)와 장면 시트가 따로입니다. 오피스는 `day`(기본)·`night`. 다른 테마는 변형 하나여도 됩니다.
+- `variants`는 하나 이상. 변형마다 `ui`(공통 UI 벌, §4.1)와 장면 시트가 따로입니다. 오피스는 `day`·`night`. 다른 테마는 변형 하나여도 됩니다.
+- **변형 고르기(team-lead 판정):** 빌딩 정보 창에 `낮 / 밤 / 시스템 따라`(「안」) 설정. **기본 낮**. `시스템 따라`는 `prefers-color-scheme`을 따르고, 시각에 따른 자동 전환은 없습니다. 값은 서버 `building.json`에 저장합니다(기기마다 같게). 변형이 하나인 테마는 이 설정을 흐리게 둡니다.
 - `frames`는 §3 표의 프레임 수를 늘릴 때만 적습니다. CSS 변수 `--frames`로 받습니다.
 
 ## 2. 테마가 채울 칸
@@ -65,8 +66,8 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 | 칸 | 필수 | 담당 | 들어가는 것 | 오피스 크기·규칙 |
 |---|---|---|---|---|
-| `sky` | 필수 | themes | 하늘 띠 셋 + 해(밤: 달·별) + 구름 | 띠는 CSS(§4 `--th-sky-*`). `sun` 24×24, `cloud` 48×14 |
-| `skyline` | 필수 | themes | 먼·가까운 풍경 두 겹 | **폭 256 반복 타일 두 장**(높이 ≤ 150). 한 장 그림 금지(목업 450×300 = 17.7KB) |
+| `sky` | 필수 | themes | 하늘 띠 셋 + 해·달 + 구름 | 띠는 CSS(§4 `--th-sky-*`). `sky.png` 176×24: 해·달 24×24, 큰 구름 40×24, 작은 구름 24×24(낮·밤 칸). 구름은 움직이지 않음 |
+| `skyline` | 필수 | themes | 먼·가까운 풍경 두 겹, 창 불빛(밤 별) | `backdrop-<v>.png` 192×128 **가로 반복 타일**(하늘 칸은 비움). 한 장 그림 금지. 창 불빛·별은 고정 표(무작위 없음) |
 | `facade` | 필수 | office | 겉벽·층 사이 판·창틀 | 9-slice(층 수에 따라 늘어남) |
 | `roof` | 필수 | office | 옥상 소품(물탱크 34×44, 실외기 30×22, 나무 32×48, 벤치 34×18, 안테나 10×62) | 간판 글은 DOM. 360폭은 소품을 줄임(테마가 숨길 순서를 적음) |
 | `room-wall` | 필수 | office | 층 안 벽·걸레받이·창·천장 등 | 무늬는 CSS(§4). 창·등은 조각 그림 |
@@ -78,9 +79,9 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `team-zone` | 필수 | office | 팀 구역 바닥·테두리 | 테두리색은 장식(글자색 아님). 팻말 글자는 DOM |
 | `lobby` | 필수 | office | 출입문 70×88, 관리실 66×88, 화분 24×50 | 장식. 로비 `2F ▲` 표시만 칸 위치를 따라감(DOM) |
 | `elevator` | 필수 | office | 칸 22×40, 문 22×42, 기계실 24×34, 줄 | 통로 폭은 공통(56px / 360폭 40px) |
-| `street` | 필수 | themes | 보도·연석·차도·차선 + 가로등 14×60, 가로수 20×44 | 무늬는 CSS(§4), 소품만 그림 |
-| `extras` | 필수 | themes | 경비·행인·방문객·바리스타·손님(사람) | §2a: motion 시트 형식 + 옷 변형만. **이름표 없음**(팀원으로 오해하지 않게) |
-| `vehicle` | 선택 | themes | 차 48×22(색별 칸) | 사람이 아닌 장식 시트 |
+| `street` | 필수 | themes | 인도·연석·차도·차선·건너편 연석 + 가로등·가로수 | `street-<v>.png` 32×60 가로 반복(인도 y 0–21, 연석 22–24, 도로 25–56, 건너편 57–59). `street-props.png` 96×48(칸 24×48, 발 = 칸 아래 가운데, 낮·밤 칸). **경계: 건물 바닥선 = 인도 위 가장자리(y 0)** |
+| `extras` | 필수 | themes | 행인·카페 손님·경비 등(사람) | §2a: motion 층 시트 + `extras.json`(사람마다 `id`·`role`·`hair`·`glasses`·`cap`·`rows`·`palette`). 새 PNG 없음, 빌드 때 슬롯 색 바꾼 판(사람당 ~2KB). 낮·밤 팔레트 같음. 서는 x는 office 칸 좌표(카운터·테이블·관리실 데스크)를 받음. **이름표 없음, 누를 수 없음, `aria-hidden`** |
+| `vehicle` | 선택 | themes | 차(오피스: 승용차·택시·버스) | `vehicles.png` 320×72, 칸 80×24, 행 = 차 종류, 열 = 오른쪽 낮·밤·왼쪽 낮·밤(왼쪽 = 뒤집기). 바퀴 아래 = y 23. 정지 그림 + `translateX`만 |
 | `report` | 필수 | office | 서류철 아이콘 | 16×16 |
 | `report-view` | 선택 | office | 보고서 1인칭 창 배경 | 본문 영역에는 불투명 판(§6) |
 
@@ -122,7 +123,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | 10 | `walk_up` | 4 | 120ms | 무한 | 같음. 뒷모습(눈·입·안경 없음, 귀는 body 층) |
 
 - 테마는 프레임 수만 늘릴 수 있습니다. **이름·행 순서·칸 크기·기준점은 바꾸지 않습니다.** 새 동작은 행 11부터 덧붙입니다. 행 9·10은 선택이고, 없으면 좌우 걷기로 대신합니다.
-- 층 여섯(아래 → 위): `body` → `outfit` → `hands` → `hair-*` → `glasses` → `prop`. 모든 층 시트가 같은 크기·칸 배치라 요소 하나에 `background-image` 여러 장으로 겹칩니다.
+- 층 여섯(아래 → 위): `body` → `outfit` → `hands` → `hair-*` → `glasses` → `prop`. 선택 층 `cap`(모자, 오피스 경비)은 `hair-*`와 `glasses` 사이에 끼웁니다(3a0b0bc `cap.png` 104×330, `hair-short`에서 뽑아 만듦). 모든 층 시트가 같은 크기·칸 배치라 요소 하나에 `background-image` 여러 장으로 겹칩니다.
 - 테마가 다시 그려도 되는 층: `outfit`(실루엣 칸 안: 앞 x 5–20 / y 14–28, 옆 x 5–19 / y 13–28), `glasses`(같은 칸), `prop`. 나머지는 팔레트만.
 - 외곽선: 자기 둘레에만, 아래 층이 칠한 칸에는 두지 않음(`make-sheet.mjs`의 `Fr.finish`). 머그만 예외.
 - 팔레트 슬롯: 피부 `S1–S3`, 머리 `H1–H3`, 옷 `C1–C3`, 바지 `P1 P2`, 신발 `K`, 외곽선 `O`. 테마·팀원 변형은 **빌드 때 슬롯 색만 바꾼 PNG**를 만듭니다. 런타임 `filter`·`hue-rotate` 금지.
@@ -169,11 +170,10 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | 토큰 | 쓰는 곳 | office 낮 | office 밤 | 판타지 | 우주선 | 사이버펑크 |
 |---|---|---|---|---|---|---|
 | `--th-page` | 빌딩 바깥 바탕 | `#d6f0fb` | `#12111f` | `#140f22` | `#05060f` | `#07040f` |
-| `--th-sky-top` / `-mid` / `-low` | 하늘 세 띠(계단) | `#7cc8f2` / `#a8dcf7` / `#d6f0fb` | `#0b0a1a` / `#15133a` / `#2a2456` | themes 렌더 값 | | |
+| `--th-sky-top` / `-mid` / `-low` | 하늘 세 띠(계단). themes 초안의 `--th-sky-bottom` = `-low` | `#7cc8f2` / `#a8dcf7` / `#d6f0fb` | `#0b0a1a` / `#15133a` / `#2a2456` | themes 렌더 값 | | |
 | `--th-wall` / `--th-wall-stripe` / `--th-baseboard` | 층 안 벽지 무늬 | `#f7f4ee` / `#eeeadf` / `#bcae97` | `tokens.js` night | `#3b2c2a` | `#1a2133` | `#120d1c` |
 | `--th-floor-a` / `-b` / `-seam` | 바닥 무늬 | `#ddd4c4` / `#d3c9b7` / `#c2b7a3` | 〃 | `#5a4030` | `#2a3348` | `#1e1630` |
 | `--th-rest-wall` / `-stripe` / `--th-awning-a` / `-b` | 카페 벽·차양 무늬 | `#f4e4c9` / `#ead6b4` / `#2f9c7a` / `#f7f4ee` | 〃 | themes | | |
-| `--th-sidewalk` / `-seam` / `--th-curb` / `--th-road` / `-edge` / `--th-lane` | 거리 무늬 | `#d9d2c5` / `#c4bcad` / `#a89f90` / `#555963` / `#474a53` / `#f3efe4` | 〃 | themes | | |
 | `--th-shaft` | 엘리베이터 통로 바탕(층 번호 글이 놓임) | office 값 | 〃 | | | |
 | `--th-team-zone` | 팀 구역 테두리·바닥(장식, 글자색 금지) | office 값 | 〃 | themes 1cf46fa | | |
 | `--th-label-bg` / `--th-label-border` / `--th-label-ink` / `--th-label-muted` | 장면 위 글 판(office `tagBg`, themes `--plate`) | `#ffffff` / `#c9c0b0` / `#1f2233` / `#555b73` | `#0e0d18` / `#3b3460` / `#e8e4ff` / `#9d97c7` | `#241a16` / `#b07a46` / `#f4ead2` / – | `#0d1424` / `#5ee0ff` / `#e6f4ff` / – | `#0a0612` / `#ff3fa4` / `#f5f0ff` / – |
@@ -181,6 +181,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `--th-paper` / `--th-paper-ink` | 보고서 1인칭 창 | 종이(지금 값) | 〃 | `#f1e2bd` / `#2e1d12` | `#0d1424` / `#e6f4ff` | `#0a0612` / `#f5f0ff` |
 | `--th-aura-1` / `-2` / `-3` | 오라 불꽃(바깥 → 심) | `#f08a1c` / `--yellow` / 흰 심 + 외곽선 1칸 | `--yellow-deep` / `--yellow` / 흰 | | | 분홍 계열 |
 
+- 거리·스카이라인·해·가로등 색은 3a0b0bc 시트에 구워 넣었으므로 CSS 토큰이 아닙니다(값은 office-exterior SPEC 표에 기록). 바깥에서 CSS 토큰은 하늘 띠뿐입니다.
 - `〃` = office `mock/tokens.js` night 값을 그대로 옮김. 빈 칸 = 그 테마 구현 때 themes 렌더 값에서 옮김(이번 Phase 구현 밖).
 - 낮 오라: 밝은 벽 위에서 노랑만으로는 안 보여 office가 바깥 주황 + 외곽선 1칸을 넣었습니다. 테마는 오라 색만 바꿀 수 있습니다(모양은 motion `aura.png`).
 - 옷 색 `--costume-*`은 토큰이 아니라 `theme.json` `palette` 목록입니다(§3).
@@ -224,12 +225,13 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 ## 7. 성능 예산
 
-- **장면 그림 합계 64KB 이하**(테마·변형 하나, gzip 전 PNG). office 낮 실측 약 37KB(목업 canvas, 최적화 전). 가장 무거운 `skyline`(17.7KB)을 폭 256 반복 타일 두 장으로 바꾸면 약 6–8KB → 약 27KB 예상. 캐릭터 층 시트·오라는 따로 합계 8,162B(a4b45bc), 팔레트 판 각 ~2KB.
+- **장면 그림 합계 64KB 이하**(테마·변형 하나, gzip 전 PNG). office 낮 실측 약 37KB(목업 canvas, 최적화 전, 바깥 포함). 바깥을 themes 3a0b0bc 시트(낮·밤 합계 **3,816B**)로 바꾸면 office 몫(약 19KB) + 바깥 약 2–3KB → **약 22KB** 예상. 캐릭터 층 시트·오라는 따로 합계 8,162B(a4b45bc), 팔레트 판 각 ~2KB.
 - 무늬(벽지·타일·차양·보도·차선)는 CSS 그라데이션이라 그림 예산에 들지 않습니다.
 - 캐릭터 하나 = `div` 하나, 층은 `background-image` 여러 장. JS 타이머 없음, `steps()`로 `background-position`만.
 - 이동은 `transform`만(`left`·`top` 금지), `image-rendering: pixelated`, 정수 배율.
 - 접힌 층·화면 밖 층·길은 `content-visibility: auto` + `.floor--offscreen`으로 `animation-play-state: paused`.
-- 장식 움직임(데이터와 무관): 구름(`translateX` 90초), 차 둘(14·18초, 서로 반대), 행인(2프레임 + `translateX` 30·40초), 그리고 테마 장식 **2프레임 이하 3곳까지**(화로 불꽃·김 등). 움직임 줄이기면 모두 멈춤. 깜빡임·밝기 변화 없음(안테나 등은 늘 켜짐). 비·네온 반사·창 불빛은 정지 그림, 무작위 패턴 금지.
+- 장식 움직임(데이터와 무관): 행인 `walk_*` + `translateX`(약 25칸/초, 화면 밖에서 반대편으로 다시 들어옴), 차 `translateX`만(가까운 차로 오른쪽, 먼 차로 왼쪽), 카페 손님 `coffee`·`idle`, 경비 `idle`. 구름은 정지. **행인 최대 2명 + 차 최대 2대를 한 곳으로 셉니다**(themes 제안 채택), 그 밖의 테마 장식은 **2프레임 이하 3곳까지**(화로 불꽃·김 등). 움직임 줄이기면 모두 멈춤. 깜빡임·밝기 변화 없음(안테나 등은 늘 켜짐). 비·네온 반사·창 불빛은 정지 그림, 무작위 패턴 금지.
+- **반투명 빛 금지:** 전조등·가로등 빛줄기 같은 반투명 덧칠은 쓰지 않습니다(어두운 바탕에서 회색 얼룩처럼 보임, 3a0b0bc). 빛은 밝은 점·불투명 도트로만.
 - 30명 층에서 메인 스레드 프레임 시간 16ms 안(qa가 성능 패널로 확인).
 
 ## 8. 지식재산권 규칙(공개 저장소)
@@ -253,14 +255,17 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 - 디더·체크 무늬처럼 사각형이 아주 많으면 qlmanage가 멈춥니다. 같은 색 가로 줄을 합치거나 PNG 타일로 넣습니다.
 - 멈춘 프로세스는 자기 PID만 끕니다(B113).
 
-## 10. 남은 일
+## 10. 판정(team-lead)과 남은 일
 
-1. director 판정:
-   - 낮·밤 전환을 사용자 선택으로 할지, 컴퓨터 시각(예: 19시~)으로 할지(office §4). 이 초안의 안은 **설정에서 고르기, 기본 낮**입니다. 시각 자동은 화면이 저절로 바뀌어 놀랄 수 있습니다.
-   - 카페·로비·옥상을 HUD 엘리베이터 버튼에 넣을지(office 안: 넣지 않음).
-   - 바깥 장면은 스크롤 끝에 한 번 보이는 것으로 함(office 안). 층이 많을 때 로비 높이를 줄이는 판은 필요하면 따로 만듭니다.
-2. qa: `words` 낱말과 `2F ▲`·`탕비실 →`·`관리실` 한·영 문구 검토.
-3. developer:
+판정:
+1. **낮·밤:** 빌딩 정보 창의 `낮 / 밤 / 시스템 따라` 설정, 기본 낮, 시각 자동 전환 없음, `building.json` 저장(§1).
+2. **HUD 엘리베이터:** 세션 층만. 카페·로비·옥상은 넣지 않습니다(§2).
+3. **바깥 장면 배치:** 하늘·옥상은 빌딩 맨 위, 로비·거리는 스크롤 맨 아래에 한 번. 층이 많아도 세션 층이 가운데에 모입니다(바깥 장면을 화면에 고정하지 않음).
+
+남은 일:
+1. qa: `words` 낱말, `낮 / 밤 / 시스템 따라`, `2F ▲`·`탕비실 →`·`관리실` 한·영 문구 검토.
+2. developer:
    - 빌드 검사 셋: 공통 토큰 금지(§4.1), 대비 쌍(§6, `contrast.cjs` 원형), 그림 예산 64KB(§7).
-   - `contract`·`variants`·`ui` 처리.
+   - `contract`·`variants`·`ui` 처리, `building.json`의 변형 설정.
    - `.q-chip` 글자색을 `--yellow-ink`로 바꾸기(§4.1).
+3. themes·office: 엑스트라 서는 x(카운터·테이블·관리실 데스크 좌표)를 맞춤. `cap` 층의 행 9·10 확인.
