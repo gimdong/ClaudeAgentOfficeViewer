@@ -23,6 +23,8 @@ export const CMD_TEXT = {
   statusLongIdle: "오래 쉬는 중",
   offSign: "퇴근",
   awaiting: "답을 기다립니다",
+  /** 답 칸 안에서 서류철로(B335 ②) */
+  replyFolder: (n: number) => `서류철 열기 · 대기 ${n}건`,
   awaitHeld: "답을 보관했습니다 — 재개할 때 확인하고 보냅니다",
   // 전임자(§6)
   predecessors: (n: number) => `전임자 ${n}`,
@@ -42,7 +44,10 @@ export const CMD_TEXT = {
   // 접근 이름(§8)
   aria: {
     folder: (n: number) => `, 결재 대기 ${n}건`,
-    await: (name: string) => `${name}, 답을 기다립니다. 답하기 열기`,
+    // extra: 결재 대기 꼬리(folder(n)) — 책상이 답 칸을 열어도 결재 대기를 알린다(B335 ②)
+    await: (name: string, extra = "") => `${name}, 답을 기다립니다${extra}. 답하기 열기`,
+    /** 책상 옆 결재 칩 버튼(B335 ②) */
+    folderOpen: (n: number) => `서류철 열기, 결재 대기 ${n}건`,
     off: (name: string) => `${name}, 퇴근함. 열기`,
     longIdle: (name: string) => `${name}, 오래 쉬는 중. 열기`,
   },

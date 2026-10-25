@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "re
 import { createPortal } from "react-dom";
 import { Icon } from "../pixel/Icon";
 import { graphemes } from "../report/text";
+import { CMD_TEXT } from "./leadCmdText";
 import { channelWhy, LEAD_MAX, LEAD_TEXT as T, type ChatQuestionView, type LeadChannel } from "./leadText";
 
 /**
@@ -15,6 +16,8 @@ export function ReplyDialog(p: {
   error: string | null;
   onSend(answer: { choice?: number; text: string }): void;
   onShowNewer?(): void;
+  /** 그 층에 대기 보고서가 있으면 서류철로 가는 버튼(B335 ②) */
+  folder?: { pending: number; onOpen(el: HTMLElement): void };
   onClose(): void;
 }) {
   const q = p.question;
@@ -77,6 +80,11 @@ export function ReplyDialog(p: {
         </div>
       )}
       <div className="rp-scroll">
+        {p.folder && p.folder.pending > 0 && (
+          <button type="button" className="rp-more rd-folder" onClick={(e) => p.folder!.onOpen(e.currentTarget)}>
+            {CMD_TEXT.replyFolder(p.folder.pending)}
+          </button>
+        )}
         {!q.ownerIsLead && <p className="rd-who">{T.memberNote(q.owner)}</p>}
         <blockquote ref={quote} className="rp-quote rd-q" tabIndex={-1} data-testid="rd-question">
           {q.text}

@@ -726,3 +726,11 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .ap-cmd-err { color: var(--red); }
 /* 휴업 중 보관된 결재 도장(디자인 phase6b §3.2, 스펙 12장 l): 아직 보내지 않음을 점선으로 */
 .rf-stamp.held { color: var(--muted); border-style: dashed; }
+
+/* B335: 답을 기다립니다 글자 말머리(①)·책상 밖 서류철 버튼(②) */
+.desk-await { position: absolute; top: 0; left: 4px; max-width: 88px; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--await); color: var(--wall); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.desk-slot { position: relative; width: 96px; }
+.desk-folder-hit { position: absolute; left: 80px; top: 60px; width: 16px; height: 16px; padding: 0; border: 0; background: none; cursor: pointer; }
+.desk-folder-btn { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); border: 0; cursor: pointer; font: inherit; font-size: 10px; }
+.desk-folder-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.rd-folder { display: block; margin: 0 0 8px; }

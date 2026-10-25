@@ -8,6 +8,8 @@ vi.mock("../../web/useSnapshot", () => ({ useSnapshot: () => state.value }));
 
 import { App } from "../../web/App";
 import { BUILDING_TEXT } from "../../web/building/BuildingInfo";
+import { CMD_TEXT } from "../../web/office/leadCmdText";
+import { LEAD_TEXT } from "../../web/office/leadText";
 
 afterEach(cleanup);
 
@@ -104,6 +106,27 @@ describe("App", () => {
     expect(put?.init?.method).toBe("PUT");
     expect(JSON.parse(String(put!.init!.body))).toEqual({ userName: "Acme" });
     expect(screen.getByRole("button", { name: BUILDING_TEXT.signAria("Acme") }).textContent).toBe(BUILDING_TEXT.sign("Acme"));
+    vi.unstubAllGlobals();
+  });
+
+  it("B335 회귀(#641): 리드가 보고 뒤 물음으로 멈춰 '답을 기다립니다'가 떠도 책상의 결재 칩 → 서류철 → 보고서 → [승인]이 POST까지 간다", async () => {
+    if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
+    const report = { id: "r-11111111", kind: "report", title: "주간 진행", from: "team-lead", body: "한 일", at: "2026-10-25T01:00:00Z", state: "pending" };
+    const posts: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") posts.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify(url.endsWith("/reports") ? { reports: [report], archived: [] } : { requestId: "r-22222222", id: "i", state: "sent" }), { status: 200 });
+    }));
+    const awaitQ = { id: "q-aaaaaaaa", source: "await" as const, owner: "team-lead", ownerIsLead: true, text: "보고서를 제출했습니다. 검토 후 승인해 주시겠어요?", options: [], state: "open" as const, since: "2026-10-25T01:00:05Z" };
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession({ id: "s1", channel: { connected: true, tmux: "co-1", held: 0 }, folder: { pending: 1, total: 1 }, members: [makeMember({ name: "team-lead", role: "lead", awaitingReply: awaitQ })] })] }), live: true };
+    render(<App />);
+    expect(screen.getByTestId("await-bubble").textContent).toBe(CMD_TEXT.awaiting);
+    fireEvent.click(screen.getByRole("button", { name: CMD_TEXT.aria.folderOpen(1) }));
+    fireEvent.click(await screen.findByRole("button", { name: /주간 진행/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: LEAD_TEXT.approve }));
+    });
+    expect(posts).toEqual([{ url: "/api/floors/s1/lead", body: { kind: "approve", reportId: "r-11111111" } }]);
     vi.unstubAllGlobals();
   });
 });

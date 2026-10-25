@@ -16,6 +16,8 @@ export const LEAD_MAX = 4_000;
 export const LEAD_TEXT = {
   // 지시 통로가 없을 때(B312·SPEC §1.2). 연결 없음은 기존 CH_TEXT.notConnected를 그대로 쓴다
   notLaunched: "작업 지시 켜기(옮겨 열기)로 연결하면 쓸 수 있습니다",
+  // 서류철 안의 not-launched: 보고서가 있으면 전에 연결됐던 층 — 다시 켰거나 층이 끝난 것(B335 ④, B336 qa 글자)
+  notLaunchedRestart: "연결이 끊겨 결재를 보낼 수 없습니다(대시보드를 다시 켰거나 층이 끝남). 층이 살아 있으면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요.",
   notConnected: CH_TEXT.notConnected,
   failed: CH_TEXT.failed,
   close: "닫기",

@@ -68,7 +68,9 @@ describe("ReportFolder", () => {
     const p = folderProps(folder([rep()]), { channel: "not-launched" });
     render(<ReportFolder {...p} />);
     fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
-    expect(screen.getByText(LEAD_TEXT.notLaunched)).toBeTruthy();
+    // B335 ④: 서류철에 보고서가 있으면 전에 연결됐던 층 — 다시 켠 뒤 끊긴 것으로 알린다
+    expect(screen.getByText(LEAD_TEXT.notLaunchedRestart)).toBeTruthy();
+    expect(LEAD_TEXT.notLaunchedRestart).toBe("연결이 끊겨 결재를 보낼 수 없습니다(대시보드를 다시 켰거나 층이 끝남). 층이 살아 있으면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요."); // B336
     const approve = screen.getByRole("button", { name: LEAD_TEXT.approve });
     expect(approve.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(approve);

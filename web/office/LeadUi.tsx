@@ -197,6 +197,7 @@ export function LeadDrawers({ lead, snapshot, announce }: { lead: ReturnType<typ
       error={error}
       onSend={(a) => void act({ kind: "reply", questionId: question.id, ...(member ? { member } : {}), ...(a.choice !== undefined ? { choice: a.choice } : {}), ...(a.text.trim() ? { text: a.text } : {}) }, C.announce.reply, () => lead.close())}
       onShowNewer={current && current.id !== o.qid ? () => lead.api.openReply(o.floor, o.member, current.id) : undefined}
+      folder={session.folder && session.folder.pending > 0 ? { pending: session.folder.pending, onOpen: (el) => lead.api.openFolder(o.floor, el) } : undefined}
       onClose={() => lead.close()}
     />
   );

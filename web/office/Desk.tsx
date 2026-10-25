@@ -27,6 +27,29 @@ interface DeskProps {
   retireWait?: boolean;
 }
 
+/**
+ * 책상. 리드 책상에 서류철이 있으면 결재 칩·서류철 그림을 책상 버튼 밖 형제 버튼으로 둔다(B335 ②) — 책상이 답 칸을 열 때도
+ * 서류철로 바로 갈 수 있게. 버튼 안에 버튼을 두지 않는다
+ */
+export function Desk(props: DeskProps) {
+  const lead = useContext(OpenLeadContext);
+  const { floorId, folder } = props;
+  if (!lead || !floorId || !folder || folder.total === 0) return <DeskBody {...props} />;
+  const open = (el: HTMLElement) => lead.openFolder(floorId, el);
+  return (
+    <div className="desk-slot">
+      <DeskBody {...props} folderOutside />
+      {/* 서류철 그림 위의 누름 자리(마우스). 키보드·스크린 리더는 아래 칩 버튼과 패널 [서류철]로 간다 */}
+      <button type="button" className="desk-folder-hit" data-testid="folder-hit" tabIndex={-1} aria-hidden="true" onClick={(e) => open(e.currentTarget)} />
+      {folder.pending > 0 && (
+        <button type="button" className="desk-folder desk-folder-btn" aria-label={CMD_TEXT.aria.folderOpen(folder.pending)} onClick={(e) => open(e.currentTarget)}>
+          {CMD_TEXT.deskFolder(folder.pending)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** 남은 시간이 60초 이하이면 ?를 급함 팔레트로(디자인 phase2 §1.3, Phase 1 6장). deadline이 있을 때만 매초 다시 본다 */
 function useUrgent(deadline: string | undefined): boolean {
   const [, tick] = useState(0);
@@ -38,7 +61,7 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false }: DeskProps) {
+function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
@@ -67,6 +90,12 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
   const retireTail = member.retiring && retireWait ? `, ${CMD_TEXT.retireResume}` : "";
   const marks = `${locked ? ", 권한 정책 있음" : ""}${denied ? ", 방금 정책으로 막힘" : ""}${retireTail}`;
 
+  // 답을 기다립니다(§2.3·B335 ①): 말머리 자리에 글자 상자(하늘 바탕). 92px에서 말줄임
+  const awaitLabel = awaiting && (
+    <span className="desk-await" data-testid="await-bubble">
+      {CMD_TEXT.awaiting}
+    </span>
+  );
   const svg = (
     <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
       {decision && !paused ? (
@@ -77,16 +106,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
             <PixelSprite rects={spriteRects(QMARK, urgent ? { y: NEON.pink, Y: NEON.pinkDeep } : { y: NEON.yellow, Y: NEON.yellowDeep })} x={3} y={0} />
           </g>
         </>
-      ) : awaiting ? (
-        // §2.3: 하늘색 말머리 + 점 셋(파란 점). StatusBubble과 같은 틀
-        <g transform="translate(1,0)" className="bubble bubble-await" data-testid="await-bubble">
-          <rect x={0} y={0} width={12} height={7} fill={NEON.cyan} />
-          <rect x={3} y={7} width={2} height={1} fill={NEON.cyan} />
-          <text x={6} y={5.3} fontSize={4.5} textAnchor="middle" fill={NEON.wall} fontFamily="monospace">
-            · · ·
-          </text>
-        </g>
-      ) : (
+      ) : awaiting ? null /* 답을 기다립니다는 아래 글자 말머리(B335 ①) */ : (
         !paused &&
         !offDuty && (
           <g transform="translate(1,0)">
@@ -180,7 +200,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
   const status = member.retiring ? { text: CMD_TEXT.statusRetiring, cls: "desk-status pink", title: `${CMD_TEXT.statusRetiring}${retireTail}` } : member.duty === "requested" ? { text: CMD_TEXT.statusOffRequested, cls: "desk-status" } : member.longIdle && !offDuty ? { text: CMD_TEXT.statusLongIdle, cls: "desk-status" } : null;
   const extra = (
     <span className="desk-extra" data-testid="extra-line">
-      {pending > 0 ? <span className="desk-folder">{CMD_TEXT.deskFolder(pending)}</span> : status && <span className={status.cls} title={"title" in status ? status.title : undefined}>{status.text}</span>}
+      {pending > 0 ? folderOutside ? null : <span className="desk-folder">{CMD_TEXT.deskFolder(pending)}</span> : status && <span className={status.cls} title={"title" in status ? status.title : undefined}>{status.text}</span>}
     </span>
   );
   const folderMark = pending > 0 ? CMD_TEXT.aria.folder(pending) : "";
@@ -194,11 +214,12 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
         data-testid={`desk-${member.name}`}
         data-policy-key={targetKeyOf(member)}
         aria-haspopup="dialog"
-        aria-label={awaiting ? CMD_TEXT.aria.await(member.name) : `${member.name}, 결정 필요${marks}${folderMark}. 답하기 열기`}
+        aria-label={awaiting ? CMD_TEXT.aria.await(member.name, folderMark) : `${member.name}, 결정 필요${marks}${folderMark}. 답하기 열기`}
         onClick={(e) => lead!.openReply(floorId!, member.name, q!.id, e.currentTarget)}
         {...handlers}
       >
-        {svg}
+        {awaitLabel}
+      {svg}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -221,7 +242,8 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
         onClick={(e) => openDecision?.(decisionId, e.currentTarget)}
         {...handlers}
       >
-        {svg}
+        {awaitLabel}
+      {svg}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -245,7 +267,8 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
         onClick={(e) => openPolicy(key, e.currentTarget, floorId)}
         {...handlers}
       >
-        {svg}
+        {awaitLabel}
+      {svg}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -265,6 +288,7 @@ export function Desk({ member, paused = false, bubbleKey, bubble, floorId, folde
       aria-label={`${decision ? `${member.name}, 결정 필요` : `${member.name}, ${stateLabel(member.state)}`}${marks}`}
       {...handlers}
     >
+      {awaitLabel}
       {svg}
       <span className="nametag">{member.name}</span>
       {meta}

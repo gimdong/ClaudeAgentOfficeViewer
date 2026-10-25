@@ -55,7 +55,8 @@ export function ReportFolder(p: {
   const all = [...p.folder.reports, ...p.folder.archived];
   const open = openId ? all.find((r) => r.id === openId) : undefined;
   const pending = all.filter((r) => r.state === "pending").length;
-  const off = channelWhy(p.channel);
+  // 보고서가 있는 서류철에서 not-launched면 다시 켠 뒤 끊긴 것(B335 ④)
+  const off = p.channel === "not-launched" ? T.notLaunchedRestart : channelWhy(p.channel);
 
   useLayoutEffect(() => {
     title.current?.focus();

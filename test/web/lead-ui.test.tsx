@@ -7,7 +7,8 @@ import { CH_TEXT } from "../../web/floors/ChannelDialogs";
 import { Desk } from "../../web/office/Desk";
 import { CMD_TEXT } from "../../web/office/leadCmdText";
 import { shortTime } from "../../web/office/leadText";
-import { LeadCommands, LeadDrawers, OpenLeadContext, channelOf, type LeadOpener } from "../../web/office/LeadUi";
+import { LeadCommands, LeadDrawers, OpenLeadContext, channelOf, useLead, type LeadOpener } from "../../web/office/LeadUi";
+import { useEffect } from "react";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
 
 // Phase 6b Task 4 연결(designer SPEC docs/design/phase6b/SPEC.md §1·§2·§4·§6)
@@ -98,7 +99,7 @@ describe("책상 표시(§2)", () => {
     );
     expect(screen.getByTestId("await-bubble")).toBeTruthy();
     const desk = screen.getByTestId("desk-team-lead");
-    expect(desk.getAttribute("aria-label")).toBe(CMD_TEXT.aria.await("team-lead"));
+    expect(desk.getAttribute("aria-label")).toBe(CMD_TEXT.aria.await("team-lead", ""));
     fireEvent.click(desk);
     cleanup();
     render(
@@ -110,6 +111,59 @@ describe("책상 표시(§2)", () => {
     fireEvent.click(screen.getByTestId("desk-tester"));
     expect(decisionOpen).not.toHaveBeenCalled();
     expect(lead.calls.map((c) => c.slice(0, 4))).toEqual([["reply", "s1", "team-lead", "q-aaaaaaaa"], ["reply", "s1", "tester", "q-bbbbbbbb"]]);
+  });
+});
+
+describe("B335 — 답을 기다립니다 글자·서류철 따로 열기", () => {
+  const awaitQ = () => q({ source: "await", options: [] });
+  it("① await 말머리는 '답을 기다립니다' 글자(말줄임 상자)", () => {
+    render(<Desk member={makeMember({ name: "team-lead", role: "lead", awaitingReply: awaitQ() })} />);
+    expect(screen.getByTestId("await-bubble").textContent).toBe(CMD_TEXT.awaiting);
+  });
+
+  it("② 결재 칩·서류철 그림은 책상 버튼 밖 형제 버튼 — 누르면 서류철, 책상 접근 이름에 결재 대기", () => {
+    const lead = opener();
+    render(
+      <OpenLeadContext.Provider value={lead}>
+        <Desk member={makeMember({ name: "team-lead", role: "lead", awaitingReply: awaitQ() })} floorId="s1" folder={{ pending: 2, total: 3 }} />
+      </OpenLeadContext.Provider>,
+    );
+    const desk = screen.getByTestId("desk-team-lead");
+    expect(desk.getAttribute("aria-label")).toBe(CMD_TEXT.aria.await("team-lead", CMD_TEXT.aria.folder(2)));
+    const chip = screen.getByRole("button", { name: CMD_TEXT.aria.folderOpen(2) });
+    expect(chip.textContent).toBe(CMD_TEXT.deskFolder(2));
+    expect(desk.contains(chip)).toBe(false);
+    expect(chip.parentElement).toBe(desk.parentElement);
+    expect(screen.getByTestId("extra-line").textContent).toBe(""); // 칩은 책상 안에 두 번 그리지 않는다
+    fireEvent.click(chip);
+    fireEvent.click(screen.getByTestId("folder-hit"));
+    expect(lead.calls.map((c) => c.slice(0, 2))).toEqual([["folder", "s1"], ["folder", "s1"]]);
+    expect(screen.getByTestId("folder-hit").getAttribute("tabindex")).toBe("-1");
+    cleanup();
+    // 대기가 없으면 칩 버튼 없음(그림만), 서류철이 비면 둘 다 없음
+    render(
+      <OpenLeadContext.Provider value={lead}>
+        <Desk member={makeMember({ name: "team-lead", role: "lead" })} floorId="s1" folder={{ pending: 0, total: 1 }} />
+      </OpenLeadContext.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: /서류철 열기/ })).toBeNull();
+    expect(screen.getByTestId("folder-hit")).toBeTruthy();
+  });
+
+  it("② 답 칸에 대기 보고서가 있으면 '서류철 열기 · 대기 n건'(B336) → 서류철로", async () => {
+    expect(CMD_TEXT.replyFolder(1)).toBe("서류철 열기 · 대기 1건");
+    expect(CMD_TEXT.aria.folderOpen(2)).toBe("서류철 열기, 결재 대기 2건");
+    const snapshot = makeSnapshot({ sessions: [makeSession({ id: "s1", ...connected, folder: { pending: 1, total: 1 }, members: [makeMember({ name: "team-lead", role: "lead", awaitingReply: awaitQ() })] })] });
+    function Harness() {
+      const lead = useLead();
+      useEffect(() => lead.api.openReply("s1", "team-lead", "q-aaaaaaaa"), []); // eslint-disable-line react-hooks/exhaustive-deps
+      return <LeadDrawers lead={lead} snapshot={snapshot} announce={() => {}} />;
+    }
+    reply = (url) => ({ status: 200, body: url.endsWith("/reports") ? { reports: [], archived: [] } : {} });
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: CMD_TEXT.replyFolder(1) }));
+    await waitFor(() => expect(document.getElementById("rf-title")).toBeTruthy()); // 서류철 서랍
+    expect(calls.some((c) => c.url === "/api/floors/s1/reports")).toBe(true);
   });
 });
 
