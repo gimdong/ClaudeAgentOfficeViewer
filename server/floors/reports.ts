@@ -53,8 +53,13 @@ export class ReportStore {
     narrow(o.file); // 읽기만 해도 넓은 권한을 남기지 않는다(security Minor-3)
     try {
       const d = JSON.parse(readFileSync(o.file, "utf8"));
-      if (d && typeof d === "object" && d.floors && typeof d.floors === "object") this.data = d;
+      if (d && typeof d === "object" && d.floors && typeof d.floors === "object") this.data = { floors: d.floors };
       else throw new Error("shape");
+      // 아직 답이 오지 않은 요청 id(스펙 12장 n): 다시 켠 뒤에도 그 제출을 한 번 받는다
+      for (const [id, p] of Object.entries((d.pending ?? {}) as Record<string, { floor?: unknown; kind?: unknown; member?: unknown; at?: unknown }>)) {
+        if (!/^r-[0-9a-f]{8}$/.test(id) || typeof p?.floor !== "string" || (p.kind !== "report" && p.kind !== "handover") || typeof p.at !== "number") continue;
+        this.pending.set(id, { floor: p.floor, kind: p.kind, ...(typeof p.member === "string" ? { member: p.member } : {}), at: p.at });
+      }
       for (const [id, f] of Object.entries(this.data.floors)) this.savedSeen.set(id, f.lastSeenAt);
       // 보관 지시는 메모리(ChannelHub)에만 있다 — 다시 켜면 "보관됨" 결재는 대기로 되돌린다(B333 I-1)
       for (const f of Object.values(this.data.floors)) for (const r of [...f.reports, ...f.archived]) if (r.state === "held") (r.state = "pending"), delete r.held;
@@ -80,7 +85,7 @@ export class ReportStore {
       }
       const tmp = `${file}.tmp`;
       narrow(tmp); // 남아 있던 임시 파일은 writeFileSync의 mode가 적용되지 않는다
-      writeFileSync(tmp, JSON.stringify(this.data) + "\n", { mode: 0o600 });
+      writeFileSync(tmp, JSON.stringify({ ...this.data, pending: Object.fromEntries(this.pending) }) + "\n", { mode: 0o600 });
       renameSync(tmp, file);
       this.savedSeen.clear();
       for (const [id, f] of Object.entries(this.data.floors)) this.savedSeen.set(id, f.lastSeenAt);
@@ -97,6 +102,7 @@ export class ReportStore {
   expect(id: string, floor: string, kind: ReportKind, member?: string): void {
     this.pending.set(id, { floor, kind, ...(member ? { member } : {}), at: this.now() });
     while (this.pending.size > MAX_PENDING) this.pending.delete(this.pending.keys().next().value!);
+    this.save();
   }
   /** 꺼내지 않고 본다(인수인계 이름 대조 등) */
   peek(id: string, floor: string, kind: ReportKind): { floor: string; kind: ReportKind; member?: string } | null {
@@ -108,6 +114,7 @@ export class ReportStore {
     const p = this.pending.get(id);
     if (!p || p.floor !== floor || p.kind !== kind) return null;
     this.pending.delete(id);
+    this.save();
     return p;
   }
 

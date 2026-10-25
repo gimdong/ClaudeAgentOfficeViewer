@@ -448,6 +448,35 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(existsSync(f)).toBe(false);
   });
 
+  it("스펙 12장 n: 다시 켜면 등록 파일의 층을 되살리고(열쇠는 열쇠 파일에서), 등록에 없는 열쇠 파일만 지운다", () => {
+    const keyDir = join(tmp, "floors");
+    const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    const h = mk();
+    h.load();
+    const key = h.register("s1", "co-0a1b2c3d")!;
+    h.register("s2", "co-11112222");
+    h.unregister("s2");
+    writeFileSync(join(keyDir, "co-99999999.key"), "ab".repeat(32), { mode: 0o600 }); // 등록에 없는 고아
+    const again = mk();
+    again.load();
+    expect([again.has("s1"), again.has("s2")]).toEqual([true, false]);
+    expect(readFileSync(floorKeyFile(keyDir, "co-0a1b2c3d"), "utf8")).toBe(key);
+    expect(existsSync(join(keyDir, "co-99999999.key"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number) }] });
+  });
+
+  it("스펙 12장 n: 등록 파일의 tmux가 형식(co-8hex)이 아니면 그 이름이 가리키는 열쇠 파일이 있어도 되살리지 않는다(폴더 밖 경로·명령 주입)", () => {
+    const keyDir = join(tmp, "floors");
+    mkdirSync(keyDir, { mode: 0o700 });
+    writeFileSync(join(tmp, "evil.key"), "ab".repeat(32), { mode: 0o600 }); // floors/../evil.key
+    writeFileSync(join(keyDir, "co-Z.key"), "ab".repeat(32), { mode: 0o600 });
+    writeFileSync(join(keyDir, "registry.json"), JSON.stringify({ floors: [{ sessionId: "s1", tmux: "../evil", at: 1 }, { sessionId: "s2", tmux: "co-Z", at: 1 }] }), { mode: 0o600 });
+    const h = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    h.load();
+    expect([h.has("s1"), h.has("s2")]).toEqual([false, false]);
+    expect(existsSync(join(tmp, "evil.key"))).toBe(true); // 폴더 밖 파일은 건드리지 않는다
+  });
+
   it("열쇠 파일을 쓰지 못하면 등록하지 않고 던진다(층 수에 남지 않는다)", () => {
     const blocker = join(tmp, "not-a-dir");
     writeFileSync(blocker, "");

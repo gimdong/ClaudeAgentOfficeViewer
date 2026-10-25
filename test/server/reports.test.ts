@@ -35,6 +35,16 @@ describe("ReportStore — 요청 id는 한 번만, 그 층·그 종류만", () =
 });
 
 describe("ReportStore — 파일(0600·원자 쓰기)·다시 켜도 남음", () => {
+  it("스펙 12장 n: 아직 답이 오지 않은 요청 id는 다시 켜도 남고, 한 번 받으면(take) 다시 켜도 다시 받지 않는다", () => {
+    store().expect("r-0a1b2c3d", "s1", "report");
+    store().expect("r-11112222", "s1", "handover", "tester");
+    const b = store();
+    expect(b.peek("r-11112222", "s1", "handover")).toMatchObject({ member: "tester" });
+    expect(b.take("r-0a1b2c3d", "s1", "report")).not.toBeNull();
+    expect(store().take("r-0a1b2c3d", "s1", "report")).toBeNull();
+    expect(store().take("r-11112222", "s1", "handover")).not.toBeNull();
+  });
+
   it("보고서를 더하면 0600 파일에 원자적으로 쓰고(임시 파일 남지 않음), 새 저장소가 다시 읽는다", () => {
     const s = store();
     s.add("s1", { id: rid(1), kind: "report", title: "주간", body: "본문" });

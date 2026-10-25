@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { MAX_LAUNCHED } from "../../src/shared/types";
@@ -36,10 +36,26 @@ const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
+/** 등록 파일(스펙 12장 n): 열쇠 폴더 안. 층마다 {sessionId, tmux, at}만 — 열쇠·핸드셰이크 상태·보관 지시는 쓰지 않는다 */
+const REGISTRY = "registry.json";
+const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
+const TMUX = /^co-[0-9a-f]{8}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
+/** 자기 계정 소유의 일반 파일(또는 폴더)이고 그룹·다른 사용자가 쓸 수 없는가(다른 계정이 심은 가짜 층 막기) */
+function trusted(path: string, kind: "file" | "dir"): boolean {
+  try {
+    const st = lstatSync(path);
+    if (kind === "file" ? !st.isFile() : !st.isDirectory()) return false;
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) return false;
+    return (st.mode & 0o022) === 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
- * 대시보드가 띄운 층과 channel 연결(Phase 4b). 층 열쇠·지시 글은 메모리에만 두고 로그·스냅샷에 넣지 않는다.
- * 실험 기능 스위치만 파일(experimental.json, B160)에 저장한다
+ * 대시보드가 띄운 층과 channel 연결(Phase 4b). 층 열쇠는 열쇠 파일(0600)에만, 층 목록은 등록 파일(registry.json, 스펙 12장 n)에 두고,
+ * 지시 글·보관 지시·핸드셰이크 상태는 메모리에만 둔다. 로그·스냅샷에는 넣지 않는다. 실험 기능 스위치는 experimental.json(B160)
  */
 export class ChannelHub {
   private readonly floors = new Map<string, Floor>();
@@ -63,8 +79,8 @@ export class ChannelHub {
   constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string }) {}
 
   load(): void {
-    // 지난 실행의 열쇠는 이제 쓸 데가 없다(열쇠는 메모리에만 있었다)
-    if (this.o.keyDir) rmSync(this.o.keyDir, { recursive: true, force: true });
+    // 지난 실행의 층을 등록 파일과 열쇠 파일에서 되살린다(스펙 12장 n). 재연결은 늘 새 핸드셰이크(상태는 저장하지 않음)
+    if (this.o.keyDir) this.restore(this.o.keyDir);
     try {
       this.enabledFlag = JSON.parse(readFileSync(this.o.file, "utf8"))?.channels === true;
     } catch (e) {
@@ -93,6 +109,60 @@ export class ChannelHub {
     }
   }
 
+  /**
+   * 등록 파일 → 층. 폴더·등록 파일·열쇠 파일은 자기 소유이고 그룹·다른 사용자 쓰기 권한이 없어야 하며(열쇠는 0600·0400), 항목은 형식이 맞아야 한다.
+   * 틀린 항목은 버리되 파일은 지우지 않는다(남의 파일일 수 있음). 등록 파일이 없을 때만(옛 버전) 자기 소유의 고아 열쇠를 지운다.
+   * at은 지금으로 — 저장된 띄운 시각이면 sweep의 UNSEEN 규칙이 재시작 직후 옛 층을 지운다
+   */
+  private restore(dir: string): void {
+    if (!existsSync(dir) || !trusted(dir, "dir")) return;
+    const file = join(dir, REGISTRY);
+    const now = (this.o.now ?? Date.now)();
+    let entries: unknown[] = [];
+    if (existsSync(file)) {
+      if (!trusted(file, "file")) return getLogger().warn("floors", "registry not trusted", {});
+      try {
+        const d = JSON.parse(readFileSync(file, "utf8")) as { floors?: unknown };
+        entries = Array.isArray(d?.floors) ? d.floors : [];
+      } catch (e) {
+        return getLogger().warn("floors", "registry load failed", { error: errInfo(e) });
+      }
+    }
+    const listed = new Set<string>();
+    for (const raw of entries) {
+      const e = raw as { sessionId?: unknown; tmux?: unknown; at?: unknown } | null;
+      if (!e || typeof e.sessionId !== "string" || !SESSION_ID.test(e.sessionId) || typeof e.tmux !== "string" || !TMUX.test(e.tmux) || typeof e.at !== "number") continue;
+      listed.add(e.tmux);
+      if (this.floors.size >= MAX_LAUNCHED || this.floors.has(e.sessionId)) continue;
+      const kf = floorKeyFile(dir, e.tmux);
+      if (!trusted(kf, "file") || ![0o600, 0o400].includes(lstatSync(kf).mode & 0o777)) continue;
+      const key = readFileSync(kf, "utf8").trim();
+      if (!HEX64.test(key)) continue;
+      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, pending: [], held: [] });
+    }
+    for (const f of readdirSync(dir)) {
+      const tmux = f.endsWith(".key") ? f.slice(0, -4) : null;
+      if (tmux && !listed.has(tmux) && trusted(join(dir, f), "file")) rmSync(join(dir, f), { force: true });
+    }
+    if (this.floors.size) getLogger().info("floors", "restored", { count: this.floors.size });
+  }
+  /** 등록 파일 쓰기(0600 임시 파일 wx → rename). 실패해도 층은 메모리에 남는다 */
+  private saveRegistry(): void {
+    const dir = this.o.keyDir;
+    if (!dir) return;
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      chmodSync(dir, 0o700);
+      const file = join(dir, REGISTRY);
+      const tmp = `${file}.tmp-${process.pid}`;
+      rmSync(tmp, { force: true });
+      writeFileSync(tmp, JSON.stringify({ floors: [...this.floors].map(([sessionId, f]) => ({ sessionId, tmux: f.tmux, at: f.at })) }) + "\n", { mode: 0o600, flag: "wx" });
+      renameSync(tmp, file);
+    } catch (e) {
+      getLogger().warn("floors", "registry save failed", { error: errInfo(e) });
+    }
+  }
+
   /** 새 층 등록. 열쇠는 64자 hex. keyDir이 있으면 열쇠 파일(0600)을 먼저 쓰고, 못 쓰면 등록하지 않고 던진다 */
   register(sessionId: string, tmux: string): string | null {
     if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
@@ -103,6 +173,7 @@ export class ChannelHub {
       writeFileSync(floorKeyFile(this.o.keyDir, tmux), key, { mode: 0o600, flag: "wx" });
     }
     this.floors.set(sessionId, { key, kid: mac(key, "kid"), tmux, at: (this.o.now ?? Date.now)(), seen: false, pending: [], held: [] });
+    this.saveRegistry();
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
     this.changed();
     return key;
@@ -113,6 +184,7 @@ export class ChannelHub {
     f.conn?.end();
     if (this.o.keyDir) rmSync(floorKeyFile(this.o.keyDir, f.tmux), { force: true });
     this.floors.delete(sessionId);
+    this.saveRegistry();
     // 남은 보관 지시는 보내지 않고 사라진다(결재 도장·질문 표시를 되돌리게, B333 I-1)
     this.heldGone(f.held, false);
     this.changed();

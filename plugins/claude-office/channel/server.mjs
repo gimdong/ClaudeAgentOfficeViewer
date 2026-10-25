@@ -10,7 +10,7 @@
 // - 도구 세 개(submit_report·submit_handover·ask_user, 스펙 3장)는 지금 연결의 세션 키로 MAC을 붙여 /channel/submit으로 낸다
 import { execFileSync } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const KEY_FILE = process.env.CLAUDE_OFFICE_FLOOR_KEY_FILE;
@@ -192,7 +192,9 @@ async function connect(attempt) {
       // 시도마다 새 nonce. 서버 proof가 없거나 틀리면(열쇠를 모르는 가짜 서버) 스트림을 열지 않고 다시 시도한다
       const nonce = randomBytes(32).toString("hex");
       const h = await fetch(`${BASE}/channel/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kid: KID, nonce }) });
-      if (h.status === 401 || h.status === 403) return; // 열쇠가 더는 유효하지 않다(대시보드가 다시 켜짐 등) — 조용히 멈춘다
+      // 모르는 열쇠: 대시보드가 층을 정리했으면 열쇠 파일도 지웠다 — 그때만 조용히 멈춘다. 파일이 있으면(재시작 직후 등록 누락 등)
+      // 아래 백오프(최대 30초)로 다시 시도한다(스펙 12장 n)
+      if ((h.status === 401 || h.status === 403) && !(KEY_FILE && existsSync(KEY_FILE))) return;
       const { snonce, proof } = h.ok ? await h.json() : {};
       if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `server|${nonce}|${snonce}`))) {
         const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `client|${nonce}|${snonce}`)}`, Accept: "text/event-stream" } });
