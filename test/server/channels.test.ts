@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS } from "../../server/floors/channels";
+import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, RECONNECT_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -463,6 +463,26 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(readFileSync(floorKeyFile(keyDir, "co-0a1b2c3d"), "utf8")).toBe(key);
     expect(existsSync(join(keyDir, "co-99999999.key"))).toBe(false);
     expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number) }] });
+  });
+
+  it(`#658: 복원했지만 아직 hello가 없는 층은 ${RECONNECT_MS / 60_000}분 동안 reconnecting — hello가 오거나 시간이 지나면 없다. 새로 띄운 층은 처음부터 없다`, () => {
+    const keyDir = join(tmp, "floors");
+    let t = 1_800_000_000_000;
+    const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, now: () => t });
+    const h = mk();
+    h.load();
+    const key = h.register("s1", "co-0a1b2c3d")!;
+    h.register("s2", "co-11112222");
+    expect(h.view("s1")).toEqual({ connected: false, tmux: "co-0a1b2c3d", held: 0 });
+    const again = mk();
+    again.load();
+    expect(again.view("s1")?.reconnecting).toBe(true);
+    t += RECONNECT_MS - 1;
+    expect(again.view("s2")?.reconnecting).toBe(true);
+    again.hello(createHmac("sha256", key).update("kid").digest("hex"), "ab".repeat(32));
+    expect(again.view("s1")?.reconnecting).toBeUndefined();
+    t += 2;
+    expect(again.view("s2")?.reconnecting).toBeUndefined();
   });
 
   it("스펙 12장 n: 등록 파일의 tmux가 형식(co-8hex)이 아니면 그 이름이 가리키는 열쇠 파일이 있어도 되살리지 않는다(폴더 밖 경로·명령 주입)", () => {

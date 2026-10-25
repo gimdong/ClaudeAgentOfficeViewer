@@ -6,7 +6,7 @@ import { Floor } from "../../web/building/Floor";
 import { CH_TEXT } from "../../web/floors/ChannelDialogs";
 import { Desk } from "../../web/office/Desk";
 import { CMD_TEXT } from "../../web/office/leadCmdText";
-import { shortTime } from "../../web/office/leadText";
+import { LEAD_TEXT, shortTime } from "../../web/office/leadText";
 import { LeadCommands, LeadDrawers, OpenLeadContext, channelOf, useLead, type LeadOpener } from "../../web/office/LeadUi";
 import { useEffect } from "react";
 import { makeMember, makeSession, makeSnapshot } from "./fixtures";
@@ -164,6 +164,20 @@ describe("B335 — 답을 기다립니다 글자·서류철 따로 열기", () =
     fireEvent.click(await screen.findByRole("button", { name: CMD_TEXT.replyFolder(1) }));
     await waitFor(() => expect(document.getElementById("rf-title")).toBeTruthy()); // 서류철 서랍
     expect(calls.some((c) => c.url === "/api/floors/s1/reports")).toBe(true);
+  });
+});
+
+describe("#658 다시 연결하는 중", () => {
+  const recon = { channel: { connected: false, tmux: "co-1", held: 0, reconnecting: true } } satisfies Partial<SessionView>;
+  it("채널 상태는 reconnecting — 패널 지시 절은 버튼을 끄고 '다시 연결하는 중' 이유만(옮겨 열기·확인 창 안내 없음)", () => {
+    expect(LEAD_TEXT.reconnecting).toBe("다시 연결하는 중입니다 — 잠시 뒤 저절로 쓸 수 있습니다");
+    expect(channelOf(recon)).toBe("reconnecting");
+    const s = makeSession({ ...recon, members: [makeMember({ name: "team-lead", role: "lead" }), makeMember({ name: "tester" })] });
+    render(<LeadCommands session={s} member={s.members[1]} announce={() => {}} lead={opener()} />);
+    expect(document.querySelector(".ap-cmd-why")!.textContent).toBe(LEAD_TEXT.reconnecting);
+    expect(screen.getByRole("button", { name: CMD_TEXT.offduty }).getAttribute("aria-disabled")).toBe("true");
+    expect(document.body.textContent).not.toContain("옮겨 열기");
+    expect(document.body.textContent).not.toContain(CH_TEXT.notConnected);
   });
 });
 

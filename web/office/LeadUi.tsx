@@ -10,7 +10,7 @@ import { RetireDialog } from "./RetireDialog";
 
 /** 지시 통로 상태(designer SPEC §1.2): 대시보드가 띄우지 않은 층 → not-launched, 연결 없음 → not-connected */
 export function channelOf(s: Pick<SessionView, "channel">): LeadChannel {
-  return !s.channel ? "not-launched" : s.channel.connected ? "ok" : "not-connected";
+  return !s.channel ? "not-launched" : s.channel.connected ? "ok" : s.channel.reconnecting ? "reconnecting" : "not-connected";
 }
 const failText = (e: string) => (e === "not-connected" ? CH_TEXT.notConnected : CH_TEXT.failed);
 

@@ -64,6 +64,14 @@ describe("ReportFolder", () => {
     expect(p.onApprove).toHaveBeenCalledWith("r-1");
   });
 
+  it("#658: 다시 연결하는 중이면 결재 버튼은 꺼지고 이유는 '다시 연결하는 중'(재시작 안내·옮겨 열기 없음)", () => {
+    render(<ReportFolder {...folderProps(folder([rep()]), { channel: "reconnecting" })} />);
+    fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
+    expect(screen.getByText(LEAD_TEXT.reconnecting)).toBeTruthy();
+    expect(screen.getByRole("button", { name: LEAD_TEXT.approve }).getAttribute("aria-disabled")).toBe("true");
+    expect(document.body.textContent).not.toContain("옮겨 열기");
+  });
+
   it("channel 없음: 결재 버튼 비활성 + 이유, 눌러도 부르지 않음", () => {
     const p = folderProps(folder([rep()]), { channel: "not-launched" });
     render(<ReportFolder {...p} />);
@@ -145,6 +153,12 @@ const q = (p: Partial<ChatQuestionView> = {}): ChatQuestionView => ({ id: "q-1",
 const replyProps = (question: ChatQuestionView, extra: Partial<Parameters<typeof ReplyDialog>[0]> = {}) => ({ question, channel: "ok" as const, sending: false, error: null, onSend: vi.fn(), onClose: vi.fn(), ...extra });
 
 describe("ReplyDialog", () => {
+  it("#658: 다시 연결하는 중이면 답 칸도 그 이유만(옮겨 열기 권유 없음)", () => {
+    render(<ReplyDialog {...replyProps(q(), { channel: "reconnecting" })} />);
+    expect(document.querySelector(".rd-off")!.textContent).toBe(LEAD_TEXT.reconnecting);
+    expect(document.body.textContent).not.toContain("옮겨 열기");
+  });
+
   it("제안된 선택지: 번호를 붙여 보이고, 고른 번호만 보낸다", () => {
     const p = replyProps(q());
     render(<ReplyDialog {...p} />);

@@ -20,6 +20,8 @@ export interface ChannelView {
   tmux: string;
   held: number;
   last?: "sent" | "delivered";
+  /** 재시작 때 등록 파일에서 복원했고 아직 hello가 없음(복원 뒤 RECONNECT_MS 안, #658) */
+  reconnecting?: true;
 }
 /** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
 /** meta: 보관한 팀리더 지시가 실제로 나갈 때 쓰는 값(퇴근 기록 등, Phase 6b 11장 a). 화면에는 쓰지 않는다 */
@@ -29,13 +31,15 @@ export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
+/** 복원한 층이 이 시간 안에 hello를 보내지 않으면 "다시 연결하는 중"을 거두고 연결 없음으로 보인다(#658) */
+export const RECONNECT_MS = 2 * 60_000;
 /** 등록 파일(스펙 12장 n): 열쇠 폴더 안. 층마다 {sessionId, tmux, at}만 — 열쇠·핸드셰이크 상태·보관 지시는 쓰지 않는다 */
 const REGISTRY = "registry.json";
 const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -138,7 +142,7 @@ export class ChannelHub {
       if (!trusted(kf, "file") || ![0o600, 0o400].includes(lstatSync(kf).mode & 0o777)) continue;
       const key = readFileSync(kf, "utf8").trim();
       if (!HEX64.test(key)) continue;
-      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, pending: [], held: [] });
+      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, restoredAt: now, pending: [], held: [] });
     }
     for (const f of readdirSync(dir)) {
       const tmux = f.endsWith(".key") ? f.slice(0, -4) : null;
@@ -234,6 +238,7 @@ export class ChannelHub {
   hello(kid: string, nonce: string): { snonce: string; proof: string } | null {
     const f = this.byKid(kid)?.[1];
     if (!f) return null;
+    delete f.restoredAt; // 복원한 층의 channel이 돌아왔다(#658)
     const now = (this.o.now ?? Date.now)();
     f.pending = f.pending.filter((p) => now - p.at <= PENDING_MS);
     if (f.pending.length >= MAX_PENDING) f.pending.shift();
@@ -360,7 +365,8 @@ export class ChannelHub {
   view(sessionId: string): ChannelView | undefined {
     const f = this.floors.get(sessionId);
     if (!f) return undefined;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}) };
+    const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt < RECONNECT_MS;
+    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}) };
   }
   stats(): { launched: number; connected: number; held: number } {
     let connected = 0;

@@ -19,6 +19,8 @@ export const LEAD_TEXT = {
   // 서류철 안의 not-launched: 보고서가 있으면 전에 연결됐던 층 — 다시 켰거나 층이 끝난 것(B335 ④, B336 qa 글자)
   notLaunchedRestart: "연결이 끊겨 결재를 보낼 수 없습니다(대시보드를 다시 켰거나 층이 끝남). 층이 살아 있으면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요.",
   notConnected: CH_TEXT.notConnected,
+  // 재시작 뒤 복원한 층이 아직 다시 붙지 않음(#658, qa 확정). 옮겨 열기는 권하지 않는다
+  reconnecting: "다시 연결하는 중입니다 — 잠시 뒤 저절로 쓸 수 있습니다",
   failed: CH_TEXT.failed,
   close: "닫기",
   back: "목록으로",
@@ -82,5 +84,5 @@ export function shortTime(iso: string): string {
 }
 
 export function channelWhy(ch: LeadChannel): string | null {
-  return ch === "not-launched" ? LEAD_TEXT.notLaunched : ch === "not-connected" ? LEAD_TEXT.notConnected : null;
+  return ch === "not-launched" ? LEAD_TEXT.notLaunched : ch === "not-connected" ? LEAD_TEXT.notConnected : ch === "reconnecting" ? LEAD_TEXT.reconnecting : null;
 }
