@@ -172,7 +172,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | **`--th-*` CSS 토큰** | CSS로 그리는 무늬 색 + 장면 위 글 판 | 테마 `tokens.css` | 글 판 쌍만 §6 |
 | **공통 UI 토큰** | HUD·대화상자·버튼·포커스·상태색 | 앱. 테마는 **`ui: "light" \| "dark"` 둘 중 고르기만** | 앱 테스트(§6) |
 
-- **공통 UI 두 벌(새로 정함):** office 낮 장면은 밝은 HUD 카드가 필요하고(`hudBg #ffffff`, `ink #1f2233`), 밤은 지금 어두운 판입니다. 테마가 `--ink`를 고치는 대신, 앱이 공통 UI 토큰을 `light`·`dark` 두 벌로 갖고 `theme.json`의 `ui`가 하나를 고릅니다(`:root[data-ui="light"]`). 두 벌 다 앱이 검사하므로 테마가 공통 UI를 깨뜨릴 수 없습니다. 지금 토큰이 `dark`, office 낮 값이 `light`의 출발점입니다.
+- **공통 UI 두 벌(새로 정함):** office 낮 장면은 밝은 HUD 카드가 필요하고(`hudBg #ffffff`, `ink #1f2233`), 밤은 지금 어두운 판입니다. 테마가 `--ink`를 고치는 대신, 앱이 공통 UI 토큰을 `light`·`dark` 두 벌로 갖고 `theme.json`의 `ui`가 하나를 고릅니다(`:root[data-ui="light"]`). 두 벌 다 앱이 검사하므로 테마가 공통 UI를 깨뜨릴 수 없습니다. 지금 토큰이 `dark`, office 낮 값이 `light`의 출발점입니다. **light 벌의 `--wall`은 `#ffffff`**입니다: `.pbtn--primary`가 `color: var(--wall)`이라 light `--green #0b7a52` 위 글자가 5.36:1이 되어야 하기 때문입니다(P7-11).
 - **공통 UI 토큰(테마가 쓰지 못함):** `--ink --wall --panel --muted --green --pink --yellow --yellow-ink --cyan --red --violet --focus`. 테마 `tokens.css`에 이 이름이 나오면 빌드 검사에서 막습니다.
 - **`--yellow-ink`(새 공통 토큰, office 제안 `chipInk`):** 노란 바탕 위 글자. 결재 칩·`!` 풍선·`.q-chip`은 `ink`·`--wall`이 아니라 이것을 씁니다. 두 벌 모두 어두운 색(light `#1f2233`, dark `#12111f`). **지금 `.q-chip`의 `color: var(--wall)`은 light에서 글이 사라지므로 Phase 7 구현 때 `--yellow-ink`로 바꿉니다**(developer). 공통 UI로 둔 까닭: "!"·배지는 테마와 상관없이 같은 노랑이므로 그 위 글자도 테마 칸이 아닙니다.
 - `--yellow`는 벌마다 값이 다를 수 있습니다(office: light `#ffd84a`, dark `#fff7a8`). 노랑이라는 뜻은 같습니다.
@@ -225,7 +225,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 
 - 글자는 **언제나 불투명 판 위**(`--th-label-bg` 또는 공통 UI 판). 하늘·벽지·타일·차양·별밭·창 불빛·반투명 홀로 판 위에 바로 쓰지 않습니다. 이 규칙 하나로 테마마다 검사할 쌍이 아래 표로 줄어듭니다(office 1ac7d29 §3).
 - 글자/판 **4.5:1 이상**(WCAG AA). 판 테두리(`--th-label-border`)는 장식이라 글자색으로 쓰지 않습니다(office 낮 `#c9c0b0`/흰 1.8:1, 판타지 `#b07a46` 4.6:1).
-- 비텍스트(포커스 링 등) 3:1 이상. **포커스 링은 공통 두 겹**(office 제안, 사용자 확정): `outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--panel)`. `--focus #3fd0ff` 하나만으로는 낮 벽·바닥 위에서 1.2–1.6:1이라 모자랍니다. 두 겹이면 낮은 바깥 `--panel` 링 13.1–17.6:1, 밤은 안쪽 `--focus` 링 7.0–9.3:1. 검사는 "두 겹 중 하나가 장면 색 모두에 ≥ 3:1".
+- 비텍스트(포커스 링 등) 3:1 이상. **포커스 링은 공통 두 겹**(office 제안, 사용자 확정): `outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink)`. 바깥 겹은 **`--ink`**입니다(P7-11). `--panel`은 light 벌에서 흰색이라 낮 장면 위에서 두 겹 모두 1.22–1.64:1로 모자랐습니다. `--ink`는 두 벌 모두 판과 반대 밝기라 바깥 겹이 낮 10.7–14.3:1, 밤 10.1–13.5:1(office 7334726 `contrast.cjs` `RING_OUTER`). 검사는 "두 겹 중 하나가 장면 색 모두에 ≥ 3:1".
 - 상태는 색만으로 나타내지 않습니다: "!"·배지·말풍선 글자·모니터 그림 모양이 함께 바뀝니다.
 - 반투명 판 위에 실제 글(보고서 본문)을 올릴 때는 안쪽에 불투명 판을 하나 더 깝니다.
 
@@ -238,7 +238,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `--th-label-accent` / `--th-label-bg` | 로비 `2F ▲` | 5.36 | 14.83 |
 | `--th-paper-ink` / `--th-paper` | 보고서 1인칭 창 | 지금 값 | 지금 값 |
 
-**앱(공통 UI 두 벌)이 통과해야 할 쌍:** 포커스 두 겹 링 / 장면 색(벽·바닥·러그·겉벽, 둘 중 하나 ≥ 3:1, 낮·밤 모두), `--ink`/`--panel`(HUD), `--muted`/`--panel`, `--yellow-ink`/`--yellow`(결재 칩·`!`, office 낮 11.37 · 밤 16.99), `--pink`/`--panel`(오류), `--cyan`/`--panel`(링크).
+**앱(공통 UI 두 벌)이 통과해야 할 쌍:** 포커스 두 겹 링 / 장면 색(벽·바닥·러그·겉벽, 둘 중 하나 ≥ 3:1, 낮·밤 모두), `--ink`/`--panel`(HUD), `--muted`/`--panel`, `--yellow-ink`/`--yellow`(결재 칩·`!`, office 낮 11.37 · 밤 16.99), `--wall`/`--green`(`.pbtn--primary` 글자, light 5.36), `--pink`/`--panel`(오류), `--cyan`/`--panel`(링크).
 
 **검사 원형:** office `docs/design/phase7/office/mock/contrast.cjs`(1ac7d29). 쌍 목록 `PAIRS`와 WCAG 휘도 계산 `ratio()`, AA 미만이면 exit 1. 구현 때 이것을 테스트로 옮깁니다: 각 테마 `tokens.css`에서 `--th-*` 값을 읽어 위 테마 쌍을, 공통 UI 두 벌에서 앱 쌍을 검사합니다. 목업의 참고 쌍 `muted`/`tile`(4.56, 아슬아슬)은 "판 없이 바닥 위 글"이라 이 계약에서는 금지이므로 검사에서 뺍니다.
 
