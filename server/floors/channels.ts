@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, constants as fsc, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { MAX_LAUNCHED } from "../../src/shared/types";
@@ -31,7 +31,8 @@ export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** restoredAt: 복원 뒤 hello 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음(UNSEEN_MS 뒤 정리, #658) */
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -46,6 +47,26 @@ const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const TMUX = /^co-[0-9a-f]{8}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 /** 자기 계정 소유의 일반 파일(또는 폴더)이고 그룹·다른 사용자가 쓸 수 없는가(다른 계정이 심은 가짜 층 막기) */
+/**
+ * 열쇠 파일을 열어 둔 채(fd) 검사하고 읽는다(검사와 읽기 사이에 바뀌지 않게 — relay readKey와 같은 방식). 심볼릭 링크는 따라가지 않는다.
+ * 자기 소유 일반 파일, 0600·0400, 64자 hex일 때만 열쇠
+ */
+function readKeyFile(path: string): string | null {
+  let fd: number;
+  try {
+    fd = openSync(path, fsc.O_RDONLY | (fsc.O_NOFOLLOW ?? 0));
+  } catch {
+    return null;
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile() || (typeof process.getuid === "function" && st.uid !== process.getuid()) || ![0o600, 0o400].includes(st.mode & 0o777)) return null;
+    const key = readFileSync(fd, "utf8").trim();
+    return HEX64.test(key) ? key : null;
+  } finally {
+    closeSync(fd);
+  }
+}
 function trusted(path: string, kind: "file" | "dir"): boolean {
   try {
     const st = lstatSync(path);
@@ -115,7 +136,8 @@ export class ChannelHub {
 
   /**
    * 등록 파일 → 층. 폴더·등록 파일·열쇠 파일은 자기 소유이고 그룹·다른 사용자 쓰기 권한이 없어야 하며(열쇠는 0600·0400), 항목은 형식이 맞아야 한다.
-   * 틀린 항목은 버리되 파일은 지우지 않는다(남의 파일일 수 있음). 등록 파일이 없을 때만(옛 버전) 자기 소유의 고아 열쇠를 지운다.
+   * 틀린 항목은 버리되 파일은 지우지 않는다(남의 파일일 수 있음). 등록 파일을 믿을 수 있거나 없을 때(옛 버전) 목록에 없는 자기 소유 열쇠를 지운다.
+   * 등록 파일을 믿을 수 없으면 아무것도 지우지 않는다. 깨진(읽히지 않는) 등록 파일은 다음에 쓰기 전에 .broken으로 남긴다
    * at은 지금으로 — 저장된 띄운 시각이면 sweep의 UNSEEN 규칙이 재시작 직후 옛 층을 지운다
    */
   private restore(dir: string): void {
@@ -129,6 +151,7 @@ export class ChannelHub {
         const d = JSON.parse(readFileSync(file, "utf8")) as { floors?: unknown };
         entries = Array.isArray(d?.floors) ? d.floors : [];
       } catch (e) {
+        this.registryBroken = true;
         return getLogger().warn("floors", "registry load failed", { error: errInfo(e) });
       }
     }
@@ -138,11 +161,9 @@ export class ChannelHub {
       if (!e || typeof e.sessionId !== "string" || !SESSION_ID.test(e.sessionId) || typeof e.tmux !== "string" || !TMUX.test(e.tmux) || typeof e.at !== "number") continue;
       listed.add(e.tmux);
       if (this.floors.size >= MAX_LAUNCHED || this.floors.has(e.sessionId)) continue;
-      const kf = floorKeyFile(dir, e.tmux);
-      if (!trusted(kf, "file") || ![0o600, 0o400].includes(lstatSync(kf).mode & 0o777)) continue;
-      const key = readFileSync(kf, "utf8").trim();
-      if (!HEX64.test(key)) continue;
-      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, restoredAt: now, pending: [], held: [] });
+      const key = readKeyFile(floorKeyFile(dir, e.tmux));
+      if (!key) continue;
+      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, restoredAt: now, restored: now, pending: [], held: [] });
     }
     for (const f of readdirSync(dir)) {
       const tmux = f.endsWith(".key") ? f.slice(0, -4) : null;
@@ -151,6 +172,7 @@ export class ChannelHub {
     if (this.floors.size) getLogger().info("floors", "restored", { count: this.floors.size });
   }
   /** 등록 파일 쓰기(0600 임시 파일 wx → rename). 실패해도 층은 메모리에 남는다 */
+  private registryBroken = false;
   private saveRegistry(): void {
     const dir = this.o.keyDir;
     if (!dir) return;
@@ -158,6 +180,10 @@ export class ChannelHub {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       chmodSync(dir, 0o700);
       const file = join(dir, REGISTRY);
+      if (this.registryBroken) {
+        renameSync(file, `${file}.broken`);
+        this.registryBroken = false;
+      }
       const tmp = `${file}.tmp-${process.pid}`;
       rmSync(tmp, { force: true });
       writeFileSync(tmp, JSON.stringify({ floors: [...this.floors].map(([sessionId, f]) => ({ sessionId, tmux: f.tmux, at: f.at })) }) + "\n", { mode: 0o600, flag: "wx" });
@@ -200,6 +226,11 @@ export class ChannelHub {
   sweep(alive: ReadonlySet<string>): void {
     const now = (this.o.now ?? Date.now)();
     for (const [id, f] of [...this.floors]) {
+      // 되살렸는데 UNSEEN_MS 동안 한 번도 붙지 않은 층은 살아 있어도 정리한다 — 등록이 남으면 옮겨 열기가 409 "launched"로 막힌다(#658, reviewer #657)
+      if (f.restored !== undefined && !f.conn && now - f.restored > UNSEEN_MS) {
+        this.unregister(id);
+        continue;
+      }
       if (alive.has(id)) f.seen = true;
       else if (f.seen || (!f.conn && now - f.at > UNSEEN_MS)) this.unregister(id);
     }
@@ -271,6 +302,7 @@ export class ChannelHub {
     }
     f.busyLogged = false;
     f.conn = res;
+    delete f.restored;
     f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
     f.ackToken = randomBytes(32).toString("hex");
     f.nonces = new Set();

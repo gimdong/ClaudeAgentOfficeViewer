@@ -1,13 +1,13 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, RECONNECT_MS } from "../../server/floors/channels";
+import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, RECONNECT_MS, UNSEEN_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -483,6 +483,50 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(again.view("s1")?.reconnecting).toBeUndefined();
     t += 2;
     expect(again.view("s2")?.reconnecting).toBeUndefined();
+  });
+
+  it(`#658 ③(reviewer #657): 되살린 층이 ${UNSEEN_MS / 60_000}분 안에 한 번도 연결하지 않으면 살아 있어도 정리(옮겨 열기 409 "launched"가 풀림). 연결한 뒤에는 지금 규칙`, () => {
+    const keyDir = join(tmp, "floors");
+    let t = 1_800_000_000_000;
+    const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, now: () => t });
+    const h = mk();
+    h.load();
+    h.register("s1", "co-0a1b2c3d");
+    const k2 = h.register("s2", "co-11112222")!;
+    const again = mk();
+    again.load();
+    // s2는 복원 뒤 한 번 연결했다가 끊김
+    const kid = createHmac("sha256", k2).update("kid").digest("hex");
+    const nonce = "ab".repeat(32);
+    const hi = again.hello(kid, nonce)!;
+    let close = () => {};
+    const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false } as never;
+    expect(again.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", k2).update(`client|${nonce}|${hi.snonce}`).digest("hex") }, res)).toMatchObject({ id: "s2" });
+    close();
+    t += UNSEEN_MS - 1;
+    again.sweep(new Set(["s1", "s2"]));
+    expect(again.has("s1")).toBe(true);
+    t += 2;
+    again.sweep(new Set(["s1", "s2"]));
+    expect([again.has("s1"), again.has("s2")]).toEqual([false, true]);
+    expect(existsSync(floorKeyFile(keyDir, "co-0a1b2c3d"))).toBe(false);
+  });
+
+  it("#658: 깨진 등록 파일은 덮어쓰기 전에 .broken으로 남기고, 심볼릭 링크 열쇠 파일은 따라가지 않는다", () => {
+    const keyDir = join(tmp, "floors");
+    mkdirSync(keyDir, { mode: 0o700 });
+    writeFileSync(join(keyDir, "registry.json"), "{oops", { mode: 0o600 });
+    const h = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    h.load();
+    h.register("s1", "co-0a1b2c3d");
+    expect(readFileSync(join(keyDir, "registry.json.broken"), "utf8")).toBe("{oops");
+    // 열쇠 자리에 심볼릭 링크(자기 소유 0600 파일을 가리켜도) — 되살리지 않는다
+    writeFileSync(join(tmp, "real.key"), "cd".repeat(32), { mode: 0o600 });
+    rmSync(floorKeyFile(keyDir, "co-0a1b2c3d"));
+    symlinkSync(join(tmp, "real.key"), floorKeyFile(keyDir, "co-0a1b2c3d"));
+    const again = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    again.load();
+    expect(again.has("s1")).toBe(false);
   });
 
   it("스펙 12장 n: 등록 파일의 tmux가 형식(co-8hex)이 아니면 그 이름이 가리키는 열쇠 파일이 있어도 되살리지 않는다(폴더 밖 경로·명령 주입)", () => {
