@@ -7,7 +7,7 @@
 - 층 안 **하위 팀 구역**(예: 디자인 팀)을 보인다.
 - 참고 분위기: 타이니 타워(Tiny Tower). 이름·그림은 베끼지 않는다.
 
-**디자인 계약:** `docs/design/phase7/SPEC.md`(판 3, 19a4904 + 보충 079ee7a·afe7c12·285c14b). 칸·시트·토큰·대비·예산·지식재산권은 그 문서가 기준이다. 이 스펙은 "무엇을 어떤 순서로 구현하는가"만 정한다. 둘이 다르면 계약을 따르고 이 스펙을 고친다.
+**디자인 계약:** `docs/design/phase7/SPEC.md`(판 3 최종 9ba3ade). 칸·시트·토큰·대비·예산·지식재산권은 그 문서가 기준이다. 이 스펙은 "무엇을 어떤 순서로 구현하는가"만 정한다. 둘이 다르면 계약을 따르고 이 스펙을 고친다.
 
 **그림 자산(디자이너 브랜치):** motion `design/p7-motion`(캐릭터 층 시트·오라·`make-sheet.mjs`), office `design/p7-office`(장면 칸·`tokens.js`·`contrast.cjs`), themes `design/p7-themes` `office-exterior/`(하늘·스카이라인·거리·차·엑스트라·`make-exterior.mjs`). 구현 브랜치로 합칠 때 생성기와 최종 PNG만 가져오고 목업 HTML·렌더는 `docs/design/phase7/`에 둔다.
 
