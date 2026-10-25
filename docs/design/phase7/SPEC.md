@@ -3,7 +3,7 @@
 담당 designer(Phase 7 리드). **구현 전 계약 초안**입니다. 화면 글자는 모두 「안」이고 qa 검토 전입니다(규칙 9).
 
 입력:
-- designer-motion `design/p7-motion` 104470b(행 9·10 `walk_down`·`walk_up`, 행 11·12 `ride`·`ride_lurch`(오피스에서 씀, 보충 3), 엘리베이터 상자 크기 office와 합의 c7f5d02): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
+- designer-motion `design/p7-motion` 104470b(행 9·10 `walk_down`·`walk_up`, 행 11·12 `ride`·`ride_lurch`(이번 Phase에서 씀, 67ba302 §3.2·§3.3), 엘리베이터 상자 크기 office와 합의 c7f5d02): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
 - designer-themes `design/p7-themes` 1cf46fa(74ff0c2 + `--th-*` 이름 맞춤), 3a0b0bc `docs/design/phase7/office-exterior/`(오피스 바깥 시트·`extras.json`·`make-exterior.mjs`): `docs/design/phase7/themes/SPEC.md`(슬롯 대응표·팔레트·대비)
 - designer-office `design/p7-office` b2bfdd4(1ac7d29 + 칸 기준점·`--th-*` 값·포커스 제안): `docs/design/phase7/office/NOTES.md`(장면 칸·크기·움직임·대비), `mock/tokens.js`(낮·밤 색), `mock/contrast.cjs`(AA 검사)
 - 출발점: 본 트리 `docs/design/themes/SPEC.md`(79045fc, 4446d1a) §4·§5 초안. 이 문서가 그것을 대신하고, 그쪽은 더 고치지 않습니다. 그 파일 §3 걷기 띠는 참고로만 두고 시트 규칙은 MOTION.md 하나를 따릅니다.
@@ -101,11 +101,12 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 - **오래 쉬면 카페로(사용자 결정, 보충 2의 "탑승자 없음"을 대체):**
   - 짧은 쉼(30초~): 자기 층 `pantry`(§3 탕비실 걷기).
   - `longIdle`(1시간): 탕비실에서 통로로 걸어 → 문 열림 → `ride` → 출발 `ride_lurch` → 상자가 카페 층으로 → 도착 `ride_lurch` → 걸어 나가 카페 손님 자리(x22 테이블)에서 앉아 `idle`(또는 `coffee`). 실제 팀원이므로 **이름표가 따라갑니다**(엑스트라와 구별).
-  - 일이 다시 시작되면(PreToolUse 등) 엘리베이터로 자기 층에 돌아가 `walk_*` → `sit_down` → `type`.
+  - **일이 다시 시작되거나 손들기가 생기면** 엘리베이터로 자기 층에 돌아가 `walk_*` → `sit_down` → `type`(손들기면 앉은 `hand_up`). 카페에서는 그 자리에서 손을 들지 않습니다(team-lead 최종, P7-9 대체). 같은 층 탕비실에서는 P7-3대로 그 자리에서 `hand_up_stand`.
+  - 카페에 간 동안 빈 책상에는 점선 이름표 「안」`카페 ↑`(DOM, qa 검토)를 둡니다. 탕비실은 지금처럼 `탕비실 →`.
+  - 타이밍은 motion 67ba302 §3.2·§3.3(카페 왕복, 층 하나 이동 2.64초)을 따릅니다.
   - 엘리베이터는 **한 번에 1명**. 기다리는 사람은 지금 자리(탕비실·카페)에서 그대로 기다립니다. **돌아가는 사람(일 시작)이 가는 사람보다 먼저**입니다.
-  - 카페에서 손들기: 걸어 돌아오지 않고 그 자리에서 `hand_up_stand` + "!"(P7-3). 책상에도 결정 표시가 남습니다.
-  - 사람이 타는 동안 HUD 층 버튼을 누르면 그 층으로 스크롤만 하고, 상자는 타는 사람을 먼저 옮깁니다.
-  - 움직임 줄이기: 타지 않고 바로 목적지(카페 자리 또는 자기 책상)의 정지 그림.
+  - 사용자가 HUD 층 버튼으로 옮기는 이동과 겹치면 **HUD 이동이 먼저**입니다. 타려던 사람은 그 자리에서 기다리고, HUD 이동이 끝난 뒤 탑니다.
+  - 움직임 줄이기: 타지 않고 바로 목적지 정지 그림(카페 자리 `idle` 0, 돌아오면 자기 책상).
   - 카페 층의 팀원 자리 수가 모자라면(테이블 수 < 오래 쉬는 사람) 나머지는 자기 층 탕비실에 남습니다.
 - 엘리베이터: HUD 층 바로가기를 누르면 장면의 엘리베이터 칸이 그 층까지 칸 단위로 움직이고(층당 0.12초, 최대 0.6초, `transform: translateY` + `steps`). 로비 `2F ▲`가 칸 위치를 따라 바뀝니다. 위층에는 줄(cable)이 보입니다, 문 열림 2프레임 뒤 그 층으로 스크롤합니다. 움직임 줄이기면 바로 그 층.
 - 쉬는 곳(`pantry`·`rest`·옥상): 어느 곳으로 갈지는 화면이 고르고 서버 데이터는 상태만 씁니다.
