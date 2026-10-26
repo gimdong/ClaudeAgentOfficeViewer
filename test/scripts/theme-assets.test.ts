@@ -97,20 +97,20 @@ describe("저장소 생성기(P7a-5)", () => {
  * PNG 두 장이 같은 그림인가(P7a-19): IHDR(크기·색 형식)이 같고 IDAT를 이어 푼 픽셀 줄이 같으면 같다.
  * zlib 압축 결과는 Node·zlib 판마다 다를 수 있어(CI macos-latest) 바이트가 아니라 푼 결과를 비교한다
  */
-function pngPixels(b: Buffer): { ihdr: string; raw: Buffer } {
-  let ihdr = "";
+function pngPixels(b: Buffer): { meta: string; raw: Buffer } {
+  const meta: string[] = []; // IDAT 밖 청크(IHDR·PLTE·tRNS…)는 압축되지 않으므로 바이트 그대로 비교
   const idat: Buffer[] = [];
   for (let i = 8; i < b.length; ) {
     const len = b.readUInt32BE(i), type = b.toString("ascii", i + 4, i + 8), data = b.subarray(i + 8, i + 8 + len);
-    if (type === "IHDR") ihdr = data.toString("hex");
     if (type === "IDAT") idat.push(data);
+    else meta.push(`${type}:${data.toString("hex")}`);
     i += 12 + len;
   }
-  return { ihdr, raw: inflateSync(Buffer.concat(idat)) };
+  return { meta: meta.join(","), raw: inflateSync(Buffer.concat(idat)) };
 }
 function samePng(a: Buffer, b: Buffer): boolean {
   const [x, y] = [pngPixels(a), pngPixels(b)];
-  return x.ihdr !== "" && x.ihdr === y.ihdr && x.raw.equals(y.raw);
+  return x.meta.startsWith("IHDR:") && x.meta === y.meta && x.raw.equals(y.raw);
 }
 /** 같은 파일인가: .png는 픽셀, 그 밖(.json·.css)은 바이트 */
 const sameAsset = (f: string, a: Buffer, b: Buffer) => (f.endsWith(".png") ? samePng(a, b) : a.equals(b));
@@ -122,10 +122,10 @@ describe("PNG 픽셀 비교(P7a-19)", () => {
     len.writeUInt32BE(data.length);
     return Buffer.concat([len, Buffer.from(type, "ascii"), data, Buffer.alloc(4)]);
   };
-  const png = (raw: Buffer, level: number, w = 2) => {
+  const png = (raw: Buffer, level: number, w = 2, plte?: Buffer) => {
     const ihdr = Buffer.alloc(13);
     ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 6;
-    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level })), chunk("IEND", Buffer.alloc(0))]);
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), ...(plte ? [chunk("PLTE", plte)] : []), chunk("IDAT", deflateSync(raw, { level })), chunk("IEND", Buffer.alloc(0))]);
   };
   const raw = Buffer.from([0, 255, 0, 0, 255, 0, 0, 255, 255]);
   it("같은 픽셀을 다른 압축 수준(1·9)으로 만든 두 장은 같고, 픽셀 한 칸·크기가 다르면 다르다, .json은 바이트", () => {
@@ -135,6 +135,9 @@ describe("PNG 픽셀 비교(P7a-19)", () => {
     const other = Buffer.from(raw); other[8] = 254;
     expect(sameAsset("x.png", a, png(other, 9))).toBe(false);
     expect(sameAsset("x.png", a, png(raw, 9, 1))).toBe(false);
+    // 팔레트 PNG(make-exterior): 인덱스가 같아도 팔레트 색이 다르면 다르다
+    expect(sameAsset("x.png", png(raw, 1, 2, Buffer.from([1, 2, 3])), png(raw, 9, 2, Buffer.from([1, 2, 3])))).toBe(true);
+    expect(sameAsset("x.png", png(raw, 1, 2, Buffer.from([1, 2, 3])), png(raw, 9, 2, Buffer.from([1, 2, 4])))).toBe(false);
     expect(sameAsset("x.json", Buffer.from("{}"), Buffer.from("{ }"))).toBe(false);
   });
 });
