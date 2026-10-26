@@ -86,7 +86,7 @@ describe("Desk", () => {
     expect(desk.getAttribute("aria-label")).toBe("developer, 작업 중");
   });
 
-  it("결정 대기(Phase 2): 큐의 id가 있으면 보고서를 여는 버튼이고, 손든 캐릭터와 ?, QRING, 켜진 모니터, 말머리 없음", () => {
+  it("결정 대기(Phase 2): 큐의 id가 있으면 보고서를 여는 버튼이고, 손든 캐릭터와 「!」 풍선, ask 모니터, 말머리 없음", () => {
     const opened: Array<[string, HTMLElement | null | undefined]> = [];
     render(
       <OpenDecisionContext.Provider value={(id, el) => opened.push([id, el])}>

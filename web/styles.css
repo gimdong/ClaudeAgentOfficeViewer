@@ -76,7 +76,7 @@
   --green: #0b7a52;  --pink: #b4285a;  --cyan: #13628f;  --violet: #6a46c9;  --yellow: #ffd84a;  --yellow-ink: #1f2233;
   --red: #c0352b;  --focus: #3fd0ff;
   --page: #eef0f5;  --field: #f4f1ea;  --line: #6b7085;
-  --pick: #e6e3f0; /* 고른 항목 바탕(dark #1c1a2c). 글 --ink 13:1 이상 */
+  --pick: #eeecf5; /* 고른 항목 바탕(dark #1c1a2c, 계약 §4.1a 9a6047e): 도장 글자 --green도 4.5:1 */
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -225,7 +225,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .sc { position: absolute; left: 0; top: 0; display: block; width: calc(var(--sw) * 2px); height: calc(var(--sh) * 2px); background-repeat: no-repeat; background-size: calc(var(--shw) * 2px) auto; background-position: calc(var(--sx) * -2px) calc(var(--sy) * -2px); image-rendering: pixelated; }
 .desk { position: relative; width: 132px; text-align: center; background: none; border: 0; padding: 0 0 4px; outline-offset: 0; }
 /* 바닥 띠(걸레받이 + 두 색): 책상 다리가 띠 위에 서고 이름표가 띠 안. 줄바꿈해도 줄마다 */
-.desk::before { content: ""; position: absolute; z-index: -1; left: -600px; right: -600px; top: 108px; bottom: 0; background: linear-gradient(var(--th-floor-edge, var(--floor)) 0 4px, var(--th-floor-a, var(--floor)) 4px 14px, var(--th-floor-seam, var(--floor)) 14px 15px, var(--th-floor-b, var(--floor)) 15px 26px, var(--th-floor-seam, var(--floor)) 26px 27px, var(--th-floor-a, var(--floor)) 27px); }
+.desk::before { content: ""; position: absolute; z-index: -1; left: -600px; right: -600px; top: 108px; bottom: 0; background: linear-gradient(var(--th-floor-edge) 0 4px, var(--th-floor-a) 4px 14px, var(--th-floor-seam) 14px 15px, var(--th-floor-b) 15px 26px, var(--th-floor-seam) 26px 27px, var(--th-floor-a) 27px); }
 /* 책상 세트 64×46 ×2(층 리드도 같음, 넓은 리드 책상은 하위 팀 리드용 T10). 겹침은 문서 순서: 의자 등받이 → 오라 → 캐릭터 → 모니터·책상(§3) */
 .desk-scene { position: relative; width: 128px; height: 92px; margin: 28px 2px 0; }
 .desk-marks { position: absolute; left: 0; top: 0; z-index: 1; width: 96px; height: 120px; overflow: visible; pointer-events: none; }
