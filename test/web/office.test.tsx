@@ -59,15 +59,14 @@ describe("Desk", () => {
     expect(desk.getAttribute("aria-label")).toBe("developer, 작업 중");
   });
 
-  it("책상 그림은 장면 시트 칸 좌표로 자르고, 리드 책상은 리드 칸", () => {
+  it("책상 그림은 장면 시트 칸 좌표로 자른다(의자 chair, 앞 desk-<모니터>)", () => {
     const layout = loadTheme("office").slots.desk.day.layout!;
-    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t" } })} lead />);
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t" } })} />);
     const front = screen.getByTestId("desk-developer").querySelector(".desk-front") as HTMLElement;
-    const [x, y, w, h] = layout.slots["desk-lead-ask"];
+    const [x, y, w, h] = layout.slots["desk-ask"];
     expect([front.style.getPropertyValue("--sx"), front.style.getPropertyValue("--sy"), front.style.getPropertyValue("--sw"), front.style.getPropertyValue("--sh")]).toEqual([`${x}`, `${y}`, `${w}`, `${h}`]);
     const chair = screen.getByTestId("desk-developer").querySelector(".chair") as HTMLElement;
-    expect(chair.className).toContain("chair-lead");
-    expect(chair.style.getPropertyValue("--sx")).toBe(`${layout.slots["chair-lead"][0]}`);
+    expect(chair.style.getPropertyValue("--sx")).toBe(`${layout.slots.chair[0]}`);
   });
 
   it("팝오버를 그리지 않는다(디자인 A4) — 모델·토큰은 말풍선 보조 줄로 옮겼다", () => {

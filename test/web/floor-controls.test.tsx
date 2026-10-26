@@ -174,7 +174,7 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     expect(desk.querySelector(".character")).toBeNull();
   });
 
-  it("T5: 방은 층 id로 고른 벽지 변형(data-wall)과 같은 번호 장식, 첫 책상은 리드 책상", () => {
+  it("T5: 방은 층 id로 고른 벽지 변형(data-wall)과 같은 번호 장식, 층 리드도 일반 책상(I1 — 넓은 책상은 하위 팀 리드용)", () => {
     const s = floorOf({});
     show(snap(s));
     render(<App />);
@@ -185,8 +185,12 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     // 벽 바탕 = 같은 N의 벽지 타일(지금 변형)
     expect(room.style.backgroundImage).toContain(loadTheme("office").sheets[`room-wall-${n}-${document.documentElement.dataset.variant}.png`]);
     const desks = [...floor().querySelectorAll(".desk")];
-    expect(desks[0].className).toContain("desk--lead");
-    expect(desks.slice(1).some((d) => d.className.includes("desk--lead"))).toBe(false);
+    expect(desks.length).toBeGreaterThan(1);
+    for (const d of desks) {
+      expect(d.className).not.toContain("desk--lead");
+      expect(d.querySelector(".chair")!.className).not.toContain("chair-lead");
+      expect(d.querySelector(".desk-front")!.className).not.toMatch(/desk-lead/);
+    }
   });
 
   it("막힌 호출 N은 칩 바로 뒤, 접혀도 보이고, 0이면 없다, 쉼표", () => {

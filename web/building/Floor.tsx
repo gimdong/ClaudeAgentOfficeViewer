@@ -196,7 +196,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           <div className="desks">
             {session.members.map((m, i) => (
               <Fragment key={m.name}>
-                <Desk member={m} lead={i === 0} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} />
+                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} />
                 {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>

@@ -66,6 +66,7 @@ describe("공통 UI 두 벌(계약 §4.1)", () => {
       // P7a-9 표면 토큰(계약 §4.1a): 입력칸·글 상자 --field, 페이지 --page, 테두리 --line
       pairs.push(["--ink", "--field", 4.5], ["--muted", "--field", 4.5], ["--ink", "--page", 4.5], ["--line", "--panel", 3], ["--line", "--field", 3], ["--line", "--page", 3], ["--yellow", "--line", 3]);
       pairs.push(["--wall", "--pink", 4.5]); // 급한 "!" 풍선·예산 칩·배너 글자
+      pairs.push(["--ink", "--pick", 4.5]); // 고른 항목 바탕(.qf-opt·.rf-row·.rd-opt)
       for (const [fg, bg, min] of pairs) {
         expect(v[fg], fg).toMatch(/^#[0-9a-f]{6}$/);
         expect(ratio(v[fg], v[bg]), `${fg}/${bg}`).toBeGreaterThanOrEqual(min - 0.005);
@@ -117,5 +118,11 @@ describe("두 겹 포커스 링·노랑 위 글자(계약 §4.1·§6)", () => {
     expect(body(".desk--offduty .nametag")).toMatch(/border-style:\s*dashed/);
     expect(body(".desk--offduty .nametag")).toMatch(/border-color:\s*var\(--th-label-muted\)/);
     expect(body(".desk--offduty .nametag")).toMatch(/(^|[;\s])color:\s*var\(--th-label-ink\)/);
+  });
+
+  it("바탕에 고정 hex를 쓰지 않는다(두 벌 토큰만) — 하트바·미니 트랙·고른 항목 등. 허용: 꺼진 층 방(글 없음, 장면)", () => {
+    const allowed = new Set([".floor--ended .room"]);
+    const bad = rules.filter((r) => !r.sel.startsWith(":root") && !r.sel.startsWith("@") && !/^\d|^(from|to)$/.test(r.sel) && !allowed.has(r.sel) && /background(?:-color)?\s*:[^;]*#[0-9a-fA-F]{3,6}\b/.test(r.body));
+    expect(bad.map((r) => r.sel)).toEqual([]);
   });
 });

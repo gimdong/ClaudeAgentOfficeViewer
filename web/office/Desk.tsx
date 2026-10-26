@@ -28,8 +28,6 @@ interface DeskProps {
   folder?: { pending: number; total: number };
   /** 퇴사 중이면 channel 연결이 없음을 알린다(스펙 12장 m) */
   retireWait?: boolean;
-  /** 층 첫 책상(팀 리드): 넓은 책상·높은 등받이 그림(SPEC §2 desk) */
-  lead?: boolean;
 }
 
 type Screen = "work" | "ask" | "think" | "rest";
@@ -46,14 +44,13 @@ export function SceneCell({ slot = "desk", name, className }: { slot?: SlotName;
 }
 
 /** 책상 장면(§3 겹침: 의자 등받이 → 오라 → 캐릭터 → 모니터·책상). 빈 자리면 의자 + 쉼 모니터. 모두 장식 */
-function DeskScene({ member, pose, lead, vacant }: { member: Member; pose: [ActionName, Screen]; lead: boolean; vacant: boolean }) {
-  const kind = lead ? "lead-" : "";
+function DeskScene({ member, pose, vacant }: { member: Member; pose: [ActionName, Screen]; vacant: boolean }) {
   const screen = vacant ? "rest" : pose[1];
   return (
     <div className="desk-scene" aria-hidden="true" data-testid={vacant ? "empty-chair" : undefined}>
-      <SceneCell name={lead ? "chair-lead" : "chair"} className={`sc chair${lead ? " chair-lead" : ""}`} />
+      <SceneCell name="chair" className="sc chair" />
       {!vacant && <Character name={member.name} action={pose[0]} effort={member.effort} variantIndex={memberVariant(member.name, LOOKS.length)} />}
-      <SceneCell name={`desk-${kind}${screen}`} className={`sc desk-front monitor-${screen}`} />
+      <SceneCell name={`desk-${screen}`} className={`sc desk-front monitor-${screen}`} />
     </div>
   );
 }
@@ -92,7 +89,7 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, lead: leadDesk = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
+function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
@@ -160,7 +157,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   );
   // 결정 표시: 공통 노랑 "!" 풍선(계약 §2 바뀌지 않는 칸, --yellow + --yellow-ink). 뜻은 책상 접근 이름이 전한다
   const bang = decision && !paused ? <span className="qmark" aria-hidden="true">!</span> : null;
-  const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} lead={leadDesk} vacant={vacant} />;
+  const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} vacant={vacant} />;
 
   // 이름표 아래 한 줄: 모델 · 토큰 합계(항상 보임). 둘 다 없으면 그리지 않는다
   // 92px 폭에서 숫자가 잘리지 않게 모델과 토큰을 두 줄로 둔다(정적 렌더 확인)
@@ -196,7 +193,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
     </span>
   );
   const folderMark = pending > 0 ? CMD_TEXT.aria.folder(pending) : "";
-  const cls = `desk state-${shown}${decision ? " desk--decision" : ""}${urgent ? " urgent" : ""}${awaiting ? " desk--await" : ""}${offDuty ? " desk--offduty" : ""}${leadDesk ? " desk--lead" : ""}`;
+  const cls = `desk state-${shown}${decision ? " desk--decision" : ""}${urgent ? " urgent" : ""}${awaiting ? " desk--await" : ""}${offDuty ? " desk--offduty" : ""}`;
   if (replyable) {
     // Phase 6b: ask_user(결정 표시)·답을 기다립니다는 답 칸을 연다(§2.1·§2.7)
     return (
