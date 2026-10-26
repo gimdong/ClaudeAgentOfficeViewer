@@ -126,6 +126,16 @@ describe("planPantry", () => {
   });
 });
 
+describe("planPantry 같은 입력이면 같은 객체(효과가 setState만 돌지 않게)", () => {
+  it("walking-out·walking-back·pantry(자리 있음) 각각 같은 입력 두 번 → prev 그대로", () => {
+    const m = [idle("a", T0 - 30_000), { name: "b", state: "working" as const }, idle("c", T0 - 60_000), idle("d", T0 - 60_000)];
+    const prev: PantryState = { a: { spot: "walking-out", since: T0 }, b: { spot: "walking-back", since: T0 }, c: { spot: "pantry", since: T0 - 5_000, seat: "coffee" }, d: { spot: "desk", since: T0 } };
+    const once = planPantry(prev, m, T0 + 1_000, false);
+    expect(once).toBe(prev);
+    expect(planPantry(once, m, T0 + 1_000, false)).toBe(once);
+  });
+});
+
 describe("usePantry", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -152,6 +162,17 @@ describe("usePantry", () => {
     act(() => cbs.at(-1)!());
     expect(result.current.a.spot).toBe("walking-out");
     vi.restoreAllMocks();
+  });
+
+  it("깬 타이머가 바뀐 것을 못 만들어도 다음 타이머를 건다: 정원이 찬 뒤 셋째의 30초가 와도 앞 둘은 도착한다(designer-motion C1)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const members = [idle("a", T0 - 28_000), idle("b", T0 - 27_500), idle("c", T0 - 27_000)];
+    const { result } = renderHook(() => usePantry(members, false));
+    for (let i = 0; i < 40; i++) act(() => vi.advanceTimersByTime(100)); // a 2.0초, b 2.5초에 출발, c는 3.0초에 차례가 와도 정원이 차 기다림
+    expect(spots(result.current)).toEqual({ a: "walking-out", b: "walking-out", c: "desk" });
+    act(() => vi.advanceTimersByTime(WALK_MS));
+    expect(spots(result.current)).toEqual({ a: "pantry", b: "pantry", c: "desk" });
   });
 
   it("가짜 타이머: walkMs가 짧으면 그 시각에 도착한다", () => {
