@@ -14,6 +14,13 @@ import { LEAD_TEXT } from "../../web/office/leadText";
 afterEach(cleanup);
 
 describe("App", () => {
+  it("Phase 7 T1: 루트에 공통 UI 벌(data-ui)을 단다 — 테마가 정하기 전(Task 3)까지는 dark", () => {
+    delete document.documentElement.dataset.ui;
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()] }), live: true };
+    render(<App />);
+    expect(document.documentElement.dataset.ui).toBe("dark");
+  });
+
   it("스냅샷을 받기 전에는 로딩 문구", () => {
     state.value = { snapshot: null, live: false };
     render(<App />);

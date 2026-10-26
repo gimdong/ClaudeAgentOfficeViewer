@@ -36,6 +36,7 @@
   --bg: #12111f;  --wall: #1d1b33;  --floor: #2a2446;  --desk: #3b3460;  --desk-dark: #241f40;
   --panel: #0e0d18;  --ink: #e8e4ff;  --muted: #9d97c7;
   --green: #39ffb6;  --pink: #ff5fa2;  --cyan: #3fd0ff;  --violet: #b98cff;  --yellow: #fff7a8;
+  --yellow-ink: #12111f; /* Phase 7: 노랑 바탕 위 글자(결재 칩·"!"·.q-chip). 두 벌 모두 어두운 색(계약 §4.1) */
   --red: #ff5a5a; /* 베타: 오류·실패에만(진단 디자인 가정 D2) */
 
   --yellow-deep: #ffd84a;
@@ -65,11 +66,20 @@
   --pink-dim: #7a2a50;
   color-scheme: dark; /* 진단 디자인 가정 D1: 스크롤바·기본 컨트롤도 어둡게 */
 }
+/* Phase 7 공통 UI 두 벌(계약 docs/design/phase7/SPEC.md §4.1): 위 :root가 dark 벌, 테마가 ui:"light"를 고르면 아래 값이 덮는다.
+ * 테마는 이 이름들을 고치지 못한다(빌드 검사). --wall이 흰색인 까닭: .pbtn--primary 글자(var(--wall))가 --green 위 5.36:1(P7-11).
+ * 장면 토큰(--bg --floor --desk …)은 테마 --th-*로 옮긴다(Task 5) */
+:root[data-ui="light"] {
+  --wall: #ffffff;  --panel: #ffffff;  --ink: #1f2233;  --muted: #555b73;
+  --green: #0b7a52;  --pink: #b4285a;  --cyan: #13628f;  --violet: #6a46c9;  --yellow: #ffd84a;  --yellow-ink: #1f2233;
+  --red: #c0352b;  --focus: #3fd0ff;
+  color-scheme: light;
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
 body { font-family: var(--font-pixel); font-size: 12px; line-height: 1.5; }
 button, input, textarea, select { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(계약 §6): 안쪽 --focus, 바깥 --ink — 낮·밤 장면 어디서나 한 겹은 3:1 */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block; }
 
@@ -96,7 +106,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .live.on { color: var(--green); }
 .live.off { color: var(--pink); }
 .version { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.q-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--yellow); color: var(--wall); border: 0; padding: 4px 10px 4px 6px; cursor: pointer; box-shadow: 0 2px 0 var(--yellow-deep); }
+.q-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--yellow); color: var(--yellow-ink); border: 0; padding: 4px 10px 4px 6px; cursor: pointer; box-shadow: 0 2px 0 var(--yellow-deep); }
 .q-chip:active { transform: translateY(2px); box-shadow: none; }
 .elevator { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; align-items: center; }
 .elevator .lbl { font-size: 11px; color: var(--muted); margin-right: 4px; }
@@ -140,7 +150,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .chip--idle { color: var(--muted); }
 .chip--paused { color: var(--yellow); }
 .chip--ended { color: var(--muted); border-style: dashed; }
-.chip--decision { color: var(--wall); background: var(--yellow); border-color: var(--yellow); }
+.chip--decision { color: var(--yellow-ink); background: var(--yellow); border-color: var(--yellow); }
 .chip--budget { color: var(--wall); background: var(--pink); border-color: var(--pink); }
 .stale { font-size: 11px; color: var(--pink); white-space: nowrap; }
 .summary { font-size: 11px; color: var(--muted); display: none; }
@@ -183,15 +193,15 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .fl-blocked { font-size: 11px; color: var(--muted); white-space: nowrap; }
 /* 숨긴 층 줄(§4.3): 탑 아래·땅 위, 탑의 --shell 테두리와 이어진다 */
 .hidden-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--shell); }
-.hidden-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.hidden-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: 0 0 0 6px var(--ink); }
 .hidden-bar .hb-text { font-size: 12px; color: var(--muted); }
 .pbtn[aria-busy="true"] { opacity: .4; cursor: progress; }
 .shutter { position: absolute; inset: 0; z-index: 2; background: repeating-linear-gradient(var(--shutter) 0 6px, var(--shutter-gap) 6px 8px); opacity: .84; border-bottom: 6px solid var(--shutter-bar); pointer-events: none; transform-origin: top; }
 .shutter.shutter-down { animation: shutter-down .36s steps(6) both; }
 /* 멈춘 층에서 손든 책상만 셔터 위로(B130) */
 @keyframes shutter-down { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.shutter-sign { position: absolute; left: 50%; top: 18px; transform: translateX(-50%) rotate(-3deg); background: var(--yellow); color: var(--wall); padding: 4px 10px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; text-align: center; line-height: 1.3; }
-.shutter-note { position: absolute; left: 50%; top: 66px; transform: translateX(-50%) rotate(2deg); background: var(--yellow); color: var(--wall); padding: 2px 8px; font-family: var(--font-pixel); font-size: 12px; white-space: nowrap; }
+.shutter-sign { position: absolute; left: 50%; top: 18px; transform: translateX(-50%) rotate(-3deg); background: var(--yellow); color: var(--yellow-ink); padding: 4px 10px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; text-align: center; line-height: 1.3; }
+.shutter-note { position: absolute; left: 50%; top: 66px; transform: translateX(-50%) rotate(2deg); background: var(--yellow); color: var(--yellow-ink); padding: 2px 8px; font-family: var(--font-pixel); font-size: 12px; white-space: nowrap; }
 .shutter-sign small { display: block; font-family: var(--font-pixel); font-size: 10px; }
 .shutter-sign::before, .shutter-sign::after { content: ""; position: absolute; top: -10px; width: 2px; height: 10px; background: var(--yellow-deep); }
 .shutter-sign::before { left: 10px; }
@@ -218,7 +228,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .desk--sub-done { opacity: .55; }
 .sub-tag { position: absolute; top: -8px; left: 4px; padding: 0 3px; background: var(--wall); font-size: 10px; line-height: 14px; color: var(--muted); }
 .sub-more { align-self: center; border-style: dashed; border-color: var(--muted); color: var(--muted); font-size: 11px; cursor: default; }
-.desk--decision .nametag { background: var(--yellow); color: var(--wall); }
+.desk--decision .nametag { background: var(--yellow); color: var(--yellow-ink); }
 /* Phase 2: 보고서를 열 수 있는 결정 대기 책상은 버튼이다(디자인 6장 "Phase 2 이후" 열, 11장) */
 button.desk { cursor: pointer; font: inherit; color: inherit; }
 .desk .q-ring { opacity: 0; }
@@ -438,7 +448,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 /* ───────── 401 화면 (디자인 phase2 §8) ───────── */
 .auth { max-width: 480px; margin: 15vh auto 0; padding: 0 16px; text-align: center; font-family: var(--font-text); }
 .auth-shutter { position: relative; width: 160px; height: 88px; margin: 0 auto 20px; background: repeating-linear-gradient(var(--shutter) 0 6px, var(--shutter-gap) 6px 8px); border-bottom: 6px solid var(--shutter-bar); display: grid; place-items: center; }
-.auth-sign { position: relative; background: var(--yellow); color: var(--wall); padding: 4px 10px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; transform: rotate(-3deg); }
+.auth-sign { position: relative; background: var(--yellow); color: var(--yellow-ink); padding: 4px 10px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; transform: rotate(-3deg); }
 .auth-sign::before, .auth-sign::after { content: ""; position: absolute; top: -10px; width: 2px; height: 10px; background: var(--yellow-deep); }
 .auth-sign::before { left: 12px; }
 .auth-sign::after { right: 12px; }
@@ -487,7 +497,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .pr-opt--ask:has(input:checked) { border-color: var(--yellow); color: var(--yellow); }
 .pr-opt--deny:has(input:checked) { border-color: var(--pink); color: var(--pink); }
 .pr-opt:has(input:checked) .pr-mark { background: currentColor; box-shadow: none; }
-.pr-opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pr-opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 6px var(--ink); }
 /* 아래 고정 저장 영역(§2.4) */
 .ap-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 2px solid var(--desk); background: var(--panel); }
 .ap-line { flex: 1; min-width: 0; font-family: var(--font-text); font-size: 13px; line-height: 1.5; }
@@ -703,7 +713,7 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 
 /* §2 책상 — 한 줄 자리는 모든 책상에 둔다(비어 있어도). 줄이 있는 책상만 위로 밀려 바닥선이 어긋나는 것을 막는다(렌더 확인) */
 .desk-extra { display: block; height: 14px; line-height: 14px; overflow: hidden; font-size: 10px; }
-.desk-folder { display: inline-block; vertical-align: top; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--yellow); color: var(--wall); }
+.desk-folder { display: inline-block; vertical-align: top; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--yellow); color: var(--yellow-ink); }
 .desk-status { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desk-status.pink { color: var(--pink); }
 .desk--await .nametag { text-decoration: underline; text-decoration-color: var(--await); text-decoration-thickness: 2px; text-underline-offset: 3px; }
@@ -732,5 +742,5 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .desk-slot { position: relative; width: 96px; }
 .desk-folder-hit { position: absolute; left: 80px; top: 60px; width: 16px; height: 16px; padding: 0; border: 0; background: none; cursor: pointer; }
 .desk-folder-btn { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); border: 0; cursor: pointer; font: inherit; font-size: 10px; }
-.desk-folder-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.desk-folder-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; box-shadow: 0 0 0 6px var(--ink); }
 .rd-folder { display: block; margin: 0 0 8px; }

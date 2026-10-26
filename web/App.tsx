@@ -71,6 +71,10 @@ export function App() {
   const lead = useLead();
   const openAgentAt = useCallback((t: string, el?: HTMLElement | null, floor?: string) => policy.openAgent(t, el, undefined, floor), [policy.openAgent]);
   useBudgetAlarm(snapshot, announce);
+  // 공통 UI 벌(Phase 7 계약 §4.1): 루트 data-ui가 :root[data-ui="light"] 토큰을 고른다. 테마·낮밤 설정(Task 3)이 오기 전에는 dark
+  useLayoutEffect(() => {
+    document.documentElement.dataset.ui = "dark";
+  }, []);
   // 간판 이름(Task 10): 저장 직후 그 이름을 보이고, 서버 스냅샷 값이 바뀌면 그 값을 따른다
   const serverName = snapshot?.building?.userName;
   const [savedName, setSavedName] = useState<string | null>(null);
