@@ -35,12 +35,12 @@ describe("plugin.json", () => {
     expect(p.license).toBe("MIT");
   });
 
-  it("버전은 2.0.0-beta.16로 다섯 곳이 같다(relay.cjs의 PLUGIN_VERSION 포함, Phase 6a)", async () => {
+  it("버전은 2.0.0-beta.17로 다섯 곳이 같다(relay.cjs의 PLUGIN_VERSION 포함, Phase 6a)", async () => {
     const pkg = await readJson<{ version: string }>(join(ROOT, "package.json"));
     const lock = await readJson<{ version: string; packages: Record<string, { version?: string }> }>(join(ROOT, "package-lock.json"));
     const plugin = await readJson<{ version: string }>(join(PLUGIN, ".claude-plugin/plugin.json"));
     const m = await readJson<{ plugins: Array<{ name: string; version: string }> }>(join(ROOT, ".claude-plugin/marketplace.json"));
-    expect(pkg.version).toBe("2.0.0-beta.16");
+    expect(pkg.version).toBe("2.0.0-beta.17");
     const relay = /const PLUGIN_VERSION = "([^"]+)";/.exec(await readFile(join(PLUGIN, "hooks/relay.cjs"), "utf8"))?.[1];
     expect([lock.version, lock.packages[""].version, plugin.version, m.plugins.find((x) => x.name === "claude-office")?.version, relay]).toEqual(Array(5).fill(pkg.version));
   });
