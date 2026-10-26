@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk, SceneCell } from "../office/Desk";
@@ -8,6 +8,9 @@ import { CMD_TEXT } from "../office/leadCmdText";
 import { LEAD_TEXT, shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
+import { PantryScene, SOFA_DX, Walker, walkMsOf } from "../office/Pantry";
+import { WALK_MS, type PantryMember } from "../office/pantryPlan";
+import { usePantry, useReducedMotion } from "../office/usePantry";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
@@ -87,6 +90,42 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     if (!paused) setDropping(false);
     wasPaused.current = paused;
   }, [paused]);
+
+  // 탕비실 걷기(Phase 7 T6b, 계약 SPEC §3). 휴업 층은 계획기에서 뺀다(모두 책상). 걷는 시간은 책상 ↔ 커피 자리 실제 거리
+  const roomRef = useRef<HTMLDivElement>(null);
+  const [geo, setGeo] = useState<Record<string, [desk: number, pantry: number, y: number]>>({});
+  const names = session.members.map((m) => m.name).join("\n");
+  useLayoutEffect(() => {
+    const measure = () => {
+      const room = roomRef.current?.getBoundingClientRect();
+      const p = roomRef.current?.querySelector(".pantry-scene")?.getBoundingClientRect();
+      if (!room || !p) return;
+      const next: typeof geo = {};
+      for (const d of roomRef.current!.querySelectorAll<HTMLElement>(".desk-scene[data-member]")) next[d.dataset.member!] = [d.getBoundingClientRect().left - room.left + 8, p.left - room.left + 2, p.top - room.top + 32];
+      setGeo((g) => (JSON.stringify(g) === JSON.stringify(next) ? g : next));
+    };
+    measure();
+    addEventListener("resize", measure);
+    return () => removeEventListener("resize", measure);
+  }, [names, collapsed]);
+  const plan: PantryMember[] = paused
+    ? []
+    : session.members.map((m) => {
+        const since = m.state === "idle" && m.lastActivityAt ? Date.parse(m.lastActivityAt) : NaN;
+        const g = geo[m.name];
+        return { name: m.name, state: m.state, duty: m.duty, idleSince: Number.isFinite(since) ? since : undefined, walkMs: g && walkMsOf(Math.abs(g[1] - g[0])), sofaWalkMs: g && walkMsOf(Math.abs(g[1] + SOFA_DX - g[0])) };
+      });
+  // 스냅샷마다 새 배열이면 계획 타이머를 다시 맞추므로, 내용이 같으면 같은 배열(reviewer m2)
+  const planKey = JSON.stringify(plan);
+  const planMembers = useMemo(() => plan, [planKey]);
+  const pantry = usePantry(planMembers, useReducedMotion());
+  const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
+  // 걷는 사람의 탕비실 쪽 끝 = 계획기가 출발 때 정한 자리(I1). 걷는 시간도 그 자리까지 거리(속도 3칸/120ms 고정)
+  const seatX = (name: string) => (pantry[name]?.seat === "sofa" ? SOFA_DX : 0);
+  const walkMs = (name: string) => {
+    const p = planMembers.find((x) => x.name === name);
+    return (pantry[name]?.seat === "sofa" ? p?.sofaWalkMs : p?.walkMs) ?? WALK_MS;
+  };
 
   const id = floorDomId(session.id);
   const { theme, variant } = useContext(ThemeContext);
@@ -181,7 +220,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             </span>
           )}
         </header>
-        <div className="room" id={`${id}-room`} data-wall={wall} style={tile ? { backgroundImage: `url(${tile})` } : undefined}>
+        <div className="room" id={`${id}-room`} data-wall={wall} ref={roomRef} style={tile ? { backgroundImage: `url(${tile})` } : undefined}>
           <i className="win" aria-hidden="true" />
           <SceneCell slot="room-wall" name={`room-deco-${wall}`} className={`sc room-deco deco-${wall}`} />
           {paused && (
@@ -196,11 +235,22 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           <div className="desks">
             {session.members.map((m, i) => (
               <Fragment key={m.name}>
-                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} />
+                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} away={spotOf(m.name) !== "desk"} />
                 {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>
             ))}
+            <PantryScene coffee={session.members.find((m) => spotOf(m.name) === "pantry" && pantry[m.name].seat === "coffee")} sofa={session.members.find((m) => spotOf(m.name) === "pantry" && pantry[m.name].seat === "sofa")} />
+          </div>
+          <div className="walk-layer" aria-hidden="true">
+            {session.members.map((m) => {
+              const s = pantry[m.name];
+              const g = geo[m.name] ?? [0, 0, 0];
+              if (s?.spot !== "walking-out" && s?.spot !== "walking-back") return null;
+              const seat = g[1] + seatX(m.name);
+              const out = s.spot === "walking-out";
+              return <Walker key={m.name} member={m} from={out ? g[0] : seat} to={out ? seat : g[0]} y={g[2]} since={s.since} ms={walkMs(m.name)} out={out} />;
+            })}
           </div>
           {(session.predecessors?.length ?? 0) > 0 && (
             // 전임자 서랍(Phase 6b designer SPEC §6·B323): 방 오른쪽 아래, 펼친 목록은 방 위로 겹친다. 시작 시각이 있으면 기간, 없으면 퇴사 시각만(글자로만)

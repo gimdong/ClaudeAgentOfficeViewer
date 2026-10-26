@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IDLE_WALK_MS, MAX_WALKERS, planPantry, WALK_MS, type PantryMember, type PantryState } from "../../web/office/pantryPlan";
+import { IDLE_WALK_MS, MAX_WALKERS, PANTRY_SEATS, planPantry, WALK_MS, type PantryMember, type PantryState } from "../../web/office/pantryPlan";
 import { usePantry } from "../../web/office/usePantry";
 
 // Phase 7 Task 6(계약 SPEC §3 탕비실 걷기, MOTION.md §2·§3.1): 쉼 30초 → 탕비실, 층마다 동시에 걸어 나가는 사람 2명까지
@@ -11,24 +11,53 @@ const spots = (s: PantryState) => Object.fromEntries(Object.entries(s).map(([n, 
 
 describe("planPantry", () => {
   it("상수는 계약 값", () => {
-    expect([IDLE_WALK_MS, MAX_WALKERS, WALK_MS]).toEqual([30_000, 2, 3_120]);
+    expect([IDLE_WALK_MS, MAX_WALKERS, WALK_MS, PANTRY_SEATS]).toEqual([30_000, 2, 3_120, ["coffee", "sofa"]]);
   });
 
   it("쉼 29초 → desk, 30초 → walking-out(since = 지금)", () => {
     expect(spots(planPantry({}, [idle("a")], T0 + 29_000, false))).toEqual({ a: "desk" });
     const s = planPantry({}, [idle("a")], T0 + 30_000, false);
-    expect(s.a).toEqual({ spot: "walking-out", since: T0 + 30_000 });
+    expect(s.a).toEqual({ spot: "walking-out", since: T0 + 30_000, seat: "coffee" }); // 자리는 출발할 때 정한다
   });
 
-  it("셋이 동시에 30초 → 둘만 walking-out(오래 쉰 사람 먼저), 셋째는 앞 사람이 도착한 다음 차례", () => {
+  it("셋이 동시에 30초 → 둘만 walking-out(오래 쉰 사람 먼저), 셋째는 탕비실 자리(2)가 날 때까지 책상", () => {
     const m = [idle("b", T0), idle("a", T0), idle("c", T0 - 5_000)];
     const s1 = planPantry({}, m, T0 + 30_000, false);
     expect(spots(s1)).toEqual({ a: "walking-out", b: "desk", c: "walking-out" });
     const s2 = planPantry(s1, m, T0 + 30_000 + WALK_MS - 1, false);
     expect(spots(s2)).toEqual({ a: "walking-out", b: "desk", c: "walking-out" });
     const s3 = planPantry(s2, m, T0 + 30_000 + WALK_MS + 500, false);
-    expect(spots(s3)).toEqual({ a: "pantry", b: "walking-out", c: "pantry" });
+    expect(spots(s3)).toEqual({ a: "pantry", b: "desk", c: "pantry" });
     expect(s3.a.since).toBe(T0 + 30_000 + WALK_MS); // 도착한 시각(다시 계획한 시각이 아니라)
+    const m4 = [idle("b", T0), { name: "a", state: "working" as const }, idle("c", T0 - 5_000)];
+    expect(spots(planPantry(s3, m4, T0 + 40_000, false))).toEqual({ a: "walking-back", b: "walking-out", c: "pantry" });
+  });
+
+  it("탕비실 자리는 출발할 때 빈 자리 앞에서부터: 먼저 나선 사람 커피, 다음 소파. 돌아가는 사람의 자리는 비어 다음 사람이 쓴다", () => {
+    const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000 }, idle("b", T0 - 30_000)];
+    const s1 = planPantry({}, m, T0, false);
+    const s2 = planPantry(s1, m, T0 + WALK_MS, false);
+    expect([s2.a.seat, s2.b.seat]).toEqual(["coffee", "sofa"]); // 같은 때 나서면 오래 쉰 사람 → 이름 순
+    const left = planPantry(s2, [{ name: "a", state: "working" as const, walkMs: 1_000 }, idle("b", T0 - 30_000), idle("c", T0 - 30_000)], T0 + 5_000, false);
+    expect(left.a).toEqual({ spot: "walking-back", since: T0 + 5_000, seat: "coffee" }); // 앉았던 자리에서 돌아간다
+    const s3 = planPantry(left, [{ name: "a", state: "working" as const, walkMs: 1_000 }, idle("b", T0 - 30_000), idle("c", T0 - 30_000)], T0 + 5_000 + WALK_MS, false);
+    expect([s3.b.seat, s3.c.seat]).toEqual(["sofa", "coffee"]);
+  });
+
+  it("소파로 가는 사람은 sofaWalkMs(소파까지 실제 거리)로 도착하고, 돌아설 때도 그 기준", () => {
+    const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000, sofaWalkMs: 9_000 }, { ...idle("b", T0 - 30_000), walkMs: 1_000, sofaWalkMs: 2_000 }];
+    const s1 = planPantry({}, m, T0, false);
+    expect([s1.a.seat, s1.b.seat]).toEqual(["coffee", "sofa"]);
+    expect(spots(planPantry(s1, m, T0 + 1_999, false))).toEqual({ a: "pantry", b: "walking-out" });
+    expect(planPantry(s1, m, T0 + 2_000, false).b).toEqual({ spot: "pantry", since: T0 + 2_000, seat: "sofa" });
+    const w = [m[0], { ...m[1], state: "working" as const }];
+    const back = planPantry(s1, w, T0 + 500, false);
+    expect(spots(planPantry(back, w, T0 + 999, false)).b).toBe("walking-back");
+    expect(spots(planPantry(back, w, T0 + 1_000, false)).b).toBe("desk"); // 500ms 걸었으면 500ms 되돌아옴
+  });
+
+  it("reduced도 탕비실 자리는 2: 셋째는 책상", () => {
+    expect(spots(planPantry({}, [idle("a"), idle("b"), idle("c")], T0 + 30_000, true))).toEqual({ a: "pantry", b: "pantry", c: "desk" });
   });
 
   it("walking-back은 2명 제한 밖: 둘이 돌아가는 중이어도 셋째가 걸어 나간다", () => {
@@ -49,7 +78,7 @@ describe("planPantry", () => {
     const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000 }];
     const s1 = planPantry({}, m, T0, false);
     expect(spots(planPantry(s1, m, T0 + 999, false))).toEqual({ a: "walking-out" });
-    expect(planPantry(s1, m, T0 + 1_000, false).a).toEqual({ spot: "pantry", since: T0 + 1_000 });
+    expect(planPantry(s1, m, T0 + 1_000, false).a).toEqual({ spot: "pantry", since: T0 + 1_000, seat: "coffee" });
     const back = planPantry(s1, [{ name: "a", state: "working" as const, walkMs: 1_000 }], T0 + 400, false);
     expect(spots(planPantry(back, [{ name: "a", state: "working", walkMs: 1_000 }], T0 + 800, false))).toEqual({ a: "desk" });
   });
@@ -72,7 +101,7 @@ describe("planPantry", () => {
   it("탕비실에서 손듦(decision) → 그 자리(pantry 그대로, 화면은 hand_up_stand)", () => {
     const prev: PantryState = { a: { spot: "pantry", since: T0 } };
     const s = planPantry(prev, [{ name: "a", state: "decision" }], T0 + 60_000, false);
-    expect(s.a).toEqual({ spot: "pantry", since: T0 });
+    expect(s.a).toEqual({ spot: "pantry", since: T0, seat: "coffee" });
   });
 
   it("걸어 나가는 중 손듦 → walking-back(책상에서 hand_up)", () => {
@@ -82,10 +111,15 @@ describe("planPantry", () => {
 
   it("reduced → 걷기 단계 없이 바로 pantry, 일 시작이면 바로 desk", () => {
     const s = planPantry({}, [idle("a")], T0 + 30_000, true);
-    expect(s.a).toEqual({ spot: "pantry", since: T0 + 30_000 });
+    expect(s.a).toEqual({ spot: "pantry", since: T0 + 30_000, seat: "coffee" });
     expect(spots(planPantry(s, [{ name: "a", state: "working" }], T0 + 31_000, true))).toEqual({ a: "desk" });
     const walking: PantryState = { b: { spot: "walking-out", since: T0 } };
     expect(spots(planPantry(walking, [idle("b", T0 - 30_000)], T0 + 1, true))).toEqual({ b: "pantry" });
+  });
+
+  it("reduced에서 걸어 나가는 중 손듦 → 탕비실이 아니라 바로 desk(책상에서 hand_up)", () => {
+    const walking: PantryState = { a: { spot: "walking-out", since: T0 } };
+    expect(planPantry(walking, [{ name: "a", state: "decision" }], T0 + 500, true).a).toEqual({ spot: "desk", since: T0 + 500 });
   });
 
   it("duty off·offline은 대상 아님. 탕비실에 있다가 퇴근하면 걷지 않고 바로 desk", () => {
@@ -104,6 +138,16 @@ describe("planPantry", () => {
   });
 });
 
+describe("planPantry 같은 입력이면 같은 객체(효과가 setState만 돌지 않게)", () => {
+  it("walking-out·walking-back·pantry(자리 있음) 각각 같은 입력 두 번 → prev 그대로", () => {
+    const m = [idle("a", T0 - 30_000), { name: "b", state: "working" as const }, idle("c", T0 - 60_000), idle("d", T0 - 60_000)];
+    const prev: PantryState = { a: { spot: "walking-out", since: T0 }, b: { spot: "walking-back", since: T0 }, c: { spot: "pantry", since: T0 - 5_000, seat: "coffee" }, d: { spot: "desk", since: T0 } };
+    const once = planPantry(prev, m, T0 + 1_000, false);
+    expect(once).toBe(prev);
+    expect(planPantry(once, m, T0 + 1_000, false)).toBe(once);
+  });
+});
+
 describe("usePantry", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -119,6 +163,30 @@ describe("usePantry", () => {
     expect(result.current.a.spot).toBe("pantry");
   });
 
+  it("타이머가 1ms 일찍 깨도 계획이 멈추지 않는다(designer-motion C1)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const cbs: Array<() => void> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((f: () => void) => (cbs.push(f), 0)) as unknown as typeof setTimeout);
+    const members = [idle("a", T0)];
+    const { result } = renderHook(() => usePantry(members, false));
+    vi.setSystemTime(T0 + IDLE_WALK_MS - 1);
+    act(() => cbs.at(-1)!());
+    expect(result.current.a.spot).toBe("walking-out");
+    vi.restoreAllMocks();
+  });
+
+  it("깬 타이머가 바뀐 것을 못 만들어도 다음 타이머를 건다: 정원이 찬 뒤 셋째의 30초가 와도 앞 둘은 도착한다(designer-motion C1)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const members = [idle("a", T0 - 28_000), idle("b", T0 - 27_500), idle("c", T0 - 27_000)];
+    const { result } = renderHook(() => usePantry(members, false));
+    for (let i = 0; i < 40; i++) act(() => vi.advanceTimersByTime(100)); // a 2.0초, b 2.5초에 출발, c는 3.0초에 차례가 와도 정원이 차 기다림
+    expect(spots(result.current)).toEqual({ a: "walking-out", b: "walking-out", c: "desk" });
+    act(() => vi.advanceTimersByTime(WALK_MS));
+    expect(spots(result.current)).toEqual({ a: "pantry", b: "pantry", c: "desk" });
+  });
+
   it("가짜 타이머: walkMs가 짧으면 그 시각에 도착한다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
@@ -129,7 +197,7 @@ describe("usePantry", () => {
     expect(result.current.a.spot).toBe("pantry");
   });
 
-  it("가짜 타이머: 셋째는 앞 사람이 도착하는 순간 출발, 일이 시작되면 바로 돌아섬", () => {
+  it("가짜 타이머: 셋째는 탕비실 자리가 날 때(한 사람이 일하러 감) 출발, 일이 시작되면 바로 돌아섬", () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
     const three = [idle("a"), idle("b"), idle("c")];
@@ -137,9 +205,11 @@ describe("usePantry", () => {
     act(() => vi.advanceTimersByTime(30_000));
     expect(spots(result.current)).toEqual({ a: "walking-out", b: "walking-out", c: "desk" });
     act(() => vi.advanceTimersByTime(WALK_MS));
-    expect(spots(result.current)).toEqual({ a: "pantry", b: "pantry", c: "walking-out" });
+    expect(spots(result.current)).toEqual({ a: "pantry", b: "pantry", c: "desk" });
+    rerender({ m: [{ name: "a", state: "working" }, idle("b"), idle("c")] });
+    expect(spots(result.current)).toEqual({ a: "walking-back", b: "pantry", c: "walking-out" });
     act(() => vi.advanceTimersByTime(1_000));
-    rerender({ m: [idle("a"), idle("b"), { name: "c", state: "working" }] });
+    rerender({ m: [{ name: "a", state: "working" }, idle("b"), { name: "c", state: "working" }] });
     expect(result.current.c.spot).toBe("walking-back");
     act(() => vi.advanceTimersByTime(1_000));
     expect(result.current.c.spot).toBe("desk");
