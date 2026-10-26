@@ -1136,7 +1136,11 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(sec).toContain("작업 지시가 세션에 닿지 않는 것 같아요");
     const ch = readFileSync(join(__dirname, "../../server/floors/channels.ts"), "utf8");
     expect(ch).toContain("export const RECEIPT_MS = 30_000;");
-    expect(sec).toContain("리드가 쉬고 있을 때 보낸 지시에만 합니다");
+    expect(sec).toContain("1분 넘게 조용할 때");
+    expect(ch).toContain("const IDLE_AFTER_MS = 60_000;");
+    // 결정 대기는 chat만 빼고 모두 멈춤(B344, snapshot.ts blocked)
+    expect(readFileSync(join(__dirname, "../../server/snapshot.ts"), "utf8")).toContain('members[0].decision.kind !== "chat"');
+    expect(sec).toContain("리드가 결정(권한 요청·계획 승인 등)을 기다리는 동안");
     const env = prose.slice(prose.indexOf('<p class="note" id="channel-support">'));
     for (const s of ["claude.ai 계정 로그인이나 Claude Console API 키", "Amazon Bedrock·Google Cloud(Vertex)·Microsoft Foundry", "<code>ANTHROPIC_BASE_URL</code>", "<code>channelsEnabled</code>"]) expect(env, s).toContain(s);
     for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(sec + env.slice(0, 800), w).not.toContain(w);
