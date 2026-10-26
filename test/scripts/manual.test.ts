@@ -1098,6 +1098,10 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(b).toContain(`<code>${BUILDING_TEXT.sign("User")}</code>`);
     expect(b).toContain(`<code>${BUILDING_TEXT.sign("Acme")}</code>`);
     expect(b).toContain(`<strong>${BUILDING_TEXT.title}</strong>`);
+    // 낮·밤 설정(Phase 7 T3)
+    expect(b).toContain(`<strong>${BUILDING_TEXT.variant}</strong>`);
+    for (const t of [BUILDING_TEXT.variantDay, BUILDING_TEXT.variantNight, BUILDING_TEXT.variantSystem, BUILDING_TEXT.variantHelp, BUILDING_TEXT.variantSaved("day"), BUILDING_TEXT.variantOnly]) expect(b, t).toContain(`<code>${t}</code>`);
+    expect(BUILDING_TEXT.variantSaved("system")).toBe("시스템 설정을 따르도록 바꿨습니다");
     // HUD PLAN 빈 글(Task 10 B322)이 설명서 5장·부록 B와 같다
     expect(BAR_EMPTY.planNone).toBe(BUILDING_TEXT.planNone);
     expect(prose).not.toContain("데이터 없음");
