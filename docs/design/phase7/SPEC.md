@@ -173,9 +173,45 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | **공통 UI 토큰** | HUD·대화상자·버튼·포커스·상태색 | 앱. 테마는 **`ui: "light" \| "dark"` 둘 중 고르기만** | 앱 테스트(§6) |
 
 - **공통 UI 두 벌(새로 정함):** office 낮 장면은 밝은 HUD 카드가 필요하고(`hudBg #ffffff`, `ink #1f2233`), 밤은 지금 어두운 판입니다. 테마가 `--ink`를 고치는 대신, 앱이 공통 UI 토큰을 `light`·`dark` 두 벌로 갖고 `theme.json`의 `ui`가 하나를 고릅니다(`:root[data-ui="light"]`). 두 벌 다 앱이 검사하므로 테마가 공통 UI를 깨뜨릴 수 없습니다. 지금 토큰이 `dark`, office 낮 값이 `light`의 출발점입니다. **light 벌의 `--wall`은 `#ffffff`**입니다: `.pbtn--primary`가 `color: var(--wall)`이라 light `--green #0b7a52` 위 글자가 5.36:1이 되어야 하기 때문입니다(P7-11). **light 벌의 `--violet`은 `#6a46c9`(흰 판 위 6.30:1), `--red`는 `#c0352b`(5.55:1)**입니다(developer T1 da909b0 값을 디자인 리드가 그대로 채택, #705). `--red`는 오류 글에만 쓰므로 `--pink #b4285a`와 색상(빨강·자홍)으로 구별되면 됩니다. **light 벌의 `--pink`는 `#b4285a`(6.19:1), `--cyan`은 `#13628f`(6.62:1)**입니다(office 낮 목업 `accentPink`·`accentCyan`과 같은 값, developer T1 값 그대로 채택, #706).
-- **공통 UI 토큰(테마가 쓰지 못함):** `--ink --wall --panel --muted --green --pink --yellow --yellow-ink --cyan --red --violet --focus`. 테마 `tokens.css`에 이 이름이 나오면 빌드 검사에서 막습니다.
+- **공통 UI 토큰(테마가 쓰지 못함):** `--ink --wall --panel --muted --green --pink --yellow --yellow-ink --cyan --red --violet --focus --page --field --line`. 테마 `tokens.css`에 이 이름이 나오면 빌드 검사에서 막습니다.
 - **`--yellow-ink`(새 공통 토큰, office 제안 `chipInk`):** 노란 바탕 위 글자. 결재 칩·`!` 풍선·`.q-chip`은 `ink`·`--wall`이 아니라 이것을 씁니다. 두 벌 모두 어두운 색(light `#1f2233`, dark `#12111f`). **지금 `.q-chip`의 `color: var(--wall)`은 light에서 글이 사라지므로 Phase 7 구현 때 `--yellow-ink`로 바꿉니다**(developer). 공통 UI로 둔 까닭: "!"·배지는 테마와 상관없이 같은 노랑이므로 그 위 글자도 테마 칸이 아닙니다.
 - `--yellow`는 벌마다 값이 다를 수 있습니다(office: light `#ffd84a`, dark `#fff7a8`). 노랑이라는 뜻은 같습니다.
+
+#### 4.1a 공통 UI 표면 토큰(Ruling P7a-9, #710)
+
+입력칸·글 상자·페이지 바탕처럼 **장면이 아닌 UI 표면**은 장면 토큰(`--slab --bg --wall --desk --desk-dark`)을 쓰지 않고 아래 공통 토큰을 씁니다. light에서 `--slab` 바탕 + `--ink` 글자가 1.1:1이 되던 문제(reviewer T5 Critical)를 막습니다. dark의 `--page`·`--field`는 지금 값 그대로라 dark 화면은 바뀌지 않습니다(`--line`만 테두리 3:1을 위해 밝아짐).
+
+| 토큰 | 쓰는 곳 | dark | light |
+|---|---|---|---|
+| `--page` | `html, body` 바탕(지금 `--bg`) | `#12111f` | `#eef0f5` |
+| `--field` | 입력칸·글 상자 바탕(지금 `--slab`): `.rp-reason input`, `.qf-other textarea`, `.dlg-input input`, `.rf-revise textarea`, `.rd-free textarea`, `.rp-code`, `.rp-plan`, `.rp-quote`, `.auth-cmd`, `.cmd` 등 | `#0b0a17` | `#f4f1ea` |
+| `--line` | 입력칸·글 상자·스위치 테두리(지금 `--desk`), 꺼진 표시 | `#6a63a0` | `#6b7085` |
+
+기존 토큰으로 되는 곳(새 토큰 없이):
+
+| 곳 | 지금 | 바꿀 값 |
+|---|---|---|
+| `.sub-tag` 바탕 | `--wall` | `--panel`(글자 `--muted` 그대로) |
+| `.rp-avatar` 바탕 / 테두리 | `--wall` / `--desk` | `--field` / `--line` |
+| `.switch .track` 바탕 / 테두리 | `--desk-dark` / `--desk` | `--field` / `--line`(켜짐 색은 그대로) |
+| `.led--ended` | `--desk-dark` | `--line` |
+| `.rp-timebar` 트랙 / 채움 | `--slab` / `--yellow` | `--line` / `--yellow`(급함 `--pink` 그대로) |
+
+검사 쌍(앱 대비 테스트에 넣음):
+
+| 쌍 | 기준 | dark | light |
+|---|---|---|---|
+| `--ink` / `--field` | 4.5 | 15.86 | 13.95 |
+| `--muted` / `--field` | 4.5 | 7.18 | 5.95 |
+| `--ink` / `--page` | 4.5 | 15.08 | 13.80 |
+| `--muted` / `--panel`(`.sub-tag`) | 4.5 | 7.05 | 6.71 |
+| `--line` / `--panel` | 3 | 3.58 | 4.90 |
+| `--line` / `--field` | 3 | 3.65 | 4.35 |
+| `--line` / `--page` | 3 | 3.47 | 4.30 |
+| `--yellow` / `--line`(시간 막대 채움) | 3 | 4.90 | 3.54 |
+
+- 장면 쪽(`.floor`, `.empty`, `.floor--empty`, `.ground`)은 공통 토큰이 아니라 `--th-*`로 옮깁니다(designer-office와 맞춤, 계약 §4.2).
+- 그 밖의 UI 부품 테두리(`.hud`, `.pbtn`, `.dlg` 등의 `--desk`)는 light에서도 `--desk #3b3460`(흰 판 위 10.7:1)이라 대비는 통과합니다. 이번에는 바꾸지 않고, 바꿀 때는 `--line`으로 모읍니다.
 
 ### 4.2 테마 토큰(`--th-*`)
 
