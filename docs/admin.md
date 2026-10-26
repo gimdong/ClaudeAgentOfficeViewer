@@ -18,7 +18,7 @@ Claude Agent Office is a local dashboard. Its Claude Code plugin sends hook even
 
 - `allowedHttpHookUrls`: needed only while users still run a plugin from an earlier version (plain HTTP hooks), if you restrict HTTP hook URLs. The beta.14 plugin uses command hooks and does not need it.
 - `enabledPlugins`: if `allowManagedHooksOnly` is on, the plugin's hooks run only when the plugin is force-enabled here.
-- `channelsEnabled`: only if users need the experimental features (sending instructions to a floor, starting a new floor). The app attaches its channel with `--dangerously-load-development-channels`, so `allowedChannelPlugins` is not needed (adding it may block other channel plugins).
+- `channelsEnabled`: only if users need the experimental features (sending instructions to a floor, starting a new floor). On claude.ai Team and Enterprise this is off until an Owner turns it on (Organization settings > Claude Code > Channels, or this key). While it is off or unset, the floor's channel still connects and its tools work, but instructions from the dashboard never reach the session and are dropped; the user sees a startup warning in Claude Code, and the dashboard shows 받았는지 확인 안 됨 ("not confirmed received") on the floor when no sign of work follows an instruction within 30 seconds. Channels also need claude.ai or Console API key authentication: they are not available on Amazon Bedrock, Google Cloud's Agent Platform (Vertex AI) or Microsoft Foundry, and a gateway set with `ANTHROPIC_BASE_URL` is not covered by the [channels documentation](https://code.claude.com/docs/en/channels), so it may not work. The app attaches its channel with `--dangerously-load-development-channels`, so `allowedChannelPlugins` is not needed (adding it may block other channel plugins).
 
 Without these settings the dashboard still shows sessions and token counts, but no speech bubbles, raised hands or answering from the dashboard. `claude-office doctor` reports a managed-settings problem as `❌ 회사 관리자 설정: …` ("company managed settings").
 
@@ -60,7 +60,7 @@ Claude Agent Office는 그 컴퓨터 안에서만 도는 대시보드입니다. 
 
 - `allowedHttpHookUrls`: HTTP hook 주소를 제한하고 있을 때, 사용자가 이전 버전의 플러그인(http hook)을 쓰는 동안만 필요합니다. beta.14 플러그인은 command hook을 써서 필요 없습니다.
 - `enabledPlugins`: `allowManagedHooksOnly`가 켜져 있으면 여기서 플러그인을 강제로 켜야 플러그인의 hook이 동작합니다.
-- `channelsEnabled`: 실험 기능(작업 지시·새 층)을 쓸 때만 넣습니다. 이 앱은 channel을 `--dangerously-load-development-channels`로 붙이므로 `allowedChannelPlugins`는 필요 없습니다(넣으면 다른 channel 플러그인을 막을 수 있습니다).
+- `channelsEnabled`: 실험 기능(작업 지시·새 층)을 쓸 때만 넣습니다. claude.ai Team·Enterprise에서는 Owner가 켜기 전까지 꺼져 있습니다(조직 설정 > Claude Code > Channels, 또는 이 키). 꺼져 있거나 없으면 층의 channel은 연결되고 도구도 동작하지만, 대시보드가 보낸 지시는 세션에 닿지 않고 버려집니다. 사용자에게는 Claude Code 시작 때 경고가 보이고, 지시 뒤 30초 동안 일한 흔적이 없으면 대시보드 층에 `받았는지 확인 안 됨`이 보입니다. channels는 claude.ai 또는 Console API 키 로그인이 필요하고, Amazon Bedrock·Google Cloud Agent Platform(Vertex AI)·Microsoft Foundry에서는 쓸 수 없습니다. `ANTHROPIC_BASE_URL`로 지정한 회사 중계 주소는 [channels 공식 문서](https://code.claude.com/docs/en/channels)에 나오지 않아 동작하지 않을 수 있습니다. 이 앱은 channel을 `--dangerously-load-development-channels`로 붙이므로 `allowedChannelPlugins`는 필요 없습니다(넣으면 다른 channel 플러그인을 막을 수 있습니다).
 
 이 설정이 없어도 세션과 토큰 숫자는 보이지만, 말풍선·손들기·대시보드에서 답하기는 동작하지 않습니다. `claude-office doctor`는 관리 설정 문제를 `❌ 회사 관리자 설정: …`으로 알려 줍니다.
 
