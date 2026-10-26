@@ -44,6 +44,47 @@ describe("Floor 탕비실 걷기", () => {
     expect(deskOrder()).toEqual(order);
   });
 
+  it("걸어 나간 팀원의 빈 책상은 점선 이름표 \"탕비실 →\"(테마 낱말), 접근 이름은 그대로(P7a-14 ①)", () => {
+    render(<Floor session={floor([resting()])} />);
+    const tag = () => screen.getByTestId("desk-dev").querySelector(".nametag")!;
+    expect(tag().textContent).toContain("dev");
+    const label = screen.getByTestId("desk-dev").getAttribute("aria-label");
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    expect(tag().className).toContain("nametag--away");
+    expect(tag().textContent).toContain("탕비실 →");
+    expect(screen.getByTestId("desk-dev").getAttribute("aria-label")).toBe(label);
+  });
+
+  it("탕비실 자리는 둘: 먼저 온 사람 커피, 다음 소파, 셋째는 책상에서 기다림", () => {
+    render(<Floor session={floor([resting("a"), resting("b"), resting("c")])} />);
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    act(() => vi.advanceTimersByTime(WALK_MS));
+    expect(inPantry()).toEqual(["idle", "coffee"]); // 문서 순서: 소파(뒤) → 커피 자리(앞)
+    expect(walkers()).toEqual([]);
+    expect(screen.getByTestId("desk-c").querySelector(".character")).not.toBeNull();
+  });
+
+  it("움직임 줄이기가 바뀌면 바로 따라간다(matchMedia change, P7a-14 ②): 걷던 사람은 바로 탕비실", () => {
+    let reduce = false;
+    const listeners = new Set<(e: { matches: boolean }) => void>();
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      media: q,
+      get matches() {
+        return q.includes("reduced-motion") ? reduce : false;
+      },
+      addEventListener: (_t: string, f: (e: { matches: boolean }) => void) => void listeners.add(f),
+      removeEventListener: (_t: string, f: (e: { matches: boolean }) => void) => void listeners.delete(f),
+    }));
+    render(<Floor session={floor([resting()])} />);
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    expect(walkers()).toHaveLength(1);
+    reduce = true;
+    act(() => listeners.forEach((f) => f({ matches: true })));
+    expect(walkers()).toEqual([]);
+    expect(inPantry()).toEqual(["coffee"]);
+    vi.unstubAllGlobals();
+  });
+
   it("탕비실에서 손듦 → 그 자리 hand_up_stand, 책상 결정 표시는 바로", () => {
     const { rerender } = render(<Floor session={floor([resting()])} />);
     act(() => vi.advanceTimersByTime(IDLE_WALK_MS));

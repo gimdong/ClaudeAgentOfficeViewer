@@ -110,6 +110,10 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   const offDuty = member.duty === "off";
   const shown: MemberState = paused && !decision ? "idle" : offDuty && !decision ? "offline" : member.state;
   const vacant = member.state === "offline" || paused || (offDuty && !decision) || away;
+  // 탕비실에 간 팀원의 빈 책상: 점선 이름표 "탕비실 →"(테마 낱말, P7a-14 ①). 접근 이름은 그대로 이름
+  const { theme } = useContext(ThemeContext);
+  const tagText = away ? `${theme.words.pantry.ko} →` : member.name;
+  const tagCls = away ? "nametag nametag--away" : "nametag";
   const denied = !!member.policyDenied;
   const locked = !!member.policy || denied;
   // 접근 이름 덧붙임(phase3 §8.7)
@@ -213,8 +217,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {scene}
       {svg}
       {bang}
-        <span className="nametag">
-          {member.name}
+        <span className={tagCls}>
+          {tagText}
           <span className="open-hint"> · 열기</span>
         </span>
         {meta}
@@ -239,8 +243,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {scene}
       {svg}
       {bang}
-        <span className="nametag">
-          {member.name}
+        <span className={tagCls}>
+          {tagText}
           <span className="open-hint"> · 열기</span>
         </span>
         {meta}
@@ -266,8 +270,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {scene}
       {svg}
       {bang}
-        <span className="nametag">
-          {member.name}
+        <span className={tagCls}>
+          {tagText}
           <span className="open-hint"> · 열기</span>
         </span>
         {meta}
@@ -289,7 +293,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {scene}
       {svg}
       {bang}
-      <span className="nametag">{member.name}</span>
+      <span className={tagCls}>{tagText}</span>
       {meta}
       {extra}
     </div>

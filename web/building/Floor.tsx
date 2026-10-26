@@ -10,7 +10,7 @@ import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { PantryScene, Walker, walkMsOf } from "../office/Pantry";
 import { WALK_MS, type PantryMember } from "../office/pantryPlan";
-import { usePantry } from "../office/usePantry";
+import { usePantry, useReducedMotion } from "../office/usePantry";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
@@ -118,7 +118,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   // 스냅샷마다 새 배열이면 계획 타이머를 다시 맞추므로, 내용이 같으면 같은 배열(reviewer m2)
   const planKey = JSON.stringify(plan);
   const planMembers = useMemo(() => plan, [planKey]);
-  const pantry = usePantry(planMembers, typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const pantry = usePantry(planMembers, useReducedMotion());
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
 
   const id = floorDomId(session.id);
@@ -234,7 +234,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>
             ))}
-            <PantryScene members={session.members.filter((m) => spotOf(m.name) === "pantry")} />
+            <PantryScene coffee={session.members.find((m) => pantry[m.name]?.seat === "coffee")} sofa={session.members.find((m) => pantry[m.name]?.seat === "sofa")} />
           </div>
           <div className="walk-layer" aria-hidden="true">
             {session.members.map((m) => {

@@ -11,10 +11,9 @@ const hand = (m: Member) => m.state === "decision";
 
 /**
  * 층 안 탕비실(계약 SPEC §2 pantry, 80×46 ×2). 겹침: pantry-back → 소파 사람 → pantry-front → 커피 자리 사람.
- * 첫 사람은 커피 자리(서서 coffee·손들면 hand_up_stand), 둘째는 소파(앉아 idle·hand_up). 셋째부터는 커피 자리에 겹쳐 보이지 않아 그리지 않는다. 모두 장식
+ * 커피 자리는 서서 coffee(손들면 hand_up_stand), 소파는 앉아 idle(손들면 hand_up). 자리는 계획기가 도착 순으로 준다. 모두 장식
  */
-export function PantryScene({ members }: { members: Member[] }) {
-  const [coffee, sofa] = members;
+export function PantryScene({ coffee, sofa }: { coffee?: Member; sofa?: Member }) {
   return (
     <div className="pantry-scene" aria-hidden="true">
       <SceneCell slot="pantry" name="pantry-back" className="sc pantry-back" />

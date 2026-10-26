@@ -18,3 +18,21 @@ export function usePantry(members: PantryMember[], reduced: boolean): PantryStat
   }, [state, members, reduced]);
   return state;
 }
+
+const QUERY = "(prefers-reduced-motion: reduce)";
+const reducedNow = () => typeof matchMedia === "function" && matchMedia(QUERY).matches;
+
+/** 움직임 줄이기 설정. 바뀌면 바로 따라간다(useVariant와 같은 방식, P7a-14 ②) */
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(reducedNow);
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return;
+    const mq = matchMedia(QUERY);
+    const on = (e: { matches: boolean }) => setReduced(e.matches);
+    setReduced(mq.matches);
+    // 옛 브라우저·시험의 가짜 matchMedia는 addEventListener가 없을 수 있다
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return reduced;
+}

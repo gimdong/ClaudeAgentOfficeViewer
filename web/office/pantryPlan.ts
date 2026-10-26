@@ -6,9 +6,11 @@ export const IDLE_WALK_MS = 30_000;
 export const MAX_WALKERS = 2;
 /** 책상 ↔ 탕비실 기본 걷는 시간(MOTION §3 스토리보드 78칸, 25칸/초). 화면이 실제 거리로 멤버마다 walkMs를 줄 수 있다(§3.1a) */
 export const WALK_MS = 3_120;
+/** 탕비실 자리(계약 SPEC §2 pantry): 커피 x14·소파 x57 둘뿐. 도착 순으로 앞에서부터 앉는다(team-lead) */
+export const PANTRY_SEATS = ["coffee", "sofa"] as const;
 
 export type PantrySpot = "desk" | "walking-out" | "pantry" | "walking-back";
-export type PantryState = Record<string, { spot: PantrySpot; since: number }>;
+export type PantryState = Record<string, { spot: PantrySpot; since: number; seat?: (typeof PANTRY_SEATS)[number] }>;
 export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number }
 
 /**
@@ -34,17 +36,23 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
       else if (spot === "walking-back") spot = "desk";
     } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - walk];
     else if (spot === "pantry" && back) [spot, since] = ["walking-back", now];
-    next[m.name] = { spot, since };
+    next[m.name] = spot === "pantry" && cur.seat ? { spot, since, seat: cur.seat } : { spot, since };
     if (spot === "desk" && !off && m.state === "idle" && m.idleSince !== undefined && now - m.idleSince >= IDLE_WALK_MS) out.push(m);
   }
-  // 30초가 된 사람: 오래 쉰 사람 → 이름 순. 걸어 나가는 사람이 2명이면 나머지는 자리에서 기다린다(reduced는 걷지 않으니 제한 없음)
+  // 30초가 된 사람: 오래 쉰 사람 → 이름 순. 걸어 나가는 사람 + 탕비실에 있는 사람이 자리 수(2)면 나머지는 책상에서 기다린다
   out.sort((a, b) => a.idleSince! - b.idleSince! || a.name.localeCompare(b.name));
-  let walkers = Object.values(next).filter((v) => v.spot === "walking-out").length;
+  let taken = Object.values(next).filter((v) => v.spot === "walking-out" || v.spot === "pantry").length;
   for (const m of out) {
-    if (reduced) next[m.name] = { spot: "pantry", since: now };
-    else if (walkers < MAX_WALKERS) (next[m.name] = { spot: "walking-out", since: now }), walkers++;
+    if (taken >= Math.min(MAX_WALKERS, PANTRY_SEATS.length)) break;
+    next[m.name] = { spot: reduced ? "pantry" : "walking-out", since: now };
+    taken++;
   }
-  const same = Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([n, v]) => prev[n]?.spot === v.spot && prev[n].since === v.since);
+  // 막 도착한 사람에게 빈 자리를 도착 순(같으면 이름 순)으로
+  const used = new Set(Object.values(next).map((v) => v.seat));
+  const arrived = Object.entries(next).filter(([, v]) => v.spot === "pantry" && !v.seat);
+  arrived.sort(([a, x], [b, y]) => x.since - y.since || a.localeCompare(b));
+  for (const [, v] of arrived) used.add((v.seat = PANTRY_SEATS.find((s) => !used.has(s))));
+  const same = Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([n, v]) => prev[n]?.spot === v.spot && prev[n].since === v.since && prev[n].seat === v.seat);
   return same ? prev : next;
 }
 
