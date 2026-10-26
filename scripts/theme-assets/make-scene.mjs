@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Phase 7 office 장면 생성기 — Node 표준(zlib·fs·path·crypto)만 씀.
 // 사용: node make-scene.mjs <출력 폴더>
-// 출력: scene-day.png · scene-night.png(같은 배치의 장면 칸 시트), scene.json(칸 이름 → x,y,w,h, 기준점, wallVariants), tokens.css(--th-*·--sc-* 낮·밤)
+// 출력: scene-day.png · scene-night.png(같은 배치의 장면 칸 시트), scene.json(칸 이름 → x,y,w,h, 기준점, wallVariants), tokens.css(--th-*·--th-sc-* 낮·밤)
 // 같은 입력이면 같은 바이트(재현성). 실행할 때마다 두 번 그려 바이트를 비교하고, 변형당 PNG 64KB를 넘거나 다르면 exit 1.
 // 그림 함수는 docs/design/phase7/office/mock/scene.js(승인된 목업)와 같은 코드다. 바깥(하늘·거리·차)은 themes 생성기 몫이라 없다.
 import { deflateSync } from "node:zlib";
@@ -229,10 +229,10 @@ function png(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 }
 
-/* ── tokens.css: --th-*(계약 §4) + 장면 CSS가 쓰는 --sc-* ── */
+/* ── tokens.css: --th-*(계약 §4) + 장면 CSS가 쓰는 --th-sc-*(P7a-5: 테마는 --th- 이름공간만) ── */
 const SC_KEYS = ["winFrame", "glassShine", "cable", "concrete", "concreteLine", "cafeWall", "cafeStripe", "cafeTile", "cafeTileAlt", "counter", "awningAlt", "lobbyWall", "marble", "marbleAlt", "marbleVein", "roofDeck", "roofDeckAlt", "parapet"];
 function tokensCss() {
-  const block = (v) => [...Object.entries(TH), ...Object.entries(TH_PROPOSED)].map(([k, key]) => `  ${k}: ${PAL[v][key]};`).concat(SC_KEYS.map((k) => `  --sc-${k}: ${PAL[v][k]};`)).join("\n");
+  const block = (v) => [...Object.entries(TH), ...Object.entries(TH_PROPOSED)].map(([k, key]) => `  ${k}: ${PAL[v][key]};`).concat(SC_KEYS.map((k) => `  --th-sc-${k}: ${PAL[v][k]};`)).join("\n");
   return `/* office 테마 토큰(make-scene.mjs가 만듦 — 손으로 고치지 말 것). 공통 UI 토큰은 앱이 [data-ui]로 정함.\n   점선 이름표(.nt.ghost)는 글자 --th-label-ink, 테두리 --th-label-muted(목업 #681 qa 반영). */\n:root[data-theme="office"][data-variant="day"] {\n${block("day")}\n}\n:root[data-theme="office"][data-variant="night"] {\n${block("night")}\n}\n`;
 }
 

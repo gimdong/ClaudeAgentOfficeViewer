@@ -1,18 +1,19 @@
 // Phase 7 오피스 건물 외부 장식 시트(designer-themes, P7-themes-2). node 표준 모듈만 씀.
-// 실행: node make-exterior.mjs [--layers <motion layers 폴더>] [--out <시트 폴더>] [--render]
-//  시트(기본 ./sheets): 팔레트 PNG(차·하늘·배경·거리·거리 소품·경비 모자·앞치마 층), 엑스트라별 팔레트 판 extra-<id>.png, extras.json
-//  --layers 없으면 motion 층을 design/p7-motion 브랜치에서 읽음. 같은 입력이면 같은 바이트(무작위·시각 없음).
-//  --render 일 때만 renders/에 확인용 장면(낮·밤 900·360)과 시트 콘택트(900). PNG는 qlmanage(시간 제한) + sips.
+// 실행: node make-exterior.mjs --layers <motion layers 폴더> --out <시트 폴더>
+//  시트: 팔레트 PNG(차·하늘·배경·거리·거리 소품·경비 모자·앞치마 층), 엑스트라별 팔레트 판 extra-<id>.png, extras.json. 같은 입력이면 같은 바이트(무작위·시각 없음).
+//  저장소 사본(P7a-5): --layers·--out 필수. 원본의 git 브랜치 대체 읽기와 확인 렌더(--render, macOS 렌더 도구)는 뺐다(디자인 브랜치에 남음).
 // 엑스트라 사람은 designer-motion 층 시트를 팔레트 슬롯만 바꿔 겹친다(P7-1, MOTION.md §1a).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
-const OUT = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k) => { const i = process.argv.indexOf(k); return i < 0 ? null : process.argv[i + 1]; };
-const SHEETS = path.resolve(arg("--out") ?? path.join(OUT, "sheets")), LAYERS_DIR = arg("--layers"), RENDER = process.argv.includes("--render");
+const OUT_ARG = arg("--out"), LAYERS_DIR = arg("--layers");
+if (!OUT_ARG || !LAYERS_DIR) {
+  console.error("사용: node make-exterior.mjs --layers <motion layers 폴더> --out <시트 폴더>");
+  process.exit(2);
+}
+const SHEETS = path.resolve(OUT_ARG);
 fs.mkdirSync(SHEETS, { recursive: true });
 
 // ── 팔레트: designer-office tokens.js(작업 중)의 바깥 값 그대로 + 차·소품 몇 색 ──
@@ -186,8 +187,7 @@ for (const [ox, m] of [[48, "day"], [72, "night"]]) {
 const PROPS = save(props, "street-props.png");
 
 // ── 6) 엑스트라 사람: motion 층 시트 + 팔레트 판(extras.json) + 경비 모자 층(cap.png) ──
-const git = (p) => execFileSync("git", ["show", `design/p7-motion:docs/design/phase7/motion/${p}`], { cwd: OUT });
-const LAYER = Object.fromEntries(["body", "outfit", "hands", "hair-short", "hair-bob", "hair-spiky", "glasses", "prop"].map((n) => [n, LAYERS_DIR ? fs.readFileSync(path.join(LAYERS_DIR, `${n}.png`)) : git(`layers/${n}.png`)]));
+const LAYER = Object.fromEntries(["body", "outfit", "hands", "hair-short", "hair-bob", "hair-spiky", "glasses", "prop"].map((n) => [n, fs.readFileSync(path.join(LAYERS_DIR, `${n}.png`))]));
 const SHEET_W = 104, SHEET_H = LAYER.body.readUInt32BE(20), FW = 26, FH = 30;
 const SLOT = { C1: "#dcc4ff", C2: "#b98cff", C3: "#8460cc", H1: "#4a3768", H2: "#2a1a3a", H3: "#170f22", P1: "#3b3460", P2: "#241f40", K: "#4a4470" };
 // 옷은 C1–C3 세 단을 직접 적음(계약 §3: 빌드 때 슬롯 색만 바꾼 PNG)
@@ -274,127 +274,5 @@ for (const e of EXTRAS) {
   const px = new Px(SHEET_W, SHEET_H);
   for (const n of LAYER_LIST(e)) { const l = decode(OWN[n] ?? recolor(LAYER[n], e.palette)); l.d.forEach((v, k) => { if (v) px.d[k] = v; }); }
   save(px, `extra-${e.id}.png`);
-}
-const EXTRA_URIS = Object.fromEntries(EXTRAS.map((e) => [e.id, [uri(fs.readFileSync(path.join(SHEETS, `extra-${e.id}.png`)))]]));
-
-// ── 확인 렌더(SVG → QuickLook) ──
-const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const R = (x, y, w, h, f, ex = "") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"${ex}/>`;
-const TX = (x, y, s, fs, f, o = "") => `<text x="${x}" y="${y}" font-size="${fs}" fill="${f}"${o}>${esc(s)}</text>`;
-const tw = (s, fs) => [...s].reduce((w, ch) => w + (ch.codePointAt(0) > 0x2e80 ? fs * 0.95 : fs * 0.6), 0);
-const label = (x, y, s, bg, fg, bd) => { const w = Math.round(tw(s, 11) + 10); return R(x, y, w, 19, bg) + (bd ? `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="18" fill="none" stroke="${bd}"/>` : "") + TX(x + 5, y + 14, s, 11, fg); };
-/** 시트 한 칸 그리기(정수배) */
-const img = (u, sw, sh, sx, sy, w, h, x, y, p) => `<svg x="${x}" y="${y}" width="${w * p}" height="${h * p}" viewBox="${sx} ${sy} ${w} ${h}"><image href="${u}" width="${sw}" height="${sh}" image-rendering="pixelated" style="image-rendering:pixelated"/></svg>`;
-const actor = (id, row, col, x, y, p = 2) => EXTRA_URIS[id].map((u) => img(u, SHEET_W, SHEET_H, col * FW, row * FH, FW, FH, x, y, p)).join("");
-const carAt = (kind, mode, dir, x, y, p = 2) => img(uri(CARS), CW * 4, CH * KINDS.length, ((dir === "left" ? 2 : 0) + (mode === "night" ? 1 : 0)) * CW, KINDS.indexOf(kind) * CH, CW, CH, x, y, p);
-const tile = (b, tw0, th0, x, y, W, p = 2) => { let s = ""; for (let i = x; i < W; i += tw0 * p) s += img(uri(b), tw0, th0, 0, 0, tw0, th0, i, y, p); return s; };
-const prop = (k, x, y, p = 2) => img(uri(PROPS), 96, 48, k * 24, 0, 24, 48, x, y, p);
-
-const LABEL = { day: { bg: "#ffffff", fg: "#1f2233", bd: "#c9c0b0", hold: "#efe9dd", holdBd: "#b8ad99", page: "#d6f0fb" }, night: { bg: "#0e0d18", fg: "#e8e4ff", bd: "#3b3460", hold: "#2e2852", holdBd: "#5d568f", page: "#12111f" } };
-
-/** 바깥 장면 한 장(낮 또는 밤). 반환 [svg, 높이] */
-function exterior(m, W, y0) {
-  const p = T[m], L = LABEL[m], narrow = W < 600, H = 600;
-  const bx = narrow ? 16 : 100, bw = W - bx * 2;
-  const groundY = y0 + 440; // 건물 바닥선 = 인도 위 가장자리
-  let s = "";
-  // 하늘 띠(--th-sky-top·mid·low) + 해·달·구름
-  [[p.skyTop, 0], [p.skyMid, 0.33], [p.skyLow, 0.66]].forEach(([c, k]) => (s += R(0, y0 + Math.round(k * 300), W, 100, c)));
-  s += R(0, y0 + 300, W, groundY - y0 - 300, p.skyLow);
-  s += img(uri(SKY), 176, 24, m === "day" ? 0 : 24, 0, 24, 24, W - (narrow ? 70 : 120), y0 + 30, 2);
-  s += img(uri(SKY), 176, 24, m === "day" ? 48 : 88, 0, 40, 24, narrow ? 20 : 60, y0 + 40, 2) + (narrow ? "" : img(uri(SKY), 176, 24, m === "day" ? 128 : 152, 0, 24, 24, W - 300, y0 + 90, 2));
-  // 스카이라인 타일(가로 반복)
-  s += tile(BACK[m], 192, 128, 0, groundY - 256, W);
-  // 건물 칸 자리(designer-office가 그림): 점선 상자
-  const bTop = y0 + (narrow ? 20 : 120); // 360: 카페가 두 줄(카운터 / 러그 구역)로 줄바꿈되어 위로 늘어남
-  s += R(bx, bTop, bw, groundY - bTop, L.hold) + `<rect x="${bx + 1}" y="${bTop + 1}" width="${bw - 2}" height="${groundY - bTop - 2}" fill="none" stroke="${L.holdBd}" stroke-width="2" stroke-dasharray="8 6"/>`;
-  s += R(bx, y0 + 270, bw, 2, L.holdBd);
-  s += label(bx + 8, bTop + 8, "카페 칸 — designer-office", L.bg, L.fg, L.bd) + label(bx + 8, y0 + 280, "로비 칸 — designer-office", L.bg, L.fg, L.bd);
-  // 카페 손님(서서 커피 0·마심 2) — 자리는 office 카운터·테이블 x를 받아 맞춤
-  // office 칸 기준점(b2bfdd4, 1배율, 칸 왼쪽 위 기준): 캐릭터 기준점 (13,28)을 칸 안 x에, 발은 칸 바닥에
-  const P2 = 2, put = (id, row, col, cellX, cellBottom, ax) => actor(id, row, col, cellX + (ax - 13) * P2, cellBottom - 29 * P2, P2);
-  const hold = (x, y, w, h, name) => R(x, y, w, h, L.hold, ' opacity="0.92"') + `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" fill="none" stroke="${L.holdBd}" stroke-dasharray="4 4"/>` + (name ? label(x + 2, y + h - 21, name, L.bg, L.fg, L.bd) : "");
-  // 카페 좌표(office 판 2): 1배율, 카페 방 왼쪽 끝부터 잰 x. 900폭 = 한 줄, 360폭 = 카운터 줄 아래에 러그 줄
-  const cafeFloor = y0 + 270 - 14 * P2, room = (x1) => bx + x1 * P2;
-  const counterFloor = narrow ? cafeFloor - 60 * P2 : cafeFloor, rugBase = narrow ? -127 : 0; // 360: 러그 구역이 x2부터
-  // 카운터 칸 120×46(방 x4): 바리스타 기준점 칸 x53 = 방 x57, 카운터 윗선 y28 뒤에 섬(sit_down 0 = 선 모습)
-  s += put("barista", ROWS.sit_down, 0, room(4), counterFloor, 53) + hold(room(4), counterFloor - (46 - 28) * P2, 120 * P2, (46 - 28) * P2, narrow ? "카운터" : "카운터(office) · 바리스타 x57");
-  // 오래 쉬는 자리: 러그 x129–276, 테이블 칸 x131·x206(팀원 기준점 x153·x228). 팀원 전용 — 엑스트라는 앉지 않음
-  s += hold(room(129 + rugBase), cafeFloor - 8, 147 * P2, 8, "") + label(room(129 + rugBase) + 4, cafeFloor - 36, narrow ? "오래 쉬는 자리" : "오래 쉬는 자리(office) · 팀원 전용 x153·x228", L.bg, L.fg, L.bd);
-  // 손님 테이블 칸(러그 밖) x281: 기준점 x303. 앉은 사람 칸 위 = 테이블 칸 y5(office·motion 67ba302). 360은 러그 줄에 테이블 하나만 보여 손님 없음
-  const seat = (id, cellX, cellBottom, ax) => actor(id, ROWS.idle, 0, cellX + (ax - 13) * P2, cellBottom - 46 * P2 + 5 * P2, P2);
-  if (!narrow) s += seat("customer-2", room(281), cafeFloor, 22) + hold(room(281), cafeFloor - (46 - 29) * P2, 44 * P2, (46 - 29) * P2, "손님 x303");
-  // 관리실 데스크 칸 66×88: 경비 x33, 데스크 윗선 y50 뒤에 섬
-  const lobbyBase = groundY - 11 * P2; // office: 칸 아래 끝 = 바닥선에서 로비 11칸·카페 14칸 위(바닥 띠)
-  const gx = bx + bw - 66 * P2 - (narrow ? 4 : 20);
-  s += put("guard", ROWS.sit_down, 0, gx, lobbyBase - (88 - 56) * P2, 33) /* 발 = 칸 y56(부스 안 단 위, office 확인). 바닥에 서면 데스크 앞면(y50~)에 다 가려짐 */ + hold(gx, lobbyBase - (88 - 50) * P2, 66 * P2, (88 - 50) * P2, narrow ? "데스크" : "관리실 데스크(office) x33");
-  if (!narrow) s += actor("visitor", ROWS.walk_right, 2, bx + bw * 0.3, groundY - 60); // 로비 방문객(360은 office처럼 숨김)
-  // 거리 타일 + 소품
-  s += tile(STREET[m], 32, 60, 0, groundY, W);
-  const lamps = narrow ? [W - 40] : [60, 380, 600], trees = narrow ? [24] : [220, 540, 840];
-  for (const x of lamps) s += prop(m === "day" ? 0 : 1, x - 24, groundY + 30 - 96);
-  for (const x of trees) s += prop(m === "day" ? 2 : 3, x - 24, groundY + 30 - 96);
-  // 행인(걷기 프레임 0·2 — 움직임 줄이기면 걷지 않음, 목업은 정지 프레임)
-  s += actor("passerby-1", ROWS.walk_right, 0, narrow ? 60 : 140, groundY + 36 - 58) + actor("passerby-2", ROWS.walk_left, 2, narrow ? 170 : 460, groundY + 36 - 58);
-  if (!narrow) s += actor("passerby-3", ROWS.walk_left, 0, 760, groundY + 36 - 58);
-  // 차: 가까운 차로 = 오른쪽, 먼 차로 = 왼쪽
-  const roadY = groundY + 50;
-  s += carAt(narrow ? "sedan" : "sedan-blue", m, "right", narrow ? 20 : 120, roadY + 34 - 48 + 14);
-  s += carAt("bus", m, "left", narrow ? 180 : 500, roadY - 10);
-  if (!narrow) s += carAt("sedan", m, "left", 700, roadY - 10) + carAt("taxi", m, "right", 340, roadY + 34 - 48 + 14);
-  s += label(8, y0 + 8, m === "day" ? "낮" : "밤", L.bg, L.fg, L.bd);
-  return [s, H];
-}
-
-const FONT = `-apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif`;
-function sceneSvg(W) {
-  let s = R(0, 0, W, 9999, "#12111f") + TX(16, 26, "오피스 건물 외부 장식 — 바깥·엑스트라(designer-themes)", W < 600 ? 13 : 15, "#e8e4ff", ' font-weight="700"');
-  s += TX(16, 44, W < 600 ? "점선 상자 = designer-office 칸" : "점선 상자 = designer-office가 그리는 건물 칸. 이 파일은 그 바깥(하늘·스카이라인·거리)과 엑스트라만.", 11, "#b8b0d8");
-  const [a, h] = exterior("day", W, 56), [b] = exterior("night", W, 56 + h + 12);
-  const H = 56 + h * 2 + 12 + 30;
-  s += a + b + TX(16, H - 12, "글자는 DOM 텍스트 자리(판 위). 차·가로등 빛은 정지 그림, 깜빡임 없음.", 10, "#8a82a8");
-  return [`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges" font-family="${FONT}">${s.replace('height="9999"', `height="${H}"`)}</svg>`, H];
-}
-
-function contactSvg() {
-  const W = 900, P = 3;
-  let s = "", y = 30;
-  const head = (t) => { s += TX(16, y + 14, t, 13, "#e8e4ff", ' font-weight="700"'); y += 26; };
-  s += TX(16, 22, "오피스 외부 시트 콘택트 — 3배, 바이트는 1배율 팔레트 PNG", 15, "#e8e4ff", ' font-weight="700"'); y += 10;
-  head(`vehicles.png 320×96 (${BYTES["vehicles.png"]}B) — 행: sedan·sedan-blue·taxi·bus / 열: 오른쪽 낮·밤, 왼쪽 낮·밤`);
-  s += R(16, y, 320 * 2 + 8, 96 * 2 + 8, "#8eaac4") + img(uri(CARS), 320, 96, 0, 0, 320, 96, 20, y + 4, 2); y += 96 * 2 + 20;
-  head(`sky.png 176×24 (${BYTES["sky.png"]}B) — 해·달·구름 큰(낮·밤)·작은(낮·밤)`);
-  s += R(16, y, 176 * P + 8, 24 * P + 8, "#5a7aa0") + img(uri(SKY), 176, 24, 0, 0, 176, 24, 20, y + 4, P); y += 24 * P + 20;
-  head(`backdrop-day/night.png 192×128 (${BYTES["backdrop-day.png"]}B / ${BYTES["backdrop-night.png"]}B) — 가로 반복, 하늘은 비움`);
-  s += R(16, y, 384 + 8, 256 + 8, T.day.skyLow) + img(uri(BACK.day), 192, 128, 0, 0, 192, 128, 20, y + 4, 2);
-  s += R(424, y, 384 + 8, 256 + 8, T.night.skyMid) + img(uri(BACK.night), 192, 128, 0, 0, 192, 128, 428, y + 4, 2); y += 256 + 24;
-  head(`street-day/night.png 32×60 (${BYTES["street-day.png"]}B / ${BYTES["street-night.png"]}B) · street-props.png 96×48 (${BYTES["street-props.png"]}B)`);
-  s += img(uri(STREET.day), 32, 60, 0, 0, 32, 60, 20, y, P) + img(uri(STREET.night), 32, 60, 0, 0, 32, 60, 130, y, P);
-  s += R(240, y, 96 * P + 8, 48 * P + 8, "#5a7aa0") + img(uri(PROPS), 96, 48, 0, 0, 96, 48, 244, y + 4, P); y += 60 * P + 24;
-  head(`엑스트라 — motion 층 + extras.json 팔레트 · 겹: cap.png ${BYTES["cap.png"]}B, apron.png ${BYTES["apron.png"]}B · 열: walk_left·walk_right·idle·coffee 0`);
-  EXTRAS.forEach((e, i) => {
-    const x0 = 16 + (i % 3) * 292, y0 = y + Math.floor(i / 3) * 130;
-    s += TX(x0, y0 + 12, `${e.id} · ${e.role}`, 11, "#b8b0d8");
-    ["walk_left", "walk_right", "idle", "coffee"].forEach((r, k) => (s += R(x0 + k * 70, y0 + 18, 26 * 2.5, 30 * 2.5, "#24213d") + actor(e.id, ROWS[r], 0, x0 + k * 70 + 6, y0 + 22, 2)));
-  });
-  y += Math.ceil(EXTRAS.length / 3) * 130 + 10;
-  const H = y + 10;
-  return [`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges" font-family="${FONT}">${R(0, 0, W, H, "#12111f")}${s}</svg>`, H];
-}
-
-function toPng(name, svg, w, h) {
-  const S = Math.max(w, h), tmp = path.join(OUT, `_${name}`);
-  fs.mkdirSync(tmp, { recursive: true });
-  fs.writeFileSync(path.join(tmp, "q.svg"), `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}"><g transform="translate(${(S - w) / 2},${(S - h) / 2})">${svg}</g></svg>`);
-  // qlmanage가 멈추면 우리 권한으로 못 끄므로 자기 시간 제한(리드 designer 규칙)
-  execFileSync("perl", ["-e", "alarm 150; exec @ARGV", "qlmanage", "-t", "-s", String(S), "-o", tmp, path.join(tmp, "q.svg")], { stdio: "ignore" });
-  execFileSync("sips", ["-c", String(h), String(w), path.join(tmp, "q.svg.png"), "--out", path.join(OUT, "renders", `${name}.png`)], { stdio: "ignore" });
-  fs.rmSync(tmp, { recursive: true });
-  console.log(`renders/${name}.png ${w}x${h}`);
-}
-if (RENDER) {
-  fs.mkdirSync(path.join(OUT, "renders"), { recursive: true });
-  for (const W of [900, 360]) { const [svg, h] = sceneSvg(W); toPng(`exterior-${W}`, svg, W, h); }
-  { const [svg, h] = contactSvg(); toPng("sheets-contact-900", svg, 900, h); }
 }
 console.log(BYTES, "합계", Object.values(BYTES).reduce((a, b) => a + b, 0), "B");

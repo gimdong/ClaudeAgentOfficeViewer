@@ -12,7 +12,9 @@ const themes = readdirSync(THEMES).filter((d) => existsSync(join(THEMES, d, "the
 
 const COMMON = ["ink", "wall", "panel", "muted", "green", "pink", "yellow", "yellow-ink", "cyan", "red", "violet", "focus"];
 /** tokens.css에 나온 공통 UI 토큰 이름(선언만) */
-const commonIn = (css: string) => [...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => COMMON.includes(n.slice(2)));
+const commonIn = (css: string) => [...css.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => COMMON.includes(n.slice(2)));
+/** --th-로 시작하지 않는 사용자 정의 속성(P7a-5: 테마는 --th-* 이름공간만) */
+const nonTh = (css: string) => [...css.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => !n.startsWith("--th-"));
 
 function lum(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -46,6 +48,7 @@ function variantBytes(dir: string, variant: string, variants: string[]): number 
 describe("검사 함수 자체(틀린 입력을 잡는다)", () => {
   it("공통 UI 토큰 이름·AA 미만 쌍을 찾는다", () => {
     expect(commonIn(":root[data-theme=x][data-variant=day] { --th-bg: #fff; --ink: #000; --yellow-ink: #111; }")).toEqual(["--ink", "--yellow-ink"]);
+    expect(nonTh(":root { --th-bg: #fff; --sc-cable: #000; --th-sc-x: #111; }")).toEqual(["--sc-cable"]);
     // 낮은 대비 한 쌍 + 빠진 토큰(--th-paper) 한 쌍
     expect(failingPairs({ "--th-label-ink": "#777777", "--th-label-bg": "#888888", "--th-label-muted": "#000000", "--th-label-accent": "#000000", "--th-paper-ink": "#000000" })).toEqual(["--th-label-ink/--th-label-bg", "--th-paper-ink/--th-paper"]);
   });
@@ -60,6 +63,7 @@ describe.each(themes)("테마 %s", (id) => {
   it("폴더 이름 = id, tokens.css는 공통 UI 토큰을 쓰지 않고 선택자는 [data-theme] + [data-variant]", () => {
     expect(manifest.id).toBe(id);
     expect(commonIn(css)).toEqual([]);
+    expect(nonTh(css)).toEqual([]);
     for (const v of variants) expect(css, v).toContain(`:root[data-theme="${id}"][data-variant="${v}"]`);
   });
 
@@ -70,6 +74,21 @@ describe.each(themes)("테마 %s", (id) => {
 
   it("변형마다 그림(PNG) 합계 64KB 이하", () => {
     for (const v of variants) expect(variantBytes(dir, v, variants), v).toBeLessThanOrEqual(65536);
+  });
+});
+
+describe("저장소 생성기(P7a-5)", () => {
+  it("Node 표준 밖 명령(git·qlmanage·sips·perl)을 부르지 않고, make-exterior는 --layers·--out 없으면 2로 끝난다", () => {
+    for (const f of readdirSync(join(ROOT, "scripts/theme-assets"))) {
+      const src = readFileSync(join(ROOT, "scripts/theme-assets", f), "utf8");
+      for (const bad of ['"git"', "qlmanage", '"sips"', '"perl"']) expect(src.includes(bad), `${f} ${bad}`).toBe(false);
+    }
+    const out = mkdtempSync(join(tmpdir(), "co-ext-"));
+    try {
+      expect(() => execFileSync(process.execPath, [join(ROOT, "scripts/theme-assets/make-exterior.mjs"), "--out", out], { stdio: "ignore" })).toThrow(expect.objectContaining({ status: 2 }));
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 });
 
