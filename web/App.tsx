@@ -15,6 +15,7 @@ import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 import { LeadDrawers, OpenLeadContext, useLead } from "./office/LeadUi";
 import { chApi } from "./floors/ChannelDialogs";
 import { loadTheme } from "./themes/registry";
+import { ThemeContext } from "./themes/ThemeContext";
 import { useVariant, type VariantSetting } from "./themes/useVariant";
 
 /** 지금 테마(Phase 7). 테마 고르기가 생기기 전에는 오피스 */
@@ -80,7 +81,7 @@ export function App() {
   const serverVariant = snapshot?.building?.variant ?? "system";
   const [savedVariant, setSavedVariant] = useState<VariantSetting | null>(null);
   useEffect(() => setSavedVariant(null), [serverVariant]);
-  useVariant(savedVariant ?? serverVariant, THEME);
+  const { variant } = useVariant(savedVariant ?? serverVariant, THEME);
   const saveVariant = useCallback(async (v: VariantSetting) => {
     const r = await chApi.setVariant(v);
     if (r.ok) setSavedVariant(v);
@@ -122,6 +123,7 @@ export function App() {
   // 접히지 않는 줄바꿈 없는 공백(U+00A0, NBSP)을 쓴다. 결정 보고서의 알림도 이 노드 하나로 한다(phase2 §9.5)
   const shown = announceN % 2 === 0 ? announceText : `${announceText}\u00A0`;
   return (
+    <ThemeContext.Provider value={{ theme: THEME, variant }}>
     <BudgetSettingsContext.Provider value={{ defaultTokens: snapshot.defaultBudgetTokens, announce }}>
     <OpenDecisionContext.Provider value={d.open}>
     <OpenPolicyContext.Provider value={openAgentAt}>
@@ -165,5 +167,6 @@ export function App() {
     </OpenPolicyContext.Provider>
     </OpenDecisionContext.Provider>
     </BudgetSettingsContext.Provider>
+    </ThemeContext.Provider>
   );
 }

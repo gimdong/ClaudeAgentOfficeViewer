@@ -208,13 +208,25 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .shutter-sign::after { right: 10px; }
 
 /* 방 */
-.room { position: relative; min-height: var(--room-min-h); background: linear-gradient(var(--wall) 0 70%, var(--floor) 70% 100%); padding: 8px 12px 6px; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
+/* Phase 7 Task 5: 벽 = --th-wall 줄무늬(24칸에 2칸 그늘, ×2), 바닥 띠는 책상 줄마다(.desk::before). 층 안 무늬는 그림이 아니라 그라데이션(SPEC §2) */
+.room { position: relative; min-height: var(--room-min-h); background: repeating-linear-gradient(90deg, var(--th-wall, var(--wall)) 0 44px, var(--th-wall-shade, var(--wall)) 44px 48px); padding: 8px 12px 0; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
 .floor.collapsed .room { display: none; }
-.backdrop { flex: none; width: 88px; height: 64px; align-self: flex-start; margin-top: 8px; }
-.desks { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-end; flex: 1; min-width: 0; padding-left: 8px; } /* 책상 사이 20px, 왼쪽 여백 8px — 사용자 피드백(beta.4: 책상이 왼쪽에 붙어 보임) */
+/* 창 38×35(안에 하늘 비침)·벽 장식 room-deco-N. 장식이라 누를 수 없음 */
+.room > .win { position: absolute; top: 12px; left: 22%; width: 76px; height: 70px; box-sizing: border-box; border: 4px solid var(--th-sc-winFrame, var(--desk)); background: linear-gradient(var(--th-sky-top, var(--wall)), var(--th-window, var(--wall))); pointer-events: none; }
+.room > .win::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--th-sc-winFrame, var(--desk)); }
+.room > .room-deco { top: 16px; left: auto; right: 4%; pointer-events: none; }
+.desks { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-end; flex: 1; min-width: 0; padding-left: 8px; overflow-x: clip; isolation: isolate; } /* 책상 사이 20px, 왼쪽 여백 8px — 사용자 피드백(beta.4: 책상이 왼쪽에 붙어 보임) */
 
-.desk { position: relative; width: 96px; text-align: center; background: none; border: 0; padding: 0; outline-offset: 0; }
-.desk svg { width: 96px; height: 120px; overflow: visible; }
+/* 장면 시트 칸(SceneCell): 1배율 좌표 --sx·--sy·--sw·--sh를 ×2로 */
+.sc { position: absolute; left: 0; top: 0; display: block; width: calc(var(--sw) * 2px); height: calc(var(--sh) * 2px); background-repeat: no-repeat; background-size: calc(var(--shw) * 2px) auto; background-position: calc(var(--sx) * -2px) calc(var(--sy) * -2px); image-rendering: pixelated; }
+.desk { position: relative; width: 132px; text-align: center; background: none; border: 0; padding: 0 0 4px; outline-offset: 0; }
+.desk--lead { width: 172px; }
+/* 바닥 띠(걸레받이 + 두 색): 책상 다리가 띠 위에 서고 이름표가 띠 안. 줄바꿈해도 줄마다 */
+.desk::before { content: ""; position: absolute; z-index: -1; left: -600px; right: -600px; top: 108px; bottom: 0; background: linear-gradient(var(--th-floor-edge, var(--floor)) 0 4px, var(--th-floor-a, var(--floor)) 4px 14px, var(--th-floor-seam, var(--floor)) 14px 15px, var(--th-floor-b, var(--floor)) 15px 26px, var(--th-floor-seam, var(--floor)) 26px 27px, var(--th-floor-a, var(--floor)) 27px); }
+/* 책상 세트 64×46(리드 84×46) ×2. 겹침은 문서 순서: 의자 등받이 → 오라 → 캐릭터 → 모니터·책상(§3) */
+.desk-scene { position: relative; width: 128px; height: 92px; margin: 28px 2px 0; }
+.desk--lead .desk-scene { width: 168px; }
+.desk-marks { position: absolute; left: 0; top: 0; z-index: 1; width: 96px; height: 120px; overflow: visible; pointer-events: none; }
 .nametag { display: inline-block; max-width: 92px; margin-top: 2px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 .desk-meta { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 1.3; color: var(--muted); }
 .desk-meta > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -246,6 +258,20 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .vacant { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 12px; }
 .vacant .sign { border: 2px solid var(--muted); color: var(--muted); padding: 4px 12px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; }
 .vacant p { margin: 0; font-size: 11px; color: var(--muted); }
+
+/* 캐릭터 층 시트(Phase 7 Task 5, SPEC §3): 칸 26×30 ×2, 행 --row, 프레임 steps(--frames), 한 바퀴 --ms. 밝기·투명도 변화 없음 */
+.character { position: absolute; width: 52px; height: 60px; image-rendering: pixelated; background-repeat: no-repeat; background-size: 208px 780px; background-position: 0 calc(var(--row) * -60px); animation: ch-loop var(--ms) steps(var(--frames)) infinite; }
+.character[data-facing="left"] { scale: -1 1; }
+.character[data-action="sit_down"], .character[data-action="ride_lurch"] { animation: ch-once var(--ms) steps(var(--frames), jump-none) 1 forwards; }
+.character[data-action="coffee"] { animation: ch-coffee var(--ms) infinite; } /* 들고 1.6 · 올림 .2 · 마심 .8 · 내림 .2초 */
+.desk-scene > .character { left: 8px; top: 8px; } /* 세트 (4,4) */
+/* 오라 38×50 ×2, 행 = 단계-1, 2프레임 0.4초씩. 캐릭터를 오라 (6,20)에 */
+.aura { position: absolute; width: 76px; height: 100px; image-rendering: pixelated; background-repeat: no-repeat; background-size: 152px 400px; background-position: 0 calc((var(--aura) - 1) * -100px); animation: aura-loop .8s steps(2) infinite; }
+.desk-scene > .aura { left: -4px; top: -32px; }
+@keyframes ch-loop { to { background-position-x: calc(var(--frames) * -52px); } }
+@keyframes ch-once { to { background-position-x: calc((var(--frames) - 1) * -52px); } }
+@keyframes ch-coffee { 0%, 57.13% { background-position-x: 0; } 57.14%, 64.28% { background-position-x: -52px; } 64.29%, 92.85% { background-position-x: -104px; } 92.86%, 100% { background-position-x: -156px; } }
+@keyframes aura-loop { to { background-position-x: -152px; } }
 
 /* 스프라이트 애니메이션 (v1 + 손들기, 디자인 6장·10장) */
 .frame-b { opacity: 0; }
@@ -566,6 +592,12 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 }
 /* 권한 칸 두 줄 격자, 목록 행 세 줄 격자(디자인 phase3 §7.5) */
 @media (max-width: 480px) {
+  /* 360폭: 책상(×2 그대로) 한 줄에 둘 — 탑 테두리·통로·여백을 줄인다(Phase 7 Task 5) */
+  :root { --shaft-w: 34px; }
+  .tower { border-width: 4px; }
+  .room { padding: 8px 4px 0; }
+  .desks { gap: 8px 4px; padding-left: 0; }
+  .room > .room-deco { display: none; }
   .pl-row { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
   .pl-name { grid-column: 1; grid-row: 1; }
   .pl-sum { grid-column: 1; grid-row: 2; }
@@ -582,6 +614,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .frame-b { opacity: 0 !important; }
+  .character[data-action="sit_down"] { background-position-x: -104px; } /* 앉음 프레임에 멈춤(§3) */
   /* 경광등: 켜짐 프레임과 물든 기둥에 멈춘다(§7). LED는 분홍 그대로 */
   .siren .siren-off { opacity: 0 !important; }
   .floor--alarm .shaft { background: var(--alarm-wash); }

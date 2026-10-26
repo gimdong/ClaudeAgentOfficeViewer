@@ -13,6 +13,7 @@ vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import
 import { App } from "../../web/App";
 import { UNAUTHORIZED_EVENT } from "../../web/useSnapshot";
 import { FLOOR_TEXT } from "../../web/floors/useFloors";
+import { floorWallVariant } from "../../web/building/Floor";
 
 const NBSP = " ";
 type Reply = { status: number; body?: unknown } | "network" | "hold";
@@ -169,7 +170,20 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     expect(f.querySelector(".led")?.getAttribute("title")).toBe("멈춤");
     const desk = within(f).getByTestId("desk-dev");
     expect(desk.className).toContain("state-idle");
-    expect(desk.querySelector(".frame-b")).toBeNull();
+    expect(desk.querySelector(".character")).toBeNull();
+  });
+
+  it("T5: 방은 층 id로 고른 벽지 변형(data-wall)과 같은 번호 장식, 첫 책상은 리드 책상", () => {
+    const s = floorOf({});
+    show(snap(s));
+    render(<App />);
+    const room = floor().querySelector(".room") as HTMLElement;
+    const n = floorWallVariant(s.id, 4);
+    expect(room.dataset.wall).toBe(String(n));
+    expect(room.querySelector(`.room-deco.deco-${n}`)?.getAttribute("aria-hidden")).toBe("true");
+    const desks = [...floor().querySelectorAll(".desk")];
+    expect(desks[0].className).toContain("desk--lead");
+    expect(desks.slice(1).some((d) => d.className.includes("desk--lead"))).toBe(false);
   });
 
   it("막힌 호출 N은 칩 바로 뒤, 접혀도 보이고, 0이면 없다, 쉼표", () => {
@@ -236,7 +250,7 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     for (const n of ["team-lead", "dev"]) {
       const desk = within(floor()).getByTestId(`desk-${n}`);
       expect(within(desk).getByTestId("empty-chair")).toBeTruthy();
-      expect(desk.querySelector(".char")).toBeNull();
+      expect(desk.querySelector(".character")).toBeNull();
       expect(desk.querySelector(".qmark")).toBeNull();
     }
     expect(floor().querySelector(".shutter .shutter-note")?.textContent).toBe("? 결정 2건이 기다립니다");

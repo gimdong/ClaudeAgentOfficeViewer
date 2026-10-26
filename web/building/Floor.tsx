@@ -1,13 +1,14 @@
 import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
-import { Desk } from "../office/Desk";
+import { Desk, SceneCell } from "../office/Desk";
+import { memberVariant } from "../office/Character";
+import { ThemeContext } from "../themes/ThemeContext";
 import { CMD_TEXT } from "../office/leadCmdText";
 import { LEAD_TEXT, shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { Icon } from "../pixel/Icon";
-import { Backdrop } from "./Backdrop";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
 import { BudgetBar, Siren } from "../budget/BudgetBar";
@@ -19,6 +20,9 @@ import { TerminateDialog } from "../floors/TerminateDialog";
 import { BriefingDialog, CH_TEXT, InstructDialog } from "../floors/ChannelDialogs";
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
+
+/** 층 벽지 변형(Phase 7 Task 5): 층 id 해시라 다시 그려도 같은 값. room-wall-N·room-deco-N을 같은 N으로 */
+export const floorWallVariant = (floorId: string, count: number) => memberVariant(floorId, count);
 
 const STATUS_LABEL: Record<Exclude<FloorStatus, "ended">, string> = { working: "작업 중", idle: "대기", paused: "멈춤" };
 
@@ -85,6 +89,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   }, [paused]);
 
   const id = floorDomId(session.id);
+  const { theme } = useContext(ThemeContext);
+  const wall = floorWallVariant(session.id, Object.values(theme.slots["room-wall"])[0]?.layout?.wallVariants ?? 1);
   const decisions = session.members.filter((m) => m.state === "decision").length;
   const working = session.members.filter((m) => m.state === "working").length;
   const ended = floorStatus === "ended";
@@ -173,8 +179,9 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             </span>
           )}
         </header>
-        <div className="room" id={`${id}-room`}>
-          <Backdrop />
+        <div className="room" id={`${id}-room`} data-wall={wall}>
+          <i className="win" aria-hidden="true" />
+          <SceneCell slot="room-wall" name={`room-deco-${wall}`} className={`sc room-deco deco-${wall}`} />
           {paused && (
             // animationend 뒤 클래스를 내려, 접었다 펼칠 때(display 복귀) 다시 내려오지 않게(B129 M2)
             <div className={`shutter${dropping ? " shutter-down" : ""}`} aria-hidden="true" onAnimationEnd={() => setDropping(false)}>
@@ -187,7 +194,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           <div className="desks">
             {session.members.map((m, i) => (
               <Fragment key={m.name}>
-                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} />
+                <Desk member={m} lead={i === 0} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} />
                 {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>

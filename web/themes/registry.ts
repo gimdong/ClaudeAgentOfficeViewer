@@ -23,13 +23,14 @@ export interface ThemeManifest {
   palette: Record<string, string>;
 }
 /** 장면 시트 좌표(scene.json): 칸 이름 → [x, y, w, h](1배율), 기준점, 벽지 변형 수 */
-export interface SceneLayout { slots: Record<string, [number, number, number, number]>; anchors?: Record<string, unknown>; wallVariants?: number }
+export interface SceneLayout { slots: Record<string, [number, number, number, number]>; anchors?: Record<string, unknown>; wallVariants?: number; sheet?: { width: number } }
 /** files: 묶음 안 파일 이름(하위 폴더 포함, 예 "layers/body.png") → 빌드된 주소. data: 읽은 JSON(scene.json) */
 export interface ThemeBundle { manifest: unknown; files: Record<string, string | undefined>; data?: Record<string, unknown> }
 /** 칸 하나의 그림. 장면 시트 칸은 그 시트의 좌표(layout)와 한 쌍 — 그림을 오피스로 대신하면 좌표도 오피스 것(P7a-5) */
 export interface SlotAsset { url: string; layout?: SceneLayout }
-/** slots: 칸 → 변형 → 그림. 선택 칸(vehicle·report-view)은 그 테마에 없으면 빈 객체 */
-export interface ResolvedTheme { manifest: ThemeManifest; slots: Record<SlotName, Record<string, SlotAsset>>; words: Record<WordKey, Word> }
+/** slots: 칸 → 변형 → 그림. 선택 칸(vehicle·report-view)은 그 테마에 없으면 빈 객체.
+ *  sheets: 캐릭터 층 시트(§3, "layers/body.png"·"aura.png"·"cap.png" 등) → 주소. 낮·밤 공통, 없는 장은 오피스 것 */
+export interface ResolvedTheme { manifest: ThemeManifest; slots: Record<SlotName, Record<string, SlotAsset>>; words: Record<WordKey, Word>; sheets: Record<string, string> }
 
 /** 칸 → 파일({v} = 변형). 층 안 칸들은 장면 시트 한 장(scene-<v>.png)의 부분이고 위치는 scene.json이 정한다 */
 const SLOT_FILES: Record<SlotName, string> = {
@@ -42,6 +43,7 @@ export const REQUIRED_SLOTS = (Object.keys(SLOT_FILES) as SlotName[]).filter((s)
 const WORD_KEYS: readonly WordKey[] = ["floor", "lobby", "rest", "pantry", "elevator", "guard", "team", "report"];
 
 const SCENE = "scene-{v}.png";
+const SHEET = /^(layers\/[\w-]+|aura|cap)\.png$/;
 const layoutOf = (b: ThemeBundle): SceneLayout | undefined => {
   const l = b.data?.["scene.json"] as SceneLayout | undefined;
   return l && typeof l.slots === "object" && l.slots ? l : undefined;
@@ -86,7 +88,9 @@ export function resolveTheme(id: string, bundles: Record<string, ThemeBundle>): 
   }
   const words = {} as ResolvedTheme["words"];
   for (const k of WORD_KEYS) words[k] = isWord(manifest.words[k]) ? manifest.words[k]! : office.words[k]!;
-  return { manifest, slots, words };
+  const sheets: Record<string, string> = {};
+  for (const [f, url] of Object.entries(officeBundle.files)) if (SHEET.test(f) && url) sheets[f] = src.files[f] ?? url;
+  return { manifest, slots, words, sheets };
 }
 
 /** 빌드에 묶인 테마들(theme.json·그림·데이터는 주소로, tokens.css는 스타일로 넣는다) */

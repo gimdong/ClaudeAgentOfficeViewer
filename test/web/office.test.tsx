@@ -4,31 +4,39 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Desk } from "../../web/office/Desk";
 import { OpenDecisionContext } from "../../web/report/useDecisions";
 import { NEON } from "../../web/pixel/palette";
+import { loadTheme } from "../../web/themes/registry";
 import { makeMember, makeSession } from "./fixtures";
 
 afterEach(cleanup);
+// Phase 7 Task 5: 캐릭터는 층 시트 div(.character[data-action]), 모니터는 책상 그림 칸(.desk-front.monitor-<상태>)
+const act = (d: HTMLElement) => d.querySelector(".character")?.getAttribute("data-action") ?? null;
+const monitor = (d: HTMLElement) => /monitor-(\w+)/.exec(d.querySelector(".desk-front")?.getAttribute("class") ?? "")?.[1];
 
 describe("Desk", () => {
-  it("working: ⌨ 말풍선, 켜진 모니터, 타이핑 프레임", () => {
+  it("working: ⌨ 말풍선, 일하는 모니터, type 동작과 오라", () => {
     render(<Desk member={makeMember({ state: "working" })} />);
     const desk = screen.getByTestId("desk-developer");
     expect(desk.className).toContain("state-working");
     expect(within(desk).getByTestId("bubble").textContent).toBe("⌨");
-    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOn);
-    expect(desk.querySelector(".frame-b")).not.toBeNull();
+    expect(monitor(desk)).toBe("work");
+    expect(act(desk)).toBe("type");
+    expect(desk.querySelector(".aura")).not.toBeNull();
   });
 
-  it("idle: z z 말풍선, 꺼진 모니터, 타이핑 프레임 없음", () => {
+  it("idle: z z 말풍선, 쉬는 모니터, idle 동작, 오라 없음", () => {
     render(<Desk member={makeMember({ state: "idle" })} />);
     const desk = screen.getByTestId("desk-developer");
     expect(within(desk).getByTestId("bubble").textContent).toBe("z z");
-    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOff);
-    expect(desk.querySelector(".frame-b")).toBeNull();
+    expect(monitor(desk)).toBe("rest");
+    expect(act(desk)).toBe("idle");
+    expect(desk.querySelector(".aura")).toBeNull();
   });
 
-  it("mail: ✉와 안 읽은 개수", () => {
+  it("mail: ✉와 안 읽은 개수, think 동작·모니터", () => {
     render(<Desk member={makeMember({ state: "mail", unread: 2 })} />);
-    expect(within(screen.getByTestId("desk-developer")).getByTestId("bubble").textContent).toBe("✉2");
+    const desk = screen.getByTestId("desk-developer");
+    expect(within(desk).getByTestId("bubble").textContent).toBe("✉2");
+    expect([act(desk), monitor(desk)]).toEqual(["think", "think"]);
   });
 
   it("offline: 빈 의자, 말풍선 없음", () => {
@@ -36,6 +44,30 @@ describe("Desk", () => {
     const desk = screen.getByTestId("desk-developer");
     expect(within(desk).queryByTestId("bubble")).toBeNull();
     expect(within(desk).getByTestId("empty-chair")).toBeTruthy();
+    expect(act(desk)).toBeNull();
+    expect(monitor(desk)).toBe("rest");
+  });
+
+  it("장면 그림(의자·책상·캐릭터)은 aria-hidden 칸 안이고 책상 접근 이름은 그대로", () => {
+    render(<Desk member={makeMember({ state: "working" })} />);
+    const desk = screen.getByTestId("desk-developer");
+    const scene = desk.querySelector(".desk-scene")!;
+    expect(scene.getAttribute("aria-hidden")).toBe("true");
+    for (const q of [".chair", ".character", ".desk-front"]) expect(scene.querySelector(q), q).not.toBeNull();
+    // 겹침 순서(뒤 → 앞): 의자 → 오라 → 캐릭터 → 책상
+    expect([...scene.children].map((e) => e.classList[1] ?? e.classList[0])).toEqual(["chair", "aura", "character", "desk-front"]);
+    expect(desk.getAttribute("aria-label")).toBe("developer, 작업 중");
+  });
+
+  it("책상 그림은 장면 시트 칸 좌표로 자르고, 리드 책상은 리드 칸", () => {
+    const layout = loadTheme("office").slots.desk.day.layout!;
+    render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t" } })} lead />);
+    const front = screen.getByTestId("desk-developer").querySelector(".desk-front") as HTMLElement;
+    const [x, y, w, h] = layout.slots["desk-lead-ask"];
+    expect([front.style.getPropertyValue("--sx"), front.style.getPropertyValue("--sy"), front.style.getPropertyValue("--sw"), front.style.getPropertyValue("--sh")]).toEqual([`${x}`, `${y}`, `${w}`, `${h}`]);
+    const chair = screen.getByTestId("desk-developer").querySelector(".chair") as HTMLElement;
+    expect(chair.className).toContain("chair-lead");
+    expect(chair.style.getPropertyValue("--sx")).toBe(`${layout.slots["chair-lead"][0]}`);
   });
 
   it("팝오버를 그리지 않는다(디자인 A4) — 모델·토큰은 말풍선 보조 줄로 옮겼다", () => {
@@ -71,12 +103,12 @@ describe("Desk", () => {
     expect(desk.getAttribute("aria-label")).toBe("developer, 결정 필요. 결정 보고서 열기");
     expect(desk.getAttribute("aria-haspopup")).toBe("dialog");
     expect(desk.getAttribute("title")).toBeNull();
-    expect(desk.querySelector(".hand .hop")).not.toBeNull();
+    expect(act(desk)).toBe("hand_up");
     expect(desk.querySelector(".qmark")).not.toBeNull();
     expect(desk.querySelector(".q-ring")).not.toBeNull();
     expect(desk.querySelector(".nametag")!.textContent).toBe("developer · 열기");
     expect(within(desk).queryByTestId("bubble")).toBeNull();
-    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOn);
+    expect(monitor(desk)).toBe("ask");
     fireEvent.click(desk);
     expect(opened).toEqual([["d1", desk]]);
   });
@@ -109,27 +141,27 @@ describe("Desk", () => {
     expect(fills).toEqual(new Set([NEON.yellow, NEON.yellowDeep]));
   });
 
-  it("손든 캐릭터는 BODY_UP이다: 8번째 열 0행(손)이 피부색", () => {
-    render(<Desk member={makeMember({ state: "decision", decision: { kind: "question", since: "t" } })} />);
-    const hop = screen.getByTestId("desk-developer").querySelector(".hop")!;
-    const hand = [...hop.querySelectorAll("rect")].find((r) => r.getAttribute("x") === "7" && r.getAttribute("y") === "0");
-    expect(hand?.getAttribute("fill")).toBe(NEON.skin);
+  it("같은 이름은 다시 그려도 같은 모습(variantIndex)", () => {
+    const look = () => (screen.getByTestId("desk-developer").querySelector(".character") as HTMLElement).style.backgroundImage;
+    const { rerender } = render(<Desk member={makeMember({ state: "idle" })} />);
+    const first = look();
+    rerender(<Desk member={makeMember({ state: "mail" })} />);
+    expect(look()).toBe(first);
   });
 
-  it("CSS로 움직이는 .hop, .qmark 그룹에는 transform 속성이 없다", () => {
+  it("CSS로 움직이는 .qmark 그룹에는 transform 속성이 없다", () => {
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "plan", since: "t" } })} />);
     const desk = screen.getByTestId("desk-developer");
-    expect(desk.querySelector(".hop")!.getAttribute("transform")).toBeNull();
     expect(desk.querySelector(".qmark")!.getAttribute("transform")).toBeNull();
   });
 
-  it("휴업이면 말머리를 숨기고 모니터를 끄고 idle 모습", () => {
+  it("휴업이면 말머리를 숨기고 모니터를 끄고 빈 의자", () => {
     render(<Desk member={makeMember({ state: "working" })} paused />);
     const desk = screen.getByTestId("desk-developer");
     expect(desk.className).toContain("state-idle");
     expect(within(desk).queryByTestId("bubble")).toBeNull();
-    expect(within(desk).getByTestId("screen").getAttribute("fill")).toBe(NEON.screenOff);
-    expect(desk.querySelector(".frame-b")).toBeNull();
+    expect(monitor(desk)).toBe("rest");
+    expect(act(desk)).toBeNull();
   });
 
   it("마우스·포커스·터치를 말풍선 핸들러에 key와 함께 넘긴다", () => {

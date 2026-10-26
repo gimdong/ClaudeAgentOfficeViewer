@@ -1,10 +1,13 @@
-import { useContext, useEffect, useState, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
+import { useContext, useEffect, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
 import type { Member, MemberState } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { formatTokens, modelLabel, stateLabel } from "../format";
-import { NEON, roleOf, shirtColor } from "../pixel/palette";
+import { NEON } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
-import { characterRows, FOLDER_DESK, LOCK_DESK, LOCK_DESK_DENIED, QMARK, QRING, spriteRects } from "../pixel/sprites";
+import { FOLDER_DESK, LOCK_DESK, LOCK_DESK_DENIED, QMARK, QRING, spriteRects } from "../pixel/sprites";
+import type { SlotName } from "../themes/registry";
+import { ThemeContext } from "../themes/ThemeContext";
+import { Character, LOOKS, memberVariant, type ActionName } from "./Character";
 import { CMD_TEXT } from "./leadCmdText";
 import { OpenLeadContext } from "./LeadUi";
 import { remainingSeconds } from "../report/text";
@@ -25,6 +28,34 @@ interface DeskProps {
   folder?: { pending: number; total: number };
   /** 퇴사 중이면 channel 연결이 없음을 알린다(스펙 12장 m) */
   retireWait?: boolean;
+  /** 층 첫 책상(팀 리드): 넓은 책상·높은 등받이 그림(SPEC §2 desk) */
+  lead?: boolean;
+}
+
+type Screen = "work" | "ask" | "think" | "rest";
+/** 상태 → (동작, 모니터)(Phase 7 Task 5). mail은 받은 일을 살피는 중이라 think */
+const POSE: Record<Exclude<MemberState, "offline">, [ActionName, Screen]> = { working: ["type", "work"], decision: ["hand_up", "ask"], mail: ["think", "think"], idle: ["idle", "rest"] };
+
+/** 장면 시트의 한 칸을 그리는 장식 i. 좌표는 --sx·--sy·--sw·--sh(1배율), 시트 폭 --shw, 배율은 CSS */
+export function SceneCell({ slot = "desk", name, className }: { slot?: SlotName; name: string; className: string }) {
+  const { theme, variant } = useContext(ThemeContext);
+  const asset = theme.slots[slot][variant] ?? Object.values(theme.slots[slot])[0];
+  const [x, y, w, h] = asset.layout?.slots[name] ?? [0, 0, 0, 0];
+  const style = { "--sx": x, "--sy": y, "--sw": w, "--sh": h, "--shw": asset.layout?.sheet?.width ?? 256, backgroundImage: `url(${asset.url})` };
+  return <i className={className} aria-hidden="true" style={style as CSSProperties} />;
+}
+
+/** 책상 장면(§3 겹침: 의자 등받이 → 오라 → 캐릭터 → 모니터·책상). 빈 자리면 의자 + 쉼 모니터. 모두 장식 */
+function DeskScene({ member, pose, lead, vacant }: { member: Member; pose: [ActionName, Screen]; lead: boolean; vacant: boolean }) {
+  const kind = lead ? "lead-" : "";
+  const screen = vacant ? "rest" : pose[1];
+  return (
+    <div className="desk-scene" aria-hidden="true" data-testid={vacant ? "empty-chair" : undefined}>
+      <SceneCell name={lead ? "chair-lead" : "chair"} className={`sc chair${lead ? " chair-lead" : ""}`} />
+      {!vacant && <Character name={member.name} action={pose[0]} effort={member.effort} variantIndex={memberVariant(member.name, LOOKS.length)} />}
+      <SceneCell name={`desk-${kind}${screen}`} className={`sc desk-front monitor-${screen}`} />
+    </div>
+  );
 }
 
 /**
@@ -61,13 +92,11 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
+function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, lead: leadDesk = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
   const urgent = useUrgent(member.state === "decision" ? member.decision?.deadline : undefined);
-  const role = roleOf(member.name);
-  const colors = { h: NEON.hair, s: NEON.skin, e: NEON.eye, c: shirtColor(role, member.color), p: NEON.pants, g: NEON.glasses, t: NEON.pink };
   const decision = member.state === "decision";
   // 큐가 붙인 id가 있어야 보고서를 열 수 있다. id가 없는 결정(큐 없이 만든 스냅샷)은 Phase 1처럼 누를 수 없다
   // ask_user(kind chat)는 결정 보고서가 아니라 답 칸을 연다(Phase 6b designer SPEC §2.7)
@@ -81,8 +110,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   // 퇴근함(§2.4): 사용자가 퇴근시킨 자리만 팻말 빈 의자
   const offDuty = member.duty === "off";
   const shown: MemberState = paused && !decision ? "idle" : offDuty && !decision ? "offline" : member.state;
-  const working = member.state === "working" && !paused && !offDuty;
-  const screenOn = (working || member.state === "mail" || decision) && !paused && !offDuty;
+  const vacant = member.state === "offline" || paused || (offDuty && !decision);
   const denied = !!member.policyDenied;
   const locked = !!member.policy || denied;
   // 접근 이름 덧붙임(phase3 §8.7)
@@ -97,7 +125,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
     </span>
   );
   const svg = (
-    <svg className="desk-svg" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
+    <svg className="desk-svg desk-marks" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
       {decision && !paused ? (
         <>
           {/* 누를 수 있는 결정(id가 있음)만 호버·포커스일 때 점선 링을 보인다(디자인 4.4, 6장 "Phase 2 이후") */}
@@ -114,41 +142,14 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
           </g>
         )
       )}
-      {/* 휴업 층은 모두 퇴근한 사무실처럼 빈 의자만 둔다(사용자 요청 2026-10-12, B130 대체) */}
-      {member.state === "offline" || paused || (offDuty && !decision) ? (
-        <g data-testid="empty-chair">
-          <rect x={3} y={13} width={6} height={6} fill={NEON.deskDark} />
-          <rect x={4} y={19} width={1} height={2} fill={NEON.deskDark} />
-          <rect x={7} y={19} width={1} height={2} fill={NEON.deskDark} />
-          {offDuty && !paused && (
-            // §2.4 퇴근 팻말: 휴업 셔터 팻말과 같은 색
-            <g data-testid="offduty-sign">
-              <rect x={2} y={10} width={9} height={5} fill="var(--shutter-bar)" />
-              <rect x={2} y={15} width={9} height={1} fill="var(--shutter-gap)" />
-              <text x={6.5} y={13.6} fontSize={3.5} textAnchor="middle" fill="var(--ink)">
-                {CMD_TEXT.offSign}
-              </text>
-            </g>
-          )}
-        </g>
-      ) : decision ? (
-        <g className="char hand">
-          <g className="hop">
-            <PixelSprite rects={spriteRects(characterRows(role, "up"), colors)} x={2} y={9} />
-          </g>
-        </g>
-      ) : (
-        <g className="char">
-          <PixelSprite rects={spriteRects(characterRows(role, "a"), colors)} x={2} y={9} className="frame-a" />
-          {working && <PixelSprite rects={spriteRects(characterRows(role, "b"), colors)} x={2} y={9} className="frame-b" />}
-        </g>
-      )}
-      <rect x={12} y={11} width={8} height={6} fill={NEON.monitor} />
-      <rect data-testid="screen" x={13} y={12} width={6} height={4} fill={screenOn ? NEON.screenOn : NEON.screenOff} />
-      {working && (
-        <g className="code">
-          <rect x={14} y={13} width={3} height={1} fill={NEON.monitor} />
-          <rect x={14} y={14} width={4} height={1} fill={NEON.monitor} />
+      {offDuty && !paused && !decision && (
+        // §2.4 퇴근 팻말: 휴업 셔터 팻말과 같은 색
+        <g data-testid="offduty-sign">
+          <rect x={2} y={10} width={9} height={5} fill="var(--shutter-bar)" />
+          <rect x={2} y={15} width={9} height={1} fill="var(--shutter-gap)" />
+          <text x={6.5} y={13.6} fontSize={3.5} textAnchor="middle" fill="var(--ink)">
+            {CMD_TEXT.offSign}
+          </text>
         </g>
       )}
       {locked && (
@@ -157,18 +158,15 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
           <PixelSprite rects={spriteRects(denied ? LOCK_DESK_DENIED : LOCK_DESK, { x: denied ? NEON.pink : NEON.violet, a: NEON.monitor })} x={denied ? 16 : 18} y={3} />
         </g>
       )}
-      <rect x={15} y={17} width={2} height={2} fill={NEON.monitor} />
       {folder && folder.total > 0 && (
         // §2.2 리드 책상의 서류철: 대기가 있으면 노랑, 없으면 흐리게
         <g data-testid="folder-mark">
           <PixelSprite rects={spriteRects(FOLDER_DESK, { x: folder.pending > 0 ? NEON.yellow : "var(--muted)", a: "var(--paper)" })} x={20} y={15} />
         </g>
       )}
-      <rect x={0} y={19} width={24} height={2} fill={NEON.desk} />
-      <rect x={1} y={21} width={2} height={8} fill={NEON.deskDark} />
-      <rect x={21} y={21} width={2} height={8} fill={NEON.deskDark} />
     </svg>
   );
+  const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} lead={leadDesk} vacant={vacant} />;
 
   // 이름표 아래 한 줄: 모델 · 토큰 합계(항상 보임). 둘 다 없으면 그리지 않는다
   // 92px 폭에서 숫자가 잘리지 않게 모델과 토큰을 두 줄로 둔다(정적 렌더 확인)
@@ -204,7 +202,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
     </span>
   );
   const folderMark = pending > 0 ? CMD_TEXT.aria.folder(pending) : "";
-  const cls = `desk state-${shown}${decision ? " desk--decision" : ""}${urgent ? " urgent" : ""}${awaiting ? " desk--await" : ""}${offDuty ? " desk--offduty" : ""}`;
+  const cls = `desk state-${shown}${decision ? " desk--decision" : ""}${urgent ? " urgent" : ""}${awaiting ? " desk--await" : ""}${offDuty ? " desk--offduty" : ""}${leadDesk ? " desk--lead" : ""}`;
   if (replyable) {
     // Phase 6b: ask_user(결정 표시)·답을 기다립니다는 답 칸을 연다(§2.1·§2.7)
     return (
@@ -219,6 +217,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {...handlers}
       >
         {awaitLabel}
+      {scene}
       {svg}
         <span className="nametag">
           {member.name}
@@ -243,6 +242,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {...handlers}
       >
         {awaitLabel}
+      {scene}
       {svg}
         <span className="nametag">
           {member.name}
@@ -268,6 +268,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {...handlers}
       >
         {awaitLabel}
+      {scene}
       {svg}
         <span className="nametag">
           {member.name}
@@ -289,6 +290,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {...handlers}
     >
       {awaitLabel}
+      {scene}
       {svg}
       <span className="nametag">{member.name}</span>
       {meta}

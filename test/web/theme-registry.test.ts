@@ -56,4 +56,12 @@ describe("loadTheme·resolveTheme", () => {
     expect(t.words.rest).toEqual(office.words.rest);
     expect(t.words.lobby).toEqual(office.words.lobby);
   });
+
+  it("T5: 캐릭터 층 시트는 테마 것, 빠진 장은 오피스 것(장면 시트·다른 파일은 섞지 않음)", () => {
+    expect(Object.keys(office.sheets).sort()).toEqual(expect.arrayContaining(["aura.png", "cap.png", "layers/body.png", "layers/hair-short-gold.png", "layers/outfit.png"]));
+    expect(Object.keys(office.sheets).some((f) => f.startsWith("scene-") || f.startsWith("extra-"))).toBe(false);
+    const t = resolveTheme("neon", bundles(fake({}, { "layers/outfit.png": "/neon/outfit.png" })));
+    expect(t.sheets["layers/outfit.png"]).toBe("/neon/outfit.png");
+    expect(t.sheets["layers/body.png"]).toBe(office.sheets["layers/body.png"]);
+  });
 });
