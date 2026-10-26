@@ -106,6 +106,9 @@ export interface TokenSum {
   total: number; // input + output + cacheWrite (cacheRead 제외)
 }
 
+/** Claude Code가 hook 입력 effort.level로 싣는 노력 정도(Phase 7 Task 4, #646) */
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface Member {
   name: string;
   role: string;
@@ -133,6 +136,8 @@ export interface Member {
   policyDenied?: PolicyDenied;
   /** 리드만: 최근 이벤트에 보인 서브에이전트 종류(정렬, 중복 없음) */
   subTypes?: string[];
+  /** 노력 정도: 그 멤버의 마지막 /hooks/v2 이벤트 중 effort.level이 있는 것(Phase 7 Task 4). 화면은 오라 단계로 쓴다 */
+  effort?: EffortLevel;
 }
 
 export interface ContextInfo {

@@ -8,7 +8,7 @@ import type { BudgetStore } from "./budget/store";
 import type { DecisionQueue } from "./decisions/queue";
 import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
-import type { EventStore } from "./events/store";
+import { lastEffort, type EventStore } from "./events/store";
 import { readLimits, readStatusline } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
@@ -384,6 +384,11 @@ export class SnapshotBuilder {
         const v = duty.view(s.sessionId, m.name, { paused, decision: !!m.decision, active: rec?.active, lastActivityAt: m.lastActivityAt, joinedAt: rec?.joinedAt });
         if (v.duty || v.longIdle || v.retiring) members[i] = { ...m, ...v };
       }
+    }
+    // 노력 정도(Phase 7 Task 4): 리드·팀원 각자의 마지막 v2 값
+    for (let i = 0; i < members.length; i++) {
+      const effort = lastEffort(agents?.get(members[i].name) ?? []);
+      if (effort) members[i] = { ...members[i], effort };
     }
     const predecessors = duty?.predecessors(s.sessionId).map((p) => ({ name: p.name, retiredAt: iso(p.retiredAt), ...(p.startedAt !== undefined ? { startedAt: iso(p.startedAt) } : {}) })) ?? [];
 

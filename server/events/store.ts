@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../src/shared/types";
 import { agentOf, summarize, type ToolSummary } from "./summarize";
 
 export interface StoredEvent {
@@ -12,6 +13,15 @@ export interface StoredEvent {
   summary: ToolSummary;
   /** 암호화 입구(/hooks/v2)로 온 이벤트 — 지시 수신 판정은 이것만 센다(B344, 옛 /hooks/event는 다른 플러그인일 수 있음) */
   v2?: true;
+  /** hook 입력 effort.level(v2만, 알려진 값만 — Phase 7 Task 4) */
+  effort?: EffortLevel;
+}
+
+const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+/** 그 에이전트의 마지막 노력 정도(서브에이전트 이벤트는 빼고). 값이 있는 이벤트만 보므로 이상한 값은 이전 값을 지우지 않는다 */
+export function lastEffort(list: readonly StoredEvent[]): EffortLevel | undefined {
+  for (let i = list.length - 1; i >= 0; i--) if (!list[i].sub && list[i].effort) return list[i].effort;
+  return undefined;
 }
 
 export const PER_AGENT = 20;
@@ -49,6 +59,8 @@ export class EventStore {
       summary: summarize(tool, input.tool_input),
       ...(v2 ? { v2: true as const } : {}),
     };
+    const level = (input.effort as { level?: unknown } | undefined)?.level;
+    if (v2 && typeof level === "string" && EFFORTS.includes(level)) e.effort = level as EffortLevel;
 
     let bucket = this.sessions.get(sessionId);
     if (!bucket) {
