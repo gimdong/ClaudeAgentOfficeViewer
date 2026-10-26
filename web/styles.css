@@ -280,14 +280,12 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .state-working .frame-b { animation: frameB .5s steps(1) infinite; }
 .state-working .code { animation: blink .4s steps(1) infinite; }
 .state-idle .char, .bubble-idle { animation: nod 2s steps(1) infinite; }
-.hand .hop { animation: hop .9s steps(1) infinite; }
 /* 결정 "!" 풍선(P7a-10 M2, 목업 .p7b-bang 24×24): 공통 노랑 판 + --yellow-ink. 급함은 분홍 판. 밝기 변화 없이 위아래로만 */
 .qmark { position: absolute; z-index: 2; left: 24px; top: 0; width: 24px; height: 24px; display: grid; place-items: center; box-sizing: border-box; font: 700 14px/1 var(--font-text); background: var(--yellow); color: var(--yellow-ink); border: 2px solid var(--yellow-ink); pointer-events: none; animation: bob 1.2s steps(1) infinite; }
 .urgent .qmark { background: var(--pink); color: var(--wall); }
 @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes frameB { 0% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes nod { 0% { transform: translateY(0); } 50% { transform: translateY(1px); } }
-@keyframes hop { 0% { transform: translateY(0); } 66.667% { transform: translateY(-1px); } }
 @keyframes bob { 0% { transform: translateY(0); } 50% { transform: translateY(1px); } }
 @keyframes blink { 0% { opacity: 1; } 50% { opacity: .3; } }
 
