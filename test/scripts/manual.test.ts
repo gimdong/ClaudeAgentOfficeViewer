@@ -1129,6 +1129,18 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
       expect(prose, t).toContain(`<code>${t}</code>`);
     }
   });
+  it("channel 미수신 표시(B343)와 쓸 수 있는 환경이 코드·공식 문서 사실과 같다", () => {
+    const sec = prose.slice(prose.indexOf('<h3 id="channel-unreceived">'), prose.indexOf('<h3 id="same-user">'));
+    expect(sec, "6장 절").toContain(`<code>${CH_TEXT.chipUnreceived}</code>`);
+    expect(CH_TEXT.unreceived).toContain('설명서 6장 "작업 지시가 세션에 닿지 않는 것 같아요"');
+    expect(sec).toContain("작업 지시가 세션에 닿지 않는 것 같아요");
+    const ch = readFileSync(join(__dirname, "../../server/floors/channels.ts"), "utf8");
+    expect(ch).toContain("export const RECEIPT_MS = 30_000;");
+    expect(sec).toContain("30초를 기다립니다");
+    const env = prose.slice(prose.indexOf('<p class="note" id="channel-support">'));
+    for (const s of ["claude.ai 계정 로그인이나 Claude Console API 키", "Amazon Bedrock·Google Cloud(Vertex)·Microsoft Foundry", "<code>ANTHROPIC_BASE_URL</code>", "<code>channelsEnabled</code>"]) expect(env, s).toContain(s);
+    for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(sec + env.slice(0, 800), w).not.toContain(w);
+  });
   it("부록 D 실제 세션 확인 10항목(스펙 11장 f·12장 g, 올린 직후 층)", () => {
     const d = html.slice(html.indexOf('<h2 id="s11">'), html.indexOf("</main>"));
     expect((d.slice(d.indexOf('<ol class="lead-checks">'), d.indexOf("</ol>")).match(/<li>/g) ?? []).length).toBe(10);
