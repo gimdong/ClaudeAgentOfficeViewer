@@ -182,6 +182,15 @@ describe("#658 다시 연결하는 중", () => {
   });
 });
 
+describe("B343 받았는지 확인 안 됨", () => {
+  it("패널 지시 절: 버튼은 켜진 채, 아래 한 줄로 알린다", () => {
+    const s = makeSession({ channel: { connected: true, tmux: "co-1", held: 0, unreceived: true }, members: [makeMember({ name: "team-lead", role: "lead" })] });
+    render(<LeadCommands session={s} member={s.members[0]} announce={() => {}} lead={opener()} />);
+    expect(screen.getByText(CH_TEXT.unreceived)).toBeTruthy();
+    expect(screen.getByRole("button", { name: CMD_TEXT.report }).getAttribute("aria-disabled")).toBeNull();
+  });
+});
+
 describe("지시 절(§1)", () => {
   const cmds = (session: SessionView, member = session.members[0], lead = opener(), announce = vi.fn()) => {
     render(<LeadCommands session={session} member={member} announce={announce} lead={lead} />);

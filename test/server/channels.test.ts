@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../server/app";
 import type { SessionRecord } from "../../server/collectors/sessions";
-import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, UNSEEN_MS } from "../../server/floors/channels";
+import { ChannelHub, floorKeyFile, MAX_HELD, MAX_LAUNCHED, MAX_PENDING, PENDING_MS, RECEIPT_GIVEUP_MS, RECEIPT_MS, UNSEEN_MS } from "../../server/floors/channels";
 import { FloorControl } from "../../server/floors/control";
 import { launchArgs, tmuxVersionOk, validateLaunch, type LaunchInput } from "../../server/floors/launch";
 import { Logger, setLogger } from "../../server/log";
@@ -544,6 +544,144 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     const again = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
     again.load();
     expect(again.has("s1")).toBe(false);
+  });
+
+  describe("B343 지시를 세션이 받았는지(리드 hook 이벤트로 판정)", () => {
+    let t: number;
+    let hub2: ChannelHub;
+    const ev = (event: string, at = t, sub = false) => ({ at, event, sub });
+    const setup = () => {
+      t = 1_800_000_000_000;
+      hub2 = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, now: () => t });
+      const key = hub2.register("s1", "co-0a1b2c3d")!;
+      const kid = createHmac("sha256", key).update("kid").digest("hex");
+      const attach = () => {
+        const nonce = randomBytes(32).toString("hex");
+        const hi = hub2.hello(kid, nonce)!;
+        let close = () => {};
+        const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false, write: () => true } as never;
+        hub2.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi.snonce}`).digest("hex") }, res);
+        return () => close();
+      };
+      return attach;
+    };
+    const un = () => hub2.view("s1")?.unreceived;
+
+    it(`유휴일 때 보내고 ${RECEIPT_MS / 1000}초 동안 리드 이벤트가 없으면 unreceived, 그 전에는 아니다`, () => {
+      setup()();
+      const events = [ev("Stop", t - 60_000)];
+      hub2.instruct("s1", "일", false);
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += RECEIPT_MS;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+      t += 1;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+    });
+
+    it("바쁠 때 보내면 다음 리드 Stop부터 센다 — 그 사이 이벤트는 흔적이 아니다. 서브에이전트 이벤트는 세지 않는다", () => {
+      setup()();
+      const events = [ev("PreToolUse")];
+      hub2.instruct("s1", "일", false);
+      t += 5_000;
+      events.push(ev("PostToolUse"), ev("PreToolUse", t, true));
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += 5_000;
+      events.push(ev("Stop"));
+      const stopAt = t;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t = stopAt + 10_000;
+      events.push(ev("PreToolUse", t, true)); // 서브에이전트
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t = stopAt + RECEIPT_MS + 1;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+    });
+
+    it("바쁜 턴의 남은 PreToolUse·PostToolUse는 받음이 아니고, 보낸 뒤 첫 Stop 다음 새 턴의 이벤트가 오면 받음", () => {
+      setup()();
+      const events = [ev("PreToolUse")];
+      hub2.instruct("s1", "일", false);
+      t += 3_000;
+      events.push(ev("PreToolUse"), ev("PostToolUse")); // 하던 턴의 남은 이벤트
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += 3_000;
+      events.push(ev("Stop")); // 시계 시작점
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+      t += 5_000;
+      events.push(ev("PreToolUse")); // 새 턴(지시 처리)
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += RECEIPT_MS * 2;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+    });
+
+    it("결정 대기·휴업(blocked) 중에는 멈추고, 풀리면 그때부터 다시 센다", () => {
+      setup()();
+      const events = [ev("Stop", t - 60_000)];
+      hub2.instruct("s1", "일", false);
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: true });
+      t += 5 * 60_000;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: true });
+      expect(un()).toBeUndefined();
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += RECEIPT_MS;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+      t += 1;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+    });
+
+    it("흔적이 나중에 오면 지우고(seen), 그 연결 동안 다음 지시는 재지 않는다. missing이면 뒤 지시로 다시 시작하지 않는다", () => {
+      setup()();
+      const events = [ev("Stop", t - 60_000)];
+      hub2.instruct("s1", "하나", false);
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += RECEIPT_MS + 1;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+      hub2.instruct("s1", "둘", false); // 다시 시작하지 않는다(표시 유지)
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+      t += 60_000;
+      events.push(ev("PreToolUse")); // 늦게 처리됨
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+      hub2.instruct("s1", "셋", false);
+      t += 10 * RECEIPT_MS;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBeUndefined();
+    });
+
+    it(`새 연결이면 unknown으로 돌아가고, ${RECEIPT_GIVEUP_MS / 60_000}분 동안 유휴가 오지 않으면 판정을 버린다(표시 안 함)`, () => {
+      const attach = setup();
+      const close = attach();
+      const events = [ev("Stop", t - 60_000)];
+      hub2.instruct("s1", "일", false);
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += RECEIPT_MS + 1;
+      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      expect(un()).toBe(true);
+      close();
+      attach();
+      expect(un()).toBeUndefined();
+      // 바쁜 채로 10분 — 판정하지 않고 버림
+      const busy = [ev("PreToolUse")];
+      hub2.instruct("s1", "둘", false);
+      for (let i = 0; i < 11; i++) {
+        t += 60_000;
+        busy.push(ev("PreToolUse"));
+        hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+      }
+      busy.push(ev("Stop"));
+      hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+      t += RECEIPT_MS + 1;
+      hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+      expect(un()).toBeUndefined();
+    });
   });
 
   it("스펙 12장 n: 등록 파일의 tmux가 형식(co-8hex)이 아니면 그 이름이 가리키는 열쇠 파일이 있어도 되살리지 않는다(폴더 밖 경로·명령 주입)", () => {

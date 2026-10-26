@@ -58,6 +58,9 @@ export const CH_TEXT = {
   chipWaiting: "연결 전",
   chipHeld: (n: number) => `보관 ${n}`,
   chipSent: "지시 보냄",
+  // B343(qa #668 확정): 보낸 지시를 세션이 받은 흔적(리드 hook)이 없음 — 아는 것(흔적 없음)만 말한다. 30초는 RECEIPT_MS
+  chipUnreceived: "받았는지 확인 안 됨",
+  unreceived: '보낸 지시를 세션이 받았는지 확인하지 못했습니다(30초 동안 일을 시작한 흔적이 없음). 로그인 방식(회사 중계 주소 등)이나 조직 설정에 따라 작업 지시가 동작하지 않을 수 있습니다. 설명서 6장 "작업 지시가 세션에 닿지 않는 것 같아요"를 봐 주세요.',
   chipDelivered: "전달됨",
   briefTitle: (name: string) => `${name} 층 재개 전 확인`,
   briefHeld: "휴업 중 보관한 지시",

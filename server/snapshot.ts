@@ -40,7 +40,7 @@ export interface BuilderOptions {
   /** 층 관리(Phase 4a): 일시정지·종료 중·숨김. 빌드마다 sweep으로 끝난 세션을 정리한다 */
   floors?: Pick<FloorControl, "sweep" | "view" | "isHidden" | "hiddenCount">;
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
-  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep">;
+  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep"> & Partial<Pick<ChannelHub, "receiptCheck">>;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
   /** 빌딩 설정(Phase 6b Task 10) */
   building?: { userName(): string };
@@ -407,7 +407,8 @@ export class SnapshotBuilder {
         return f ? { folder: f } : {};
       })(),
       ...(await this.subagentField(s, leadFile, now)),
-      ...this.channelField(s),
+      // 지시 수신 판정(B343): 리드 본인 hook 이벤트, 리드 결정 대기·휴업이면 멈춤
+      ...this.channelField(s, { leadEvents: agents?.get("team-lead") ?? [], blocked: paused || !!members[0]?.decision }),
       ...this.reopenField(s),
     };
   }
@@ -439,9 +440,10 @@ export class SnapshotBuilder {
     return list.length ? { subagents: list } : {};
   }
 
-  private channelField(s: SessionRecord): { channel?: NonNullable<SessionView["channel"]> } {
+  private channelField(s: SessionRecord, receipt?: Parameters<ChannelHub["receiptCheck"]>[1]): { channel?: NonNullable<SessionView["channel"]> } {
     const ch = this.opts.channels;
     if (!ch || !s.alive) return {};
+    if (receipt) ch.receiptCheck?.(s.sessionId, receipt);
     const v = ch.view(s.sessionId);
     return v ? { channel: v } : {};
   }

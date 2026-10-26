@@ -43,6 +43,16 @@ describe("ReportFolder", () => {
     expect(screen.getByText(LEAD_TEXT.archiveNote)).toBeTruthy();
   });
 
+  it("B343: 받았는지 확인 안 됨이면 서류철·답 칸에 한 줄(결재·보내기는 켜진 채)", () => {
+    render(<ReportFolder {...folderProps(folder([rep()]), { unreceived: true })} />);
+    fireEvent.click(screen.getByRole("button", { name: /이번 주 진행 보고/ }));
+    expect(screen.getByText(CH_TEXT.unreceived)).toBeTruthy();
+    expect(screen.getByRole("button", { name: LEAD_TEXT.approve }).getAttribute("aria-disabled")).toBeNull();
+    cleanup();
+    render(<ReplyDialog {...replyProps(q(), { unreceived: true })} />);
+    expect(screen.getByText(CH_TEXT.unreceived)).toBeTruthy();
+  });
+
   it("빈 서류철 안내", () => {
     render(<ReportFolder {...folderProps(folder([]))} />);
     expect(screen.getByText(LEAD_TEXT.empty)).toBeTruthy();

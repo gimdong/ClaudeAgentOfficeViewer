@@ -18,6 +18,8 @@ export function ReplyDialog(p: {
   onShowNewer?(): void;
   /** 그 층에 대기 보고서가 있으면 서류철로 가는 버튼(B335 ②) */
   folder?: { pending: number; onOpen(el: HTMLElement): void };
+  /** 보낸 지시를 세션이 받은 흔적이 없음(B343) */
+  unreceived?: boolean;
   onClose(): void;
 }) {
   const q = p.question;
@@ -124,6 +126,7 @@ export function ReplyDialog(p: {
             {p.error}
           </p>
         )}
+        {p.unreceived && !off && <p className="rd-off">{T.unreceived}</p>}
         {off && <p className="rd-off">{p.channel === "not-connected" || p.channel === "reconnecting" ? off : T.replyOff}</p>}
         <button type="button" className="pbtn pbtn--primary rf-right" aria-disabled={!ready || undefined} aria-busy={p.sending || undefined} onClick={send}>
           {p.sending ? T.sending : T.send}

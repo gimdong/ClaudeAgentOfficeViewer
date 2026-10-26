@@ -113,6 +113,7 @@ export function LeadCommands({ session, member, announce, lead }: { session: Ses
         paused && <p className="ap-cmd-why">{CH_TEXT.instructPaused}</p>
       )}
       {msg && (msg.ok ? <p className="ap-cmd-ok">{msg.text}</p> : <p className="ap-cmd-why ap-cmd-err" role="alert">{msg.text}</p>)}
+      {session.channel?.unreceived && <p className="ap-cmd-why">{CH_TEXT.unreceived}</p>}
       {isLead && session.folder?.overdue && <p className="ap-cmd-late">{C.overdue}</p>}
     </section>
   );
@@ -165,6 +166,7 @@ export function LeadDrawers({ lead, snapshot, announce }: { lead: ReturnType<typ
     const refetch = () => void chApi.reports(session.id).then((r) => r.ok && setFolder(r.body));
     return (
       <ReportFolder
+        unreceived={!!session.channel?.unreceived}
         floorName={session.name}
         folder={folder}
         channel={channel}
@@ -191,6 +193,7 @@ export function LeadDrawers({ lead, snapshot, announce }: { lead: ReturnType<typ
   const member = !question.ownerIsLead && question.owner !== "team-lead" ? question.owner : undefined;
   return (
     <ReplyDialog
+      unreceived={!!session.channel?.unreceived}
       question={question}
       channel={channel}
       sending={sending}

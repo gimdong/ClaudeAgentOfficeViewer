@@ -177,7 +177,8 @@ export interface SessionView {
   reopen?: "ok" | "busy" | "launched" | "merged" | "paused" | "ancestor";
   /** 대시보드가 channel을 붙여 띄운 층만(Phase 4b) */
   /** reconnecting: 대시보드를 다시 켠 뒤 복원한 층이 아직 다시 붙지 않음(2분 안, #658) */
-  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean };
+  /** unreceived: 보낸 지시를 세션이 받은 흔적(리드 hook)이 없음(B343, 확실하지 않음) */
+  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
   pausedDenied?: number;
   /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */

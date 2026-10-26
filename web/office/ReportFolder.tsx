@@ -44,6 +44,8 @@ export function ReportFolder(p: {
   onRevise(id: string, text: string): void;
   onRehire(id: string): void;
   onClose(): void;
+  /** 보낸 지시를 세션이 받은 흔적이 없음(B343) — 버튼은 켠 채 한 줄로 알린다 */
+  unreceived?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [revise, setRevise] = useState(false);
@@ -131,6 +133,7 @@ export function ReportFolder(p: {
           </p>
         )}
         {held && !off && <p className="rf-help rf-held">{held === "any" ? T.heldLineAny : T.heldLine[held]}</p>}
+        {p.unreceived && !off && <p className="rf-help">{T.unreceived}</p>}
         <button ref={reviseBtn} type="button" className="pbtn" aria-disabled={!!off || undefined} aria-describedby={off ? why : undefined} onClick={() => !off && setRevise(true)}>
           {T.reviseOpen}
         </button>

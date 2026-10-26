@@ -19,6 +19,8 @@ export const LEAD_TEXT = {
   // 서류철 안의 not-launched: 보고서가 있으면 전에 연결됐던 층 — 다시 켰거나 층이 끝난 것(B335 ④, B336 qa 글자)
   notLaunchedRestart: "연결이 끊겨 결재를 보낼 수 없습니다(대시보드를 다시 켰거나 층이 끝남). 층이 살아 있으면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요.",
   notConnected: CH_TEXT.notConnected,
+  // 보낸 지시를 세션이 받은 흔적이 없음(B343) — 층 머리 칩 title과 같은 글
+  unreceived: CH_TEXT.unreceived,
   // 재시작 뒤 복원한 층이 아직 다시 붙지 않음(#658, qa 확정). 옮겨 열기는 권하지 않는다
   reconnecting: "다시 연결하는 중입니다 — 잠시 뒤 저절로 쓸 수 있습니다. 10분이 지나도 안 되면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요.",
   failed: CH_TEXT.failed,

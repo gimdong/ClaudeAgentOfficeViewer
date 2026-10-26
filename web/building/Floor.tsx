@@ -137,9 +137,9 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
           {alarm && <span className="chip chip--budget">예산 도달</span>}
           {ch && (
-            <span className="chip chip--channel" data-testid="channel-chip">
+            <span className="chip chip--channel" data-testid="channel-chip" title={ch.unreceived ? CH_TEXT.unreceived : undefined}>
               {CH_TEXT.chipLaunched} · {ch.connected ? CH_TEXT.chipConnected : CH_TEXT.chipWaiting}
-              {ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
+              {ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.unreceived ? ` · ${CH_TEXT.chipUnreceived}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
             </span>
           )}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}

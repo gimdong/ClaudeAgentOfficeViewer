@@ -370,6 +370,7 @@ async function main(): Promise<void> {
   const duty = new DutyBoard({ reports });
   const channelsView = {
     view: channels.view.bind(channels),
+    receiptCheck: channels.receiptCheck.bind(channels),
     enabled: channels.enabled.bind(channels),
     available: channels.available.bind(channels),
     sweep: (alive: ReadonlySet<string>) => {

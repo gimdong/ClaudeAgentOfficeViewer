@@ -20,6 +20,8 @@ export interface ChannelView {
   tmux: string;
   held: number;
   last?: "sent" | "delivered";
+  /** 보낸 지시를 세션이 받은 흔적이 없음(B343, 확실하지 않은 판정) */
+  unreceived?: true;
   /** 재시작 때 등록 파일에서 복원했고 아직 다시 붙지 않음(증명 성공 전, 복원 뒤 UNSEEN_MS 안 — 그 뒤엔 정리, #658·B341) */
   reconnecting?: true;
 }
@@ -32,13 +34,23 @@ interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
 /** restoredAt: 복원 뒤 아직 증명 성공 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음 — 둘 다 UNSEEN_MS 뒤 정리(#658·B341) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** receipt·probe: 지시 수신 판정(B343, 메모리). probe는 판정 중인 첫 지시(보낸 시각, 유휴 기준 시각, 멈췄던 적) */
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; resumed?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
+/**
+ * 지시를 세션이 받았는지(B343): 보낸 뒤 리드가 유휴인 때부터 이 시간 안에 리드 본인의 hook 이벤트가 하나도 없으면 "받았는지 확인 안 됨".
+ * 유휴 세션에 channel이 닿으면 새 턴이 돌아 hook이 온다 — gateway 로그인·조직 설정으로 channel이 버려지면 오지 않는다
+ */
+export const RECEIPT_MS = 30_000;
+/** 이만큼 지나도 유휴가 오지 않으면(계속 바쁨·결정 대기) 판정을 버린다(표시 안 함) */
+export const RECEIPT_GIVEUP_MS = 10 * 60_000;
+/** 마지막 리드 이벤트가 이만큼 오래됐으면 Stop이 아니어도 유휴로 본다 */
+const IDLE_AFTER_MS = 60_000;
 /** 등록 파일(스펙 12장 n): 열쇠 폴더 안. 층마다 {sessionId, tmux, at}만 — 열쇠·핸드셰이크 상태·보관 지시는 쓰지 않는다 */
 const REGISTRY = "registry.json";
 const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -299,6 +311,8 @@ export class ChannelHub {
     }
     f.busyLogged = false;
     f.conn = res;
+    // 새 연결이면 수신 판정을 처음부터(로그인을 바꿔 다시 띄웠을 수 있다, B343)
+    f.receipt = f.probe = undefined;
     // 복원한 층이 증명에 성공해 붙었다 — "다시 연결하는 중"과 10분 정리 기준을 함께 끈다(#658, team-lead 판정: hello만으로는 끄지 않음)
     delete f.restored;
     delete f.restoredAt;
@@ -398,7 +412,35 @@ export class ChannelHub {
     if (!f) return undefined;
     // 복원 뒤 UNSEEN_MS 안: "다시 연결하는 중". 그 뒤엔 sweep이 정리해 등록에 없는 층(W3·옮겨 열기)이 된다(B341 — 사이에 "확인 창" 글이 보이지 않게)
     const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt <= UNSEEN_MS;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}) };
+    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}) };
+  }
+  /**
+   * 스냅샷 빌드마다(B343): 판정 중인 지시가 있는 층만. leadEvents는 그 층 리드의 hook 이벤트(서브에이전트는 여기서 뺀다),
+   * blocked는 리드 결정 대기·휴업. 유휴 기준 시각 뒤에 리드 이벤트가 오면 받음, RECEIPT_MS 동안 없으면 확인 안 됨, 나중에 오면 해제
+   */
+  receiptCheck(sessionId: string, c: { leadEvents: readonly { at: number; event: string; sub?: boolean }[]; blocked: boolean }): void {
+    const f = this.floors.get(sessionId);
+    const p = f?.probe;
+    if (!f || !p) return;
+    const now = (this.o.now ?? Date.now)();
+    const lead = c.leadEvents.filter((e) => !e.sub);
+    if (p.startAt !== undefined && lead.some((e) => e.at > p.startAt!)) {
+      f.receipt = "seen";
+      f.probe = undefined;
+      return this.changed();
+    }
+    if (c.blocked) {
+      p.startAt = undefined;
+      p.resumed = true;
+    } else if (p.startAt === undefined) {
+      const last = lead.at(-1);
+      if (!last || last.event === "Stop" || now - last.at > IDLE_AFTER_MS) p.startAt = p.resumed ? now : last?.event === "Stop" && last.at > p.sentAt ? last.at : p.sentAt;
+    }
+    if (p.startAt !== undefined && now - p.startAt > RECEIPT_MS) {
+      f.receipt = "missing";
+      return this.changed();
+    }
+    if (p.startAt === undefined && now - p.sentAt > RECEIPT_GIVEUP_MS) f.probe = undefined;
   }
   stats(): { launched: number; connected: number; held: number } {
     let connected = 0;
@@ -411,6 +453,8 @@ export class ChannelHub {
   }
 
   private push(f: Floor, iid: string, text: string): void {
+    // 수신 판정은 아직 모르는 층의 첫 지시 하나만(B343)
+    if (!f.receipt && !f.probe) f.probe = { sentAt: (this.o.now ?? Date.now)() };
     // 이벤트마다 연결 키로 MAC(B264): 핸드셰이크를 중계하는 쪽이 글을 바꾸면 channel 서버가 버린다.
     // 입력은 JSON 배열(B268) — "id|text"는 구분자를 옮겨 글 앞부분을 id로 넘기는 변조를 막지 못한다
     f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(f.sk!, JSON.stringify([iid, text])) })}\n\n`);

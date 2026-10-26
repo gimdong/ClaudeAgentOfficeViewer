@@ -88,6 +88,16 @@ describe("작업 지시(스펙 6장)", () => {
     expect(instructBtn().getAttribute("title")).toBe(LEAD_TEXT.reconnecting);
   });
 
+  it("B343: 보낸 지시를 세션이 받은 흔적이 없으면 칩의 전달 자리에 '받았는지 확인 안 됨'(title에 전체 글), 작업 지시 버튼은 그대로 켜짐", () => {
+    show([floorOf({ channel: { connected: true, tmux: "co-1", held: 0, last: "delivered", unreceived: true } })]);
+    render(<App />);
+    const chip = screen.getByTestId("channel-chip");
+    expect(chip.textContent).toBe(`대시보드가 띄움 · 연결됨 · ${CH_TEXT.chipUnreceived}`);
+    expect(chip.getAttribute("title")).toBe(CH_TEXT.unreceived);
+    expect(CH_TEXT.unreceived).toBe('보낸 지시를 세션이 받았는지 확인하지 못했습니다(30초 동안 일을 시작한 흔적이 없음). 로그인 방식(회사 중계 주소 등)이나 조직 설정에 따라 작업 지시가 동작하지 않을 수 있습니다. 설명서 6장 "작업 지시가 세션에 닿지 않는 것 같아요"를 봐 주세요.'); // qa #668
+    expect(instructBtn().getAttribute("aria-disabled")).not.toBe("true");
+  });
+
   it("연결된 층: 창에서 보내면 POST instruct, 작업 중이면 안내 한 줄, 칩은 전달됨", async () => {
     show([floorOf({ floorStatus: "working", members: [lead({ state: "working" })], channel: { connected: true, tmux: "co-1", held: 0, last: "delivered" } })]);
     render(<App />);
