@@ -407,8 +407,8 @@ export class SnapshotBuilder {
         return f ? { folder: f } : {};
       })(),
       ...(await this.subagentField(s, leadFile, now)),
-      // 지시 수신 판정(B343): 리드 본인 hook 이벤트, 리드 결정 대기·휴업이면 멈춤
-      ...this.channelField(s, { leadEvents: agents?.get("team-lead") ?? [], blocked: paused || !!members[0]?.decision }),
+      // 지시 수신 판정(B343·B344): 리드의 v2 hook 이벤트만, 휴업·리드 결정 대기(chat 제외)면 멈춤
+      ...this.channelField(s, { leadEvents: (agents?.get("team-lead") ?? []).filter((e) => e.v2), blocked: paused || (!!members[0]?.decision && members[0].decision.kind !== "chat") }),
       ...this.reopenField(s),
     };
   }

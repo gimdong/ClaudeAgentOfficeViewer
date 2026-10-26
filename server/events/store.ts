@@ -10,6 +10,8 @@ export interface StoredEvent {
   tool?: string;
   toolUseId?: string;
   summary: ToolSummary;
+  /** 암호화 입구(/hooks/v2)로 온 이벤트 — 지시 수신 판정은 이것만 센다(B344, 옛 /hooks/event는 다른 플러그인일 수 있음) */
+  v2?: true;
 }
 
 export const PER_AGENT = 20;
@@ -28,7 +30,7 @@ export class EventStore {
   constructor(private readonly perAgent = PER_AGENT) {}
 
   /** 검증된 hook 입력 하나를 요약해 저장한다. 저장하지 않았으면 false */
-  add(input: Record<string, unknown>, now: number): boolean {
+  add(input: Record<string, unknown>, now: number, v2 = false): boolean {
     const sessionId = input.session_id;
     const event = input.hook_event_name;
     if (typeof sessionId !== "string" || typeof event !== "string") return false;
@@ -45,6 +47,7 @@ export class EventStore {
       ...(tool ? { tool } : {}),
       ...(toolUseId ? { toolUseId } : {}),
       summary: summarize(tool, input.tool_input),
+      ...(v2 ? { v2: true as const } : {}),
     };
 
     let bucket = this.sessions.get(sessionId);

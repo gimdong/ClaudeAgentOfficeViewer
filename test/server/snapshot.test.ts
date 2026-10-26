@@ -616,11 +616,12 @@ describe("SnapshotBuilder + statusline 연결(스펙 12장 j)", () => {
 });
 
 describe("SnapshotBuilder + 지시 수신 판정(B343)", () => {
-  it("살아 있는 층마다 리드 hook 이벤트와 막힘(휴업·리드 결정 대기)을 넘기고, unreceived를 channel에 싣는다", async () => {
+  it("살아 있는 층마다 리드의 v2 hook 이벤트(옛 입구는 뺌)와 막힘(휴업·chat이 아닌 리드 결정 대기)을 넘기고, unreceived를 channel에 싣는다", async () => {
     await seed();
     const events = new EventStore();
-    events.add({ hook_event_name: "Stop", session_id: "s1" }, NOW - 1000);
-    events.add({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Read", agent_id: "a0123456789abcdef", agent_type: "Explore" }, NOW - 500);
+    events.add({ hook_event_name: "Stop", session_id: "s1" }, NOW - 1000, true);
+    events.add({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Read", agent_id: "a0123456789abcdef", agent_type: "Explore" }, NOW - 500, true);
+    events.add({ hook_event_name: "PostToolUse", session_id: "s1", tool_name: "Read" }, NOW - 400); // 옛 입구(/hooks/event) — 판정에 쓰지 않는다(B344)
     const calls: Array<[string, { leadEvents: readonly { event: string; sub?: boolean }[]; blocked: boolean }]> = [];
     const channels = {
       view: (id: string) => (id === "s1" ? { connected: true, tmux: "co-1", held: 0, unreceived: true as const } : undefined),
@@ -635,8 +636,14 @@ describe("SnapshotBuilder + 지시 수신 판정(B343)", () => {
     expect(c.blocked).toBe(false);
     expect(c.leadEvents.map((e) => [e.event, e.sub])).toEqual([["Stop", false], ["PreToolUse", true]]);
     expect(snap.sessions.find((s) => s.id === "s1")!.channel).toMatchObject({ unreceived: true });
+    // ask_user(chat) 질문이 열려 있어도 막힘이 아니다(B344) — 대시보드 답이나 터미널 글로 지운다
+    const chat = { id: "q-11111111", source: "ask" as const, owner: "team-lead", ownerIsLead: true, text: "어느 쪽?", options: [], state: "open" as const, since: new Date(NOW - 200).toISOString() };
+    calls.length = 0;
+    const withChat = await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events, channels, questions: { list: (conv: string) => (conv === "s1" ? [chat] : []) } }).build(NOW);
+    expect(withChat.sessions.find((s) => s.id === "s1")!.members[0].decision?.kind).toBe("chat");
+    expect(calls.find(([x]) => x === "s1")![1].blocked).toBe(false);
     // 리드가 결정(권한 요청)을 기다리면 막힘
-    events.add({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" } }, NOW - 100);
+    events.add({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" } }, NOW - 100, true);
     calls.length = 0;
     await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events, channels }).build(NOW);
     expect(calls.find(([x]) => x === "s1")![1].blocked).toBe(true);

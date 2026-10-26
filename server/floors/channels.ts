@@ -34,8 +34,8 @@ interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
 /** restoredAt: 복원 뒤 아직 증명 성공 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음 — 둘 다 UNSEEN_MS 뒤 정리(#658·B341) */
-/** receipt·probe: 지시 수신 판정(B343, 메모리). probe는 판정 중인 첫 지시(보낸 시각, 유휴 기준 시각, 멈췄던 적) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; resumed?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** receipt·probe: 지시 수신 판정(B343·B344, 메모리). probe는 판정 중인 지시(보낸 시각, 시계 시작 시각, 보낸 순간 유휴를 봤는지) */
+interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -43,13 +43,13 @@ const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(
 /** 띄운 뒤 이 시간 안에 세션 목록에 나타나지 않으면(확인 창을 누르지 않음, tmux를 지움) 정리한다 */
 export const UNSEEN_MS = 10 * 60_000;
 /**
- * 지시를 세션이 받았는지(B343): 보낸 뒤 리드가 유휴인 때부터 이 시간 안에 리드 본인의 hook 이벤트가 하나도 없으면 "받았는지 확인 안 됨".
+ * 지시를 세션이 받았는지(B343·B344): 보낸 순간 리드가 유휴였으면 그때부터 이 시간 안에 리드 본인의 v2 hook 이벤트가 하나도 없으면 "받았는지 확인 안 됨".
  * 유휴 세션에 channel이 닿으면 새 턴이 돌아 hook이 온다 — gateway 로그인·조직 설정으로 channel이 버려지면 오지 않는다
  */
 export const RECEIPT_MS = 30_000;
-/** 이만큼 지나도 유휴가 오지 않으면(계속 바쁨·결정 대기) 판정을 버린다(표시 안 함) */
+/** 결정 대기·휴업이 이만큼 이어지면 판정을 버린다(표시 안 함) */
 export const RECEIPT_GIVEUP_MS = 10 * 60_000;
-/** 마지막 리드 이벤트가 이만큼 오래됐으면 Stop이 아니어도 유휴로 본다 */
+/** 보낸 순간 마지막 리드 이벤트가 이만큼 오래됐으면(도는 도구가 아니면) Stop이 아니어도 유휴로 본다 */
 const IDLE_AFTER_MS = 60_000;
 /** 등록 파일(스펙 12장 n): 열쇠 폴더 안. 층마다 {sessionId, tmux, at}만 — 열쇠·핸드셰이크 상태·보관 지시는 쓰지 않는다 */
 const REGISTRY = "registry.json";
@@ -416,7 +416,7 @@ export class ChannelHub {
   }
   /**
    * 스냅샷 빌드마다(B343): 판정 중인 지시가 있는 층만. leadEvents는 그 층 리드의 hook 이벤트(서브에이전트는 여기서 뺀다),
-   * blocked는 리드 결정 대기·휴업. 유휴 기준 시각 뒤에 리드 이벤트가 오면 받음, RECEIPT_MS 동안 없으면 확인 안 됨, 나중에 오면 해제
+   * blocked는 리드 결정 대기(chat 제외)·휴업. 보낸 순간 바빴으면 재지 않고 버린다. 보낸 뒤 리드 이벤트가 오면 받음, RECEIPT_MS 동안 없으면 확인 안 됨, 나중에 오면 해제
    */
   receiptCheck(sessionId: string, c: { leadEvents: readonly { at: number; event: string; sub?: boolean }[]; blocked: boolean }): void {
     const f = this.floors.get(sessionId);
@@ -424,24 +424,36 @@ export class ChannelHub {
     if (!f || !p) return;
     const now = (this.o.now ?? Date.now)();
     const lead = c.leadEvents.filter((e) => !e.sub);
+    if (p.startAt === undefined && !p.checked) {
+      // 보낸 순간 유휴일 때만 판정한다(B344): 그 전 마지막 리드 이벤트가 Stop이거나, 도는 도구(짝 없는 PreToolUse)가 아니면서 IDLE_AFTER_MS 넘게 조용.
+      // 바쁘면 이 지시는 재지 않고 다음 지시로 넘긴다 — 하던 턴의 이벤트로 거짓 "받음"·긴 도구로 거짓 "확인 안 됨"이 되지 않게
+      p.checked = true;
+      const last = lead.filter((e) => e.at <= p.sentAt).at(-1);
+      if (last && last.event !== "Stop" && (last.event === "PreToolUse" || p.sentAt - last.at <= IDLE_AFTER_MS)) {
+        f.probe = undefined;
+        return;
+      }
+      p.startAt = p.sentAt;
+    }
     if (p.startAt !== undefined && lead.some((e) => e.at > p.startAt!)) {
       f.receipt = "seen";
       f.probe = undefined;
       return this.changed();
     }
-    if (c.blocked) {
-      p.startAt = undefined;
-      p.resumed = true;
-    } else if (p.startAt === undefined) {
-      const last = lead.at(-1);
-      if (!last || last.event === "Stop" || now - last.at > IDLE_AFTER_MS) p.startAt = p.resumed ? now : last?.event === "Stop" && last.at > p.sentAt ? last.at : p.sentAt;
-    }
+    // 결정 대기·휴업이면 시계를 멈추고, 풀리면 그때부터 다시 센다
+    if (c.blocked) p.startAt = undefined;
+    else if (p.startAt === undefined) p.startAt = now;
     if (p.startAt !== undefined && now - p.startAt > RECEIPT_MS) {
-      f.receipt = "missing";
-      return this.changed();
+      // 처음 missing이 될 때만 알린다(빌드마다 changed를 부르면 스냅샷이 끝없이 다시 돈다, I-1)
+      if (f.receipt !== "missing") {
+        f.receipt = "missing";
+        this.changed();
+      }
+      return;
     }
     if (p.startAt === undefined && now - p.sentAt > RECEIPT_GIVEUP_MS) f.probe = undefined;
   }
+
   stats(): { launched: number; connected: number; held: number } {
     let connected = 0;
     let held = 0;

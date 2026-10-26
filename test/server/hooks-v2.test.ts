@@ -41,6 +41,7 @@ let server: Server;
 let port: number;
 let stats: HookStats;
 let versions: Array<[string, boolean, string]>;
+let froms: Array<{ v2: boolean }>;
 let pauseAnswer: object | null;
 let held: { closed?: boolean; answer?: (o: object) => void };
 let socketClosed: Array<() => void>;
@@ -48,6 +49,7 @@ beforeEach(async () => {
   setLogger(new Logger({ dir: "" }));
   stats = new HookStats();
   versions = [];
+  froms = [];
   pauseAnswer = null;
   held = {};
   socketClosed = [];
@@ -57,6 +59,7 @@ beforeEach(async () => {
     {
       stats,
       onPluginVersion: (v, legacy, sid) => void versions.push([v, legacy, sid]),
+      onHookEvent: (_i, from) => void froms.push(from),
       hookV2: { keys: () => deriveKeys(KEY), seen: new ReplayWindow() },
       floors: { preToolUse: () => pauseAnswer, pause() {}, resume() {}, isPaused: () => false, terminate: async () => ({ ok: true }) as never, hide() {}, unhideAll() {}, hiddenCount: () => 0, record: () => undefined },
       decisions: {
@@ -104,6 +107,12 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(stats.view().v2).toBe(2);
     expect(stats.view().byEvent.PreToolUse).toBe(2);
     expect(versions).toEqual([["2.0.0-beta.14", false, "s1"], ["2.0.0-beta.14", false, "s1"]]);
+  });
+
+  it("B344: 저장소로 넘기는 이벤트에 입구를 싣는다 — /hooks/v2는 v2 true, 옛 /hooks/event는 false(지시 수신 판정은 v2만)", async () => {
+    await send(plain(pre));
+    expect((await post(JSON.stringify(pre), {}, "/hooks/event")).status).toBe(200);
+    expect(froms).toEqual([{ v2: true }, { v2: false }]);
   });
 
   it("응답은 요청 키로는 풀리지 않는다(키 방향 분리), 평문 표지가 응답 본문에 없다", async () => {

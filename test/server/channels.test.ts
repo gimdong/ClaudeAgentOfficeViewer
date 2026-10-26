@@ -546,13 +546,15 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(again.has("s1")).toBe(false);
   });
 
-  describe("B343 지시를 세션이 받았는지(리드 hook 이벤트로 판정)", () => {
+  describe("B343·B344 지시를 세션이 받았는지(리드 v2 hook 이벤트로 판정, 보낸 순간 유휴일 때만)", () => {
     let t: number;
     let hub2: ChannelHub;
+    let changes = 0;
     const ev = (event: string, at = t, sub = false) => ({ at, event, sub });
     const setup = () => {
       t = 1_800_000_000_000;
-      hub2 = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, now: () => t });
+      changes = 0;
+      hub2 = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, now: () => t, onChange: () => void changes++ });
       const key = hub2.register("s1", "co-0a1b2c3d")!;
       const kid = createHmac("sha256", key).update("kid").digest("hex");
       const attach = () => {
@@ -566,72 +568,72 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
       return attach;
     };
     const un = () => hub2.view("s1")?.unreceived;
+    const check = (events: ReturnType<typeof ev>[], blocked = false) => hub2.receiptCheck("s1", { leadEvents: events, blocked });
 
-    it(`유휴일 때 보내고 ${RECEIPT_MS / 1000}초 동안 리드 이벤트가 없으면 unreceived, 그 전에는 아니다`, () => {
+    it(`유휴(마지막 리드 이벤트가 Stop)일 때 보내고 ${RECEIPT_MS / 1000}초 동안 리드 이벤트가 없으면 unreceived, 그 전에는 아니다. changed는 처음 missing일 때 한 번(I-1)`, () => {
       setup()();
-      const events = [ev("Stop", t - 60_000)];
+      const events = [ev("Stop", t - 5_000)];
       hub2.instruct("s1", "일", false);
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       t += RECEIPT_MS;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBeUndefined();
       t += 1;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      const before = changes;
+      check(events);
       expect(un()).toBe(true);
+      for (let i = 0; i < 5; i++) check(events);
+      expect(changes - before).toBe(1);
     });
 
-    it("바쁠 때 보내면 다음 리드 Stop부터 센다 — 그 사이 이벤트는 흔적이 아니다. 서브에이전트 이벤트는 세지 않는다", () => {
+    it(`바쁠 때 보낸 지시는 판정하지 않고(missing 안 됨), 다음에 유휴일 때 보낸 지시를 판정한다. 서브에이전트 이벤트는 유휴·흔적 어느 쪽에도 세지 않는다`, () => {
       setup()();
-      const events = [ev("PreToolUse")];
-      hub2.instruct("s1", "일", false);
-      t += 5_000;
-      events.push(ev("PostToolUse"), ev("PreToolUse", t, true));
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      t += 5_000;
+      const events = [ev("PreToolUse", t - 1_000), ev("PostToolUse", t - 500), ev("Stop", t - 100, true)];
+      hub2.instruct("s1", "바쁠 때", false); // 마지막 리드 이벤트 PostToolUse 0.5초 전 → 바쁨
+      check(events);
+      t += 10 * RECEIPT_MS;
+      check(events);
+      expect(un()).toBeUndefined();
       events.push(ev("Stop"));
-      const stopAt = t;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      t = stopAt + 10_000;
-      events.push(ev("PreToolUse", t, true)); // 서브에이전트
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      t = stopAt + RECEIPT_MS + 1;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      t += 5_000;
+      hub2.instruct("s1", "유휴일 때", false);
+      check(events);
+      t += RECEIPT_MS + 1;
+      events.push(ev("PreToolUse", t - 10, true)); // 서브에이전트
+      check(events);
       expect(un()).toBe(true);
     });
 
-    it("바쁜 턴의 남은 PreToolUse·PostToolUse는 받음이 아니고, 보낸 뒤 첫 Stop 다음 새 턴의 이벤트가 오면 받음", () => {
+    it("I-3: 마지막 리드 이벤트가 짝 없는 PreToolUse면 90초가 지나도 바쁨 — 판정하지 않는다. 이벤트가 오래 없으면(PostToolUse 뒤 60초 넘음) 유휴", () => {
       setup()();
-      const events = [ev("PreToolUse")];
-      hub2.instruct("s1", "일", false);
-      t += 3_000;
-      events.push(ev("PreToolUse"), ev("PostToolUse")); // 하던 턴의 남은 이벤트
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      t += 3_000;
-      events.push(ev("Stop")); // 시계 시작점
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      const events = [ev("PreToolUse", t - 90_000)];
+      hub2.instruct("s1", "긴 도구 중", false);
+      check(events);
+      t += 5 * RECEIPT_MS;
+      check(events);
       expect(un()).toBeUndefined();
-      t += 5_000;
-      events.push(ev("PreToolUse")); // 새 턴(지시 처리)
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      t += RECEIPT_MS * 2;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
-      expect(un()).toBeUndefined();
+      events.push(ev("PostToolUse", t - 61_000));
+      hub2.instruct("s1", "조용함", false);
+      check(events);
+      t += RECEIPT_MS + 1;
+      check(events);
+      expect(un()).toBe(true);
     });
 
     it("결정 대기·휴업(blocked) 중에는 멈추고, 풀리면 그때부터 다시 센다", () => {
       setup()();
       const events = [ev("Stop", t - 60_000)];
       hub2.instruct("s1", "일", false);
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: true });
+      check(events, true);
       t += 5 * 60_000;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: true });
+      check(events, true);
       expect(un()).toBeUndefined();
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       t += RECEIPT_MS;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBeUndefined();
       t += 1;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBe(true);
     });
 
@@ -639,47 +641,43 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
       setup()();
       const events = [ev("Stop", t - 60_000)];
       hub2.instruct("s1", "하나", false);
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       t += RECEIPT_MS + 1;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBe(true);
-      hub2.instruct("s1", "둘", false); // 다시 시작하지 않는다(표시 유지)
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      hub2.instruct("s1", "둘", false);
+      check(events);
       expect(un()).toBe(true);
       t += 60_000;
-      events.push(ev("PreToolUse")); // 늦게 처리됨
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      events.push(ev("PreToolUse"));
+      check(events);
       expect(un()).toBeUndefined();
       hub2.instruct("s1", "셋", false);
       t += 10 * RECEIPT_MS;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBeUndefined();
     });
 
-    it(`새 연결이면 unknown으로 돌아가고, ${RECEIPT_GIVEUP_MS / 60_000}분 동안 유휴가 오지 않으면 판정을 버린다(표시 안 함)`, () => {
+    it(`새 연결이면 unknown으로 돌아가고, ${RECEIPT_GIVEUP_MS / 60_000}분 동안 막혀 있으면 판정을 버린다(표시 안 함)`, () => {
       const attach = setup();
       const close = attach();
       const events = [ev("Stop", t - 60_000)];
       hub2.instruct("s1", "일", false);
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       t += RECEIPT_MS + 1;
-      hub2.receiptCheck("s1", { leadEvents: events, blocked: false });
+      check(events);
       expect(un()).toBe(true);
       close();
       attach();
       expect(un()).toBeUndefined();
-      // 바쁜 채로 10분 — 판정하지 않고 버림
-      const busy = [ev("PreToolUse")];
       hub2.instruct("s1", "둘", false);
       for (let i = 0; i < 11; i++) {
         t += 60_000;
-        busy.push(ev("PreToolUse"));
-        hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+        check(events, true);
       }
-      busy.push(ev("Stop"));
-      hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+      check(events);
       t += RECEIPT_MS + 1;
-      hub2.receiptCheck("s1", { leadEvents: busy, blocked: false });
+      check(events);
       expect(un()).toBeUndefined();
     });
   });

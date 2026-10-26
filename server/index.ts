@@ -395,14 +395,14 @@ async function main(): Promise<void> {
     pluginVersion = v;
     hub.poke();
   };
-  const onHookEvent = (input: Record<string, unknown>) => {
+  const onHookEvent = (input: Record<string, unknown>, from?: { v2: boolean }) => {
     try {
       subagents.onEvent(input);
     } catch (e) {
       warnCaught("subagents", "tracker failed", e); // 기록기가 실패해도 아래 저장·관문은 계속(B177 M2)
     }
     if (input.hook_event_name === "SessionEnd" && typeof input.session_id === "string") legacySessions.end(input.session_id);
-    if (events.add(input, Date.now())) hub.poke();
+    if (events.add(input, Date.now(), from?.v2)) hub.poke();
     gate.onEvent(input);
   };
   const budget = {

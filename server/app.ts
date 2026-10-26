@@ -112,7 +112,7 @@ export function createApp(
   opts: {
     staticDir?: string;
     heartbeatMs?: number;
-    onHookEvent?: (input: Record<string, unknown>) => void;
+    onHookEvent?: (input: Record<string, unknown>, from: { v2: boolean }) => void;
     /**
      * hook이 보낸 플러그인 버전(Phase 5 §3). 옛 /hooks/event는 X-Claude-Office-Plugin 헤더(없으면 "unknown")에 legacy=true,
      * /hooks/v2는 요청 평문의 plugin에 legacy=false(Phase 6a §4). sessionId는 대화 키로 바꾼 값
@@ -252,7 +252,7 @@ export function createApp(
       }
     }
     try {
-      opts.onHookEvent?.(input);
+      opts.onHookEvent?.(input, { v2: !legacy });
     } catch (e) {
       // hook 쪽을 절대 막지 않는다. 로그만 남기고 200을 돌려준다. 요청 본문(비밀값 가능)은 로그에 넣지 않는다
       getLogger().error("hooks", "event handling failed", { error: errInfo(e) });
