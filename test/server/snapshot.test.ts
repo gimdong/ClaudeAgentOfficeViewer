@@ -641,4 +641,22 @@ describe("SnapshotBuilder + 지시 수신 판정(B343)", () => {
     await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events, channels }).build(NOW);
     expect(calls.find(([x]) => x === "s1")![1].blocked).toBe(true);
   });
+
+  it("층이 휴업이면 blocked(시계 멈춤)", async () => {
+    await seed();
+    const events = new EventStore();
+    events.add({ hook_event_name: "Stop", session_id: "s1" }, NOW - 1000);
+    const calls: Array<[string, { blocked: boolean }]> = [];
+    const channels = {
+      view: () => ({ connected: true, tmux: "co-1", held: 0 }),
+      receiptCheck: (id: string, c: { blocked: boolean }) => void calls.push([id, c]),
+      enabled: () => true,
+      available: () => ({ ok: true }),
+      sweep: () => {},
+    };
+    const floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 4242 });
+    floors.pause("s1");
+    await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, events, channels, floors }).build(NOW);
+    expect(calls.find(([x]) => x === "s1")![1].blocked).toBe(true);
+  });
 });
