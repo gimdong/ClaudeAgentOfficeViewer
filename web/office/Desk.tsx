@@ -68,9 +68,9 @@ function useShift(away: boolean): Shift {
   const [shift, setShift] = useState<Shift>(null);
   const was = useRef(away);
   useLayoutEffect(() => {
+    if (reduced) return setShift(null); // 300ms 사이에 움직임 줄이기가 켜져도 일어서는 그림이 남지 않게(reviewer m1)
     if (was.current === away) return;
     was.current = away;
-    if (reduced) return setShift(null);
     setShift(away ? "stand" : "sit");
     const t = setTimeout(() => setShift(null), ACTIONS.sit_down.ms);
     return () => clearTimeout(t);

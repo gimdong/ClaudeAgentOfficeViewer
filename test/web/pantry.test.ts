@@ -17,7 +17,7 @@ describe("planPantry", () => {
   it("쉼 29초 → desk, 30초 → walking-out(since = 지금)", () => {
     expect(spots(planPantry({}, [idle("a")], T0 + 29_000, false))).toEqual({ a: "desk" });
     const s = planPantry({}, [idle("a")], T0 + 30_000, false);
-    expect(s.a).toEqual({ spot: "walking-out", since: T0 + 30_000 });
+    expect(s.a).toEqual({ spot: "walking-out", since: T0 + 30_000, seat: "coffee" }); // 자리는 출발할 때 정한다
   });
 
   it("셋이 동시에 30초 → 둘만 walking-out(오래 쉰 사람 먼저), 셋째는 탕비실 자리(2)가 날 때까지 책상", () => {
@@ -33,15 +33,27 @@ describe("planPantry", () => {
     expect(spots(planPantry(s3, m4, T0 + 40_000, false))).toEqual({ a: "walking-back", b: "walking-out", c: "pantry" });
   });
 
-  it("탕비실 자리는 도착 순: 먼저 온 사람 커피, 다음 소파. 떠나면 그 자리가 빈다", () => {
+  it("탕비실 자리는 출발할 때 빈 자리 앞에서부터: 먼저 나선 사람 커피, 다음 소파. 돌아가는 사람의 자리는 비어 다음 사람이 쓴다", () => {
     const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000 }, idle("b", T0 - 30_000)];
     const s1 = planPantry({}, m, T0, false);
     const s2 = planPantry(s1, m, T0 + WALK_MS, false);
-    expect([s2.a.seat, s2.b.seat]).toEqual(["coffee", "sofa"]); // 한 번의 계획에서 둘이 도착해도 도착 시각 순(a 1,000ms, b 3,120ms)
+    expect([s2.a.seat, s2.b.seat]).toEqual(["coffee", "sofa"]); // 같은 때 나서면 오래 쉰 사람 → 이름 순
     const left = planPantry(s2, [{ name: "a", state: "working" as const, walkMs: 1_000 }, idle("b", T0 - 30_000), idle("c", T0 - 30_000)], T0 + 5_000, false);
-    expect(left.a.seat).toBeUndefined();
+    expect(left.a).toEqual({ spot: "walking-back", since: T0 + 5_000, seat: "coffee" }); // 앉았던 자리에서 돌아간다
     const s3 = planPantry(left, [{ name: "a", state: "working" as const, walkMs: 1_000 }, idle("b", T0 - 30_000), idle("c", T0 - 30_000)], T0 + 5_000 + WALK_MS, false);
     expect([s3.b.seat, s3.c.seat]).toEqual(["sofa", "coffee"]);
+  });
+
+  it("소파로 가는 사람은 sofaWalkMs(소파까지 실제 거리)로 도착하고, 돌아설 때도 그 기준", () => {
+    const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000, sofaWalkMs: 9_000 }, { ...idle("b", T0 - 30_000), walkMs: 1_000, sofaWalkMs: 2_000 }];
+    const s1 = planPantry({}, m, T0, false);
+    expect([s1.a.seat, s1.b.seat]).toEqual(["coffee", "sofa"]);
+    expect(spots(planPantry(s1, m, T0 + 1_999, false))).toEqual({ a: "pantry", b: "walking-out" });
+    expect(planPantry(s1, m, T0 + 2_000, false).b).toEqual({ spot: "pantry", since: T0 + 2_000, seat: "sofa" });
+    const w = [m[0], { ...m[1], state: "working" as const }];
+    const back = planPantry(s1, w, T0 + 500, false);
+    expect(spots(planPantry(back, w, T0 + 999, false)).b).toBe("walking-back");
+    expect(spots(planPantry(back, w, T0 + 1_000, false)).b).toBe("desk"); // 500ms 걸었으면 500ms 되돌아옴
   });
 
   it("reduced도 탕비실 자리는 2: 셋째는 책상", () => {

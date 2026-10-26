@@ -6,12 +6,16 @@ export const IDLE_WALK_MS = 30_000;
 export const MAX_WALKERS = 2;
 /** 책상 ↔ 탕비실 기본 걷는 시간(MOTION §3 스토리보드 78칸, 25칸/초). 화면이 실제 거리로 멤버마다 walkMs를 줄 수 있다(§3.1a) */
 export const WALK_MS = 3_120;
-/** 탕비실 자리(계약 SPEC §2 pantry): 커피 x14·소파 x57 둘뿐. 도착 순으로 앞에서부터 앉는다(team-lead) */
+/** 탕비실 자리(계약 SPEC §2 pantry): 커피 x14·소파 x57 둘뿐. 출발할 때 빈 자리를 앞에서부터 정해 그 자리로 걷는다(돌아올 때도 그 자리에서) */
 export const PANTRY_SEATS = ["coffee", "sofa"] as const;
+export type PantrySeat = (typeof PANTRY_SEATS)[number];
 
 export type PantrySpot = "desk" | "walking-out" | "pantry" | "walking-back";
-export type PantryState = Record<string, { spot: PantrySpot; since: number; seat?: (typeof PANTRY_SEATS)[number] }>;
-export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number }
+export type PantryState = Record<string, { spot: PantrySpot; since: number; seat?: PantrySeat }>;
+/** walkMs = 커피 자리까지, sofaWalkMs = 소파 자리까지 걷는 시간(실제 거리, §3.1a). 없으면 WALK_MS */
+export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number; sofaWalkMs?: number }
+
+const walkOf = (m: PantryMember, seat?: PantrySeat) => (seat === "sofa" ? m.sofaWalkMs : undefined) ?? m.walkMs ?? WALK_MS;
 
 /**
  * 한 층의 탕비실 걷기 계획(순수). 걷기는 WALK_MS 뒤 도착하고, 가다가 돌아서면 걸은 만큼만 되돌아온다.
@@ -25,7 +29,7 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
     const cur = prev[m.name] ?? { spot: "desk", since: now };
     const off = m.state === "offline" || m.duty === "off";
     const back = m.state === "working" || off;
-    const walk = m.walkMs ?? WALK_MS;
+    const walk = walkOf(m, cur.seat);
     let { spot, since } = cur;
     if (spot === "walking-out" && now - since >= walk) [spot, since] = ["pantry", since + walk];
     if (spot === "walking-back" && now - since >= walk) [spot, since] = ["desk", since + walk];
@@ -36,19 +40,22 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
       else if (spot === "walking-back") spot = "desk";
     } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - walk];
     else if (spot === "pantry" && back) [spot, since] = ["walking-back", now];
-    next[m.name] = spot === "pantry" && cur.seat ? { spot, since, seat: cur.seat } : { spot, since };
+    next[m.name] = spot !== "desk" && cur.seat ? { spot, since, seat: cur.seat } : { spot, since };
     if (spot === "desk" && !off && m.state === "idle" && m.idleSince !== undefined && now - m.idleSince >= IDLE_WALK_MS) out.push(m);
   }
   // 30초가 된 사람: 오래 쉰 사람 → 이름 순. 걸어 나가는 사람 + 탕비실에 있는 사람이 자리 수(2)면 나머지는 책상에서 기다린다
   out.sort((a, b) => a.idleSince! - b.idleSince! || a.name.localeCompare(b.name));
-  let taken = Object.values(next).filter((v) => v.spot === "walking-out" || v.spot === "pantry").length;
+  const holding = () => Object.values(next).filter((v) => v.spot === "walking-out" || v.spot === "pantry");
+  let taken = holding().length;
+  const used = new Set(holding().map((v) => v.seat));
   for (const m of out) {
     if (taken >= Math.min(MAX_WALKERS, PANTRY_SEATS.length)) break;
-    next[m.name] = { spot: reduced ? "pantry" : "walking-out", since: now };
+    const seat = PANTRY_SEATS.find((s) => !used.has(s))!;
+    used.add(seat);
+    next[m.name] = { spot: reduced ? "pantry" : "walking-out", since: now, seat };
     taken++;
   }
-  // 막 도착한 사람에게 빈 자리를 도착 순(같으면 이름 순)으로
-  const used = new Set(Object.values(next).map((v) => v.seat));
+  // 자리 없이 탕비실에 있는 사람(자리를 모르던 이전 상태)에게 빈 자리를 도착 순(같으면 이름 순)으로
   const arrived = Object.entries(next).filter(([, v]) => v.spot === "pantry" && !v.seat);
   arrived.sort(([a, x], [b, y]) => x.since - y.since || a.localeCompare(b));
   for (const [, v] of arrived) used.add((v.seat = PANTRY_SEATS.find((s) => !used.has(s))));
@@ -61,7 +68,7 @@ export function nextChange(state: PantryState, members: PantryMember[], now: num
   let t = Infinity;
   for (const m of members) {
     const v = state[m.name];
-    if (v?.spot === "walking-out" || v?.spot === "walking-back") t = Math.min(t, v.since + (m.walkMs ?? WALK_MS));
+    if (v?.spot === "walking-out" || v?.spot === "walking-back") t = Math.min(t, v.since + walkOf(m, v.seat));
     const due = (m.idleSince ?? -Infinity) + IDLE_WALK_MS;
     if (state[m.name]?.spot === "desk" && m.state === "idle" && due > now) t = Math.min(t, due);
   }

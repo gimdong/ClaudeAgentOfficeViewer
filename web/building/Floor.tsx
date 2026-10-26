@@ -8,8 +8,8 @@ import { CMD_TEXT } from "../office/leadCmdText";
 import { LEAD_TEXT, shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
-import { PantryScene, Walker, walkMsOf } from "../office/Pantry";
-import { PANTRY_SEATS, WALK_MS, type PantryMember } from "../office/pantryPlan";
+import { PantryScene, SOFA_DX, Walker, walkMsOf } from "../office/Pantry";
+import { WALK_MS, type PantryMember } from "../office/pantryPlan";
 import { usePantry, useReducedMotion } from "../office/usePantry";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
@@ -113,23 +113,19 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     : session.members.map((m) => {
         const since = m.state === "idle" && m.lastActivityAt ? Date.parse(m.lastActivityAt) : NaN;
         const g = geo[m.name];
-        return { name: m.name, state: m.state, duty: m.duty, idleSince: Number.isFinite(since) ? since : undefined, walkMs: g && walkMsOf(Math.abs(g[1] - g[0])) };
+        return { name: m.name, state: m.state, duty: m.duty, idleSince: Number.isFinite(since) ? since : undefined, walkMs: g && walkMsOf(Math.abs(g[1] - g[0])), sofaWalkMs: g && walkMsOf(Math.abs(g[1] + SOFA_DX - g[0])) };
       });
   // 스냅샷마다 새 배열이면 계획 타이머를 다시 맞추므로, 내용이 같으면 같은 배열(reviewer m2)
   const planKey = JSON.stringify(plan);
   const planMembers = useMemo(() => plan, [planKey]);
   const pantry = usePantry(planMembers, useReducedMotion());
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
-  const walkMs = (name: string) => planMembers.find((p) => p.name === name)?.walkMs ?? WALK_MS;
-  // 걷는 사람의 탕비실 쪽 끝 = 앉을 자리(I1). 나가는 사람은 빈 자리를 닿는 순으로(계획기가 도착 때 주는 순서와 같다), 돌아오는 사람은 앉았던 자리
-  const lastSeat = useRef<Record<string, string>>({});
-  for (const [n, v] of Object.entries(pantry)) if (v.seat) lastSeat.current[n] = v.seat;
-  const freeSeats = PANTRY_SEATS.filter((s) => !Object.values(pantry).some((v) => v.seat === s));
-  const outOrder = Object.entries(pantry)
-    .filter(([, v]) => v.spot === "walking-out")
-    .sort(([a, x], [b, y]) => x.since + walkMs(a) - y.since - walkMs(b) || a.localeCompare(b))
-    .map(([n]) => n);
-  const seatX = (name: string) => ((pantry[name]?.spot === "walking-out" ? freeSeats[outOrder.indexOf(name)] : lastSeat.current[name]) === "sofa" ? 86 : 0);
+  // 걷는 사람의 탕비실 쪽 끝 = 계획기가 출발 때 정한 자리(I1). 걷는 시간도 그 자리까지 거리(속도 3칸/120ms 고정)
+  const seatX = (name: string) => (pantry[name]?.seat === "sofa" ? SOFA_DX : 0);
+  const walkMs = (name: string) => {
+    const p = planMembers.find((x) => x.name === name);
+    return (pantry[name]?.seat === "sofa" ? p?.sofaWalkMs : p?.walkMs) ?? WALK_MS;
+  };
 
   const id = floorDomId(session.id);
   const { theme, variant } = useContext(ThemeContext);
@@ -244,7 +240,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>
             ))}
-            <PantryScene coffee={session.members.find((m) => pantry[m.name]?.seat === "coffee")} sofa={session.members.find((m) => pantry[m.name]?.seat === "sofa")} />
+            <PantryScene coffee={session.members.find((m) => spotOf(m.name) === "pantry" && pantry[m.name].seat === "coffee")} sofa={session.members.find((m) => spotOf(m.name) === "pantry" && pantry[m.name].seat === "sofa")} />
           </div>
           <div className="walk-layer" aria-hidden="true">
             {session.members.map((m) => {

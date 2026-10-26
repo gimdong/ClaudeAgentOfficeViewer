@@ -38,15 +38,49 @@ const walkTo = () => [...document.querySelectorAll<HTMLElement>(".walk-layer .wa
 describe("Floor 탕비실 걷기", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("둘이 걸어 나가면 먼저 닿을 사람은 커피 자리(x+2), 다음은 소파 자리(x+88)로 걷는다(designer-motion I1)", () => {
+  it("둘이 걸어 나가면 먼저 나선 사람은 커피 자리(x+2), 다음은 소파 자리(x+88)로 걷고, 걷는 시간은 그 자리까지 거리(designer-motion I1)", () => {
     fakeLayout({ a: 0, b: 150 });
     render(<Floor session={floor([resting("a"), resting("b")])} />);
     act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
     act(() => vi.advanceTimersByTime(300));
     expect(walkTo()).toEqual(["502", "588"]);
     const tx = (n: string) => document.querySelector<HTMLElement>(`.walker[data-name="${n}"]`)!.style.transform;
-    expect(tx("b")).toContain("502px"); // b가 더 가까워 먼저 닿는다
-    expect(tx("a")).toContain("588px");
+    expect(tx("a")).toContain("502px"); // 같은 때 나서면 이름 순: a 커피
+    expect(tx("b")).toContain("588px");
+    // b: 책상 x 158 → 소파 588 = 430px ÷ 2 ÷ 25칸/초 = 8,600ms(커피 거리 344px로 재면 6,880ms)
+    act(() => vi.advanceTimersByTime(8_600 - 300 - 1));
+    expect(inPantry()).toEqual([]);
+    act(() => vi.advanceTimersByTime(1));
+    expect(inPantry()).toEqual(["idle"]);
+  });
+
+  it("가다가 돌아서면 지금 보이는 자리에서 걸은 시간만큼 되돌아온다(designer-motion I1 76px 튐)", () => {
+    fakeLayout({ dev: 0 });
+    const { rerender } = render(<Floor session={floor([resting()])} />);
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    act(() => vi.advanceTimersByTime(1_300));
+    const real = window.getComputedStyle;
+    vi.spyOn(window, "getComputedStyle").mockImplementation((el, p) => ((el as HTMLElement).classList?.contains("walker") ? ({ transform: "matrix(1, 0, 0, 1, 123, 0)" } as CSSStyleDeclaration) : real(el, p)));
+    rerender(<Floor session={floor([makeMember({ name: "dev", state: "working" })])} />);
+    const w = document.querySelector<HTMLElement>('.walker[data-name="dev"]')!;
+    expect(w.querySelector(".character")!.getAttribute("data-action")).toBe("walk_left");
+    // 보이던 x 123 → 책상 8: 115px, 6px마다 한 걸음 = 19걸음, 남은 시간 = 나가며 쓴 1,300ms
+    expect(w.style.transition).toMatch(/^transform 1300ms steps\(19, end\)/);
+    expect(w.style.transform).toBe("translate(8px, 42px)");
+  });
+
+  it("움직임 줄이기가 일어서는 300ms 사이에 켜지면 책상의 일어서는 그림을 바로 지운다(reviewer m1)", () => {
+    let reduce = false;
+    const listeners = new Set<(e: { matches: boolean }) => void>();
+    vi.stubGlobal("matchMedia", (q: string) => ({ media: q, get matches() { return q.includes("reduced-motion") ? reduce : false; }, addEventListener: (_t: string, f: (e: { matches: boolean }) => void) => void listeners.add(f), removeEventListener: (_t: string, f: (e: { matches: boolean }) => void) => void listeners.delete(f) }));
+    render(<Floor session={floor([resting()])} />);
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    expect(screen.getByTestId("desk-dev").querySelector(".desk-scene")!.getAttribute("data-shift")).toBe("stand");
+    reduce = true;
+    act(() => listeners.forEach((f) => f({ matches: true })));
+    expect(screen.getByTestId("desk-dev").querySelector(".desk-scene")!.getAttribute("data-shift")).toBeNull();
+    expect(screen.getByTestId("desk-dev").querySelector(".character")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("일어서기·앉기(I2): 출발하면 300ms 책상에서 sit_down 거꾸로, 돌아오면 300ms sit_down 뒤 type. 빈 책상에 z z 없음(M2)", () => {
