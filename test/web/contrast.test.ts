@@ -19,12 +19,14 @@ const ratio = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05);
 };
 
-/** selector로 시작하는 규칙 블록 안의 --이름: #hex 값 */
+/** selector 규칙 블록들(같은 선택자가 여럿이면 차례로 합침) 안의 --이름: #hex 값 */
 function block(selector: string): Record<string, string> {
-  const i = CSS.indexOf(`${selector} {`);
-  if (i < 0) return {};
-  const body = CSS.slice(i, CSS.indexOf("}", i));
-  return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2].toLowerCase()]));
+  const out: Record<string, string> = {};
+  for (let i = CSS.indexOf(`${selector} {`); i >= 0; i = CSS.indexOf(`${selector} {`, i + 1)) {
+    const body = CSS.slice(i, CSS.indexOf("}", i));
+    for (const m of body.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2].toLowerCase();
+  }
+  return out;
 }
 const dark = { ...block(":root"), ...block(':root[data-ui="dark"]') };
 const light = { ...dark, ...block(':root[data-ui="light"]') };
@@ -49,9 +51,13 @@ describe("공통 UI 두 벌(계약 §4.1)", () => {
         ["--muted", "--panel", 4.5],
         ["--pink", "--panel", 4.5],
         ["--cyan", "--panel", 4.5],
+        ["--violet", "--panel", 4.5],
+        ["--red", "--panel", 4.5],
         ["--yellow-ink", "--yellow", 4.5],
         ["--wall", "--green", name === "light" ? 5.36 : 4.5],
       ];
+      // 서류철 종이(.rf-paper): 글자는 --yellow-ink(P7a-2 — --wall은 light에서 흰색)
+      pairs.push(["--yellow-ink", "--paper", 4.5]);
       for (const [fg, bg, min] of pairs) {
         expect(v[fg], fg).toMatch(/^#[0-9a-f]{6}$/);
         expect(ratio(v[fg], v[bg]), `${fg}/${bg}`).toBeGreaterThanOrEqual(min - 0.005);
@@ -70,8 +76,9 @@ describe("두 겹 포커스 링·노랑 위 글자(계약 §4.1·§6)", () => {
   /** 선택자 → 선언 */
   const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].trim(), body: m[2] }));
 
-  it("포커스 링은 어디서나 outline: 2px solid var(--focus) + box-shadow: 0 0 0 6px var(--ink)", () => {
-    const focus = rules.filter((r) => r.sel.includes(":focus-visible") && /outline\s*:/.test(r.body));
+  it("포커스 링은 어디서나(입력칸 :focus 포함) outline: 2px solid var(--focus) + box-shadow: 0 0 0 6px var(--ink)", () => {
+    const focus = rules.filter((r) => r.sel.includes(":focus") && /outline\s*:/.test(r.body));
+    expect(focus.filter((r) => /:focus(?!-visible)/.test(r.sel)).length).toBeGreaterThanOrEqual(4); // 입력칸 네 곳
     expect(focus.length).toBeGreaterThan(0);
     for (const r of focus) {
       expect(r.body, r.sel).toMatch(/outline:\s*2px solid var\(--focus\)/);
@@ -82,6 +89,8 @@ describe("두 겹 포커스 링·노랑 위 글자(계약 §4.1·§6)", () => {
   it("노랑 바탕(.q-chip·결재 칩·결정 이름표·셔터 팻말 등)의 글자색은 var(--yellow-ink)", () => {
     const yellow = rules.filter((r) => /background:\s*var\(--yellow\)/.test(r.body) && /(^|[;\s])color:/.test(r.body));
     expect(yellow.map((r) => r.sel)).toEqual(expect.arrayContaining([".q-chip", ".desk-folder"]));
+    // 서류철 종이도 밝은 바탕이라 같은 글자색(P7a-2)
+    expect(rules.find((r) => r.sel === ".rf-paper")!.body).toMatch(/(^|[;\s])color:\s*var\(--yellow-ink\)/);
     for (const r of yellow) expect(r.body, r.sel).toMatch(/(^|[;\s])color:\s*var\(--yellow-ink\)/);
   });
 });

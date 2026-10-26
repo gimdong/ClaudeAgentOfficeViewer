@@ -383,7 +383,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .rp-answer.locked .rp-reason, .rp-answer.locked .rp-buttons { opacity: .4; }
 .rp-reason { display: block; position: relative; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
 .rp-reason input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; }
-.rp-reason input:focus { border-color: var(--cyan); outline: none; }
+.rp-reason input:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .rp-count { display: block; text-align: right; font-size: 10px; margin-top: 2px; }
 .rp-buttons { display: flex; gap: 8px; }
 .rp .rp-buttons .pbtn { height: 36px; padding: 0 16px; font-size: 13px; justify-content: center; }
@@ -400,7 +400,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .qf-desc { grid-column: 2; font-family: var(--font-text); font-size: 12px; color: var(--muted); }
 .qf-other { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
 .qf-other textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; resize: vertical; }
-.qf-other textarea:focus { border-color: var(--cyan); outline: none; }
+.qf-other textarea:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .qf-count { display: block; text-align: right; font-size: 10px; margin-top: 2px; }
 .qf-hint { margin: 0 0 6px; font-family: var(--font-text); font-size: 12px; color: var(--muted); }
 .rp .qf-send { height: 36px; padding: 0 16px; font-size: 13px; justify-content: center; }
@@ -424,7 +424,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .dlg-field label { display: block; margin-bottom: 4px; font-size: 12px; }
 .dlg-input { display: flex; align-items: center; gap: 8px; }
 .dlg-input input { flex: 1; min-width: 0; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 14px; }
-.dlg-input input:focus { border-color: var(--cyan); outline: none; }
+.dlg-input input:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .dlg-input input[aria-invalid="true"] { border-color: var(--red); }
 .dlg-input .unit { font-size: 12px; color: var(--muted); }
 .dlg-help { margin: 4px 0 0; font-family: var(--font-text); font-size: 12px; line-height: 1.6; color: var(--muted); }
@@ -631,7 +631,7 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .rf-stamp.wait { color: var(--yellow); }
 .rf-stamp.ok { color: var(--green); }
 .rf-stamp.rev { color: var(--pink); }
-.rf-paper { position: relative; margin: 12px 0 4px; padding: 14px 16px; background: var(--paper); color: var(--wall); box-shadow: 0 4px 0 var(--slab); font-family: var(--font-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.rf-paper { position: relative; margin: 12px 0 4px; padding: 14px 16px; background: var(--paper); color: var(--yellow-ink); box-shadow: 0 4px 0 var(--slab); font-family: var(--font-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .rf-paper.sealed { padding-top: 44px; } /* 도장 자리를 위에 비워 둠 — 첫 줄이 길면 도장이 글을 덮었다(렌더 확인) */
 .rf-seal { position: absolute; top: 10px; right: 12px; border: 2px solid; padding: 2px 8px; font-family: var(--font-pixel); font-size: 13px; transform: rotate(-8deg); background: var(--paper); }
 .rf-seal.ok { color: #1b9e6e; border-color: #1b9e6e; }
@@ -646,7 +646,7 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .rf-revise label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 .rf-revise textarea, .rd-free textarea { display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; line-height: 1.6; resize: vertical; }
 .rf-revise textarea { min-height: 6.4em; }
-.rf-revise textarea:focus, .rd-free textarea:focus { border-color: var(--cyan); outline: none; }
+.rf-revise textarea:focus, .rd-free textarea:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .rf-limit { margin: 8px 0 0; font-size: 10px; color: var(--muted); }
 
 /* §4 답 칸 */
