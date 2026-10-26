@@ -1093,6 +1093,21 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(lead).toContain("10분 안에 한 번도 붙지 못한 층은 정리되고");
     expect(lead).toContain("10분 전에는 옮겨 열기가 되지 않습니다");
   });
+  it("Phase 7a 오라·탕비실 절이 코드 상수와 같다", () => {
+    const m = sec('<h3 id="motion">', "<h3>위쪽 막대의 숫자</h3>");
+    const plan = readFileSync(join(__dirname, "../../web/office/pantryPlan.ts"), "utf8");
+    expect(plan).toContain("export const IDLE_WALK_MS = 30_000;");
+    expect(plan).toContain("export const MAX_WALKERS = 2;");
+    expect(plan).toContain('export const PANTRY_SEATS = ["coffee", "sofa"] as const;');
+    expect(m).toContain("30초 넘게 쉬면");
+    expect(m).toContain("한 층에서 둘까지만 가고");
+    const theme = JSON.parse(readFileSync(join(__dirname, "../../web/themes/office/theme.json"), "utf8"));
+    expect(m).toContain(`<code>${theme.words.pantry.ko} →</code>`);
+    const aura = readFileSync(join(__dirname, "../../web/themes/aura.ts"), "utf8");
+    expect(aura).toContain("low 1, medium 2, high 3, xhigh·max 4, 값이 없으면 1");
+    for (const s of ["<code>low</code>는 1단계", "<code>medium</code>은 2단계", "<code>high</code>는 3단계", "<code>xhigh</code>·<code>max</code>는 4단계", "값을 알 수 없으면 1단계", "멈춘(휴업) 층에서는 아무도 걷지 않습니다", "움직임 줄이기"]) expect(m, s).toContain(s);
+    for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(m, w).not.toContain(w);
+  });
   it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
     const b = sec('<h3 id="building-info">', "<h3>위쪽 막대의 숫자</h3>");
     expect(b).toContain(`<code>${BUILDING_TEXT.sign("User")}</code>`);
