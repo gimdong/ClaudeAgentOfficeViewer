@@ -49,6 +49,8 @@
   --shutter-gap: #2a2548;
   --shutter-bar: #5d568f;
   --focus: #3fd0ff;
+  /* P7a-9 공통 UI 표면(계약 §4.1a): 페이지 바탕·입력칸/글 상자 바탕·그 테두리. 장면 토큰(--slab --bg --wall --desk)을 UI에 쓰지 않는다 */
+  --page: #12111f;  --field: #0b0a17;  --line: #6a63a0;
 
   --px: 4px;
   --font-pixel: "Galmuri11", ui-monospace, "SF Mono", Menlo, monospace;
@@ -73,10 +75,11 @@
   --wall: #ffffff;  --panel: #ffffff;  --ink: #1f2233;  --muted: #555b73;
   --green: #0b7a52;  --pink: #b4285a;  --cyan: #13628f;  --violet: #6a46c9;  --yellow: #ffd84a;  --yellow-ink: #1f2233;
   --red: #c0352b;  --focus: #3fd0ff;
+  --page: #eef0f5;  --field: #f4f1ea;  --line: #6b7085;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); }
+html, body { margin: 0; background: var(--page); color: var(--ink); }
 body { font-family: var(--font-pixel); font-size: 12px; line-height: 1.5; }
 button, input, textarea, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(계약 §6): 안쪽 --focus, 바깥 --ink — 낮·밤 장면 어디서나 한 겹은 3:1 */
@@ -85,7 +88,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 
 .app { max-width: 1200px; margin: 0 auto; padding: 16px; }
 .loading { padding: 40px; text-align: center; color: var(--muted); }
-.banner { background: var(--pink); color: var(--bg); padding: 8px 12px; margin-bottom: 12px; font-weight: bold; }
+.banner { background: var(--pink); color: var(--wall); padding: 8px 12px; margin-bottom: 12px; font-weight: bold; }
 .banner--upgrade { background: var(--yellow); } /* FB-7: 오류가 아니라 재시작 안내 — 노랑, role 없음(status는 하나뿐) */
 
 /* ───────── HUD (v1 유지 + 결정 대기 칩 + 층 바로가기) ───────── */
@@ -100,7 +103,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .level-ok .heartbar-fill { background: var(--green); }
 .level-warn .heartbar-fill { background: var(--yellow); }
 .level-danger .heartbar-fill { background: var(--pink); animation: blink 1s steps(1) infinite; }
-.heartbar-value { position: absolute; right: 4px; top: -2px; font-size: 10px; color: var(--ink); text-shadow: 0 0 2px var(--bg); }
+.heartbar-value { position: absolute; right: 4px; top: -2px; font-size: 10px; color: var(--ink); text-shadow: 0 0 2px var(--page); }
 .heartbar-empty { padding-top: 2px; font-size: 12px; color: var(--muted); }
 .live { margin-left: auto; font-size: 12px; }
 .live.on { color: var(--green); }
@@ -110,7 +113,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .q-chip:active { transform: translateY(2px); box-shadow: none; }
 .elevator { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; align-items: center; }
 .elevator .lbl { font-size: 11px; color: var(--muted); margin-right: 4px; }
-.el-btn { position: relative; min-width: 36px; height: 24px; padding: 0 6px 0 14px; background: var(--shaft); border: 2px solid var(--desk); font-size: 11px; cursor: pointer; text-align: right; }
+.el-btn { position: relative; min-width: 36px; height: 24px; padding: 0 6px 0 14px; background: var(--field); border: 2px solid var(--line); color: var(--ink); font-size: 11px; cursor: pointer; text-align: right; }
 .el-btn .led { position: absolute; left: 4px; top: 7px; }
 
 /* LED (6×6) */
@@ -118,7 +121,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .led--working { background: var(--green); box-shadow: 0 0 4px var(--green); }
 .led--idle { background: var(--muted); }
 .led--paused { background: repeating-linear-gradient(var(--shutter-bar) 0 2px, var(--shutter-gap) 2px 3px); }
-.led--ended { background: var(--desk-dark); }
+.led--ended { background: var(--line); }
 .led--empty { background: transparent; outline: 1px dashed var(--muted); outline-offset: -1px; }
 .led--decision { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: blink 1s steps(1) infinite; }
 .led--budget { background: var(--pink); box-shadow: 0 0 6px var(--pink); animation: blink .5s steps(1) infinite; }
@@ -128,14 +131,14 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .roof { position: relative; height: 72px; margin: 0 24px; }
 .roof svg { position: absolute; left: 0; bottom: 0; width: 100%; height: 72px; }
 .roof-sign { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); font-family: "Galmuri14", var(--font-pixel); font-size: 18px; color: var(--pink); text-shadow: 0 0 6px var(--pink); letter-spacing: 2px; white-space: nowrap; }
-.tower { border: 8px solid var(--shell); border-bottom: 0; background: var(--shell); }
-.ground { height: 24px; background: repeating-linear-gradient(90deg, var(--desk-dark) 0 12px, var(--slab) 12px 16px); border-top: 4px solid var(--shell); }
-.empty { margin: 0; padding: 16px; text-align: center; color: var(--muted); background: var(--wall); border-bottom: var(--slab-h) solid var(--slab); }
+.tower { border: 8px solid var(--th-facade-shade); border-bottom: 0; background: var(--th-facade-shade); }
+.ground { height: 24px; background: var(--th-slab); border-top: 4px solid var(--th-facade-shade); } /* T7에서 거리로 바뀌기 전까지 */
+.empty { margin: 0; padding: 16px; text-align: center; color: var(--th-label-muted); background: var(--th-label-bg); border-bottom: var(--slab-h) solid var(--th-slab); } /* 글이 판 위(§4.1a) */
 
-.floor { display: grid; grid-template-columns: var(--shaft-w) 1fr; border-bottom: var(--slab-h) solid var(--slab); background: var(--wall); scroll-margin-top: 120px; }
+.floor { display: grid; grid-template-columns: var(--shaft-w) 1fr; border-bottom: var(--slab-h) solid var(--th-slab); background: var(--th-facade); scroll-margin-top: 120px; }
 .floor:last-child { border-bottom: 0; }
-.shaft { background: var(--shaft); display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 8px; border-right: 4px solid var(--slab); }
-.fl-no { font-family: "Galmuri14", var(--font-pixel); font-size: 16px; color: var(--ink); }
+.shaft { background: var(--th-shaft); display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 8px; border-right: 4px solid var(--th-facade-shade); }
+.fl-no { font-family: "Galmuri14", var(--font-pixel); font-size: 16px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 2px solid var(--th-label-border); } /* 장면 위 글은 판 위(§4.1a) */
 .floor-body { min-width: 0; }
 
 .floor-head { min-height: var(--head-h); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; background: var(--panel); border-bottom: 2px solid var(--desk); }
@@ -177,7 +180,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .pbtn--primary:hover { border-color: var(--ink); }
 .pbtn[aria-disabled="true"], .pbtn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: 0 2px 0 var(--slab); border-color: var(--desk); }
 .switch { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; }
-.switch .track { position: relative; width: 36px; height: 20px; background: var(--desk-dark); border: 2px solid var(--desk); }
+.switch .track { position: relative; width: 36px; height: 20px; background: var(--field); border: 2px solid var(--line); }
 .switch .knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); transition: left .12s steps(3); }
 .switch[aria-checked="true"] .track { border-color: var(--green); }
 .switch[aria-checked="true"] .knob { left: 18px; background: var(--green); box-shadow: 0 0 4px var(--green); }
@@ -192,7 +195,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .chip--terminating { color: var(--pink); border: 2px dashed var(--pink); }
 .fl-blocked { font-size: 11px; color: var(--muted); white-space: nowrap; }
 /* 숨긴 층 줄(§4.3): 탑 아래·땅 위, 탑의 --shell 테두리와 이어진다 */
-.hidden-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--shell); }
+.hidden-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--panel); }
 .hidden-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: 0 0 0 6px var(--ink); }
 .hidden-bar .hb-text { font-size: 12px; color: var(--muted); }
 .pbtn[aria-busy="true"] { opacity: .4; cursor: progress; }
@@ -208,12 +211,12 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .shutter-sign::after { right: 10px; }
 
 /* 방 */
-/* Phase 7 Task 5: 벽 = --th-wall 줄무늬(24칸에 2칸 그늘, ×2), 바닥 띠는 책상 줄마다(.desk::before). 층 안 무늬는 그림이 아니라 그라데이션(SPEC §2) */
-.room { position: relative; min-height: var(--room-min-h); background: repeating-linear-gradient(90deg, var(--th-wall, var(--wall)) 0 44px, var(--th-wall-shade, var(--wall)) 44px 48px); padding: 8px 12px 0; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
+/* Phase 7 Task 5: 벽 = 벽지 타일 room-wall-N(24칸 ×2 반복, 인라인 background-image). 타일이 없으면 --th-wall 줄무늬. 바닥 띠는 책상 줄마다(.desk::before) */
+.room { position: relative; min-height: var(--room-min-h); background: repeating-linear-gradient(90deg, var(--th-wall) 0 44px, var(--th-wall-shade) 44px 48px) 0 0 / 48px 48px; image-rendering: pixelated; padding: 8px 12px 0; display: flex; gap: 12px; align-items: flex-end; overflow: hidden; }
 .floor.collapsed .room { display: none; }
 /* 창 38×35(안에 하늘 비침)·벽 장식 room-deco-N. 장식이라 누를 수 없음 */
-.room > .win { position: absolute; top: 12px; left: 22%; width: 76px; height: 70px; box-sizing: border-box; border: 4px solid var(--th-sc-winFrame, var(--desk)); background: linear-gradient(var(--th-sky-top, var(--wall)), var(--th-window, var(--wall))); pointer-events: none; }
-.room > .win::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--th-sc-winFrame, var(--desk)); }
+.room > .win { position: absolute; top: 12px; left: 22%; width: 76px; height: 70px; box-sizing: border-box; border: 4px solid var(--th-sc-winFrame); background: linear-gradient(var(--th-sky-top), var(--th-window)); pointer-events: none; }
+.room > .win::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--th-sc-winFrame); }
 .room > .room-deco { top: 16px; left: auto; right: 4%; pointer-events: none; }
 .desks { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-end; flex: 1; min-width: 0; padding-left: 8px; overflow-x: clip; isolation: isolate; } /* 책상 사이 20px, 왼쪽 여백 8px — 사용자 피드백(beta.4: 책상이 왼쪽에 붙어 보임) */
 
@@ -227,8 +230,9 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .desk-scene { position: relative; width: 128px; height: 92px; margin: 28px 2px 0; }
 .desk--lead .desk-scene { width: 168px; }
 .desk-marks { position: absolute; left: 0; top: 0; z-index: 1; width: 96px; height: 120px; overflow: visible; pointer-events: none; }
-.nametag { display: inline-block; max-width: 92px; margin-top: 2px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
-.desk-meta { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 1.3; color: var(--muted); }
+/* 장면 위 글은 불투명 판 위(계약 §6·§4.1a, P7a-10 I2): 이름표 = --th-label-bg 판 + 테두리, 모델·상태 줄 = 같은 판에 보조 글 */
+.nametag { display: inline-block; max-width: 92px; margin-top: 2px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; background: var(--th-label-bg); color: var(--th-label-ink); border: 2px solid var(--th-label-border); }
+.desk-meta { display: block; width: fit-content; max-width: 92px; margin: 0 auto; padding: 0 4px; font-size: 10px; line-height: 1.3; background: var(--th-label-bg); color: var(--th-label-muted); }
 .desk-meta > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 서브에이전트 임시 책상(docs/design/subagent-desks/SPEC.md §1~§7): 리드 오른쪽 묶음, 72×90, 점선 --muted + "임시" 딱지, 누를 수 없음 */
 .sub-desks { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-left: -8px; max-width: 100%; }
@@ -238,13 +242,11 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .desk--sub .nametag { padding: 0 2px; }
 .desk--sub .desk-meta { min-height: 3.9em; } /* 줄 수가 달라도 상자·딱지 높이를 맞춘다(§5) */
 .desk--sub-done { opacity: .55; }
-.sub-tag { position: absolute; top: -8px; left: 4px; padding: 0 3px; background: var(--wall); font-size: 10px; line-height: 14px; color: var(--muted); }
+.sub-tag { position: absolute; top: -8px; left: 4px; padding: 0 3px; background: var(--panel); font-size: 10px; line-height: 14px; color: var(--muted); }
 .sub-more { align-self: center; border-style: dashed; border-color: var(--muted); color: var(--muted); font-size: 11px; cursor: default; }
 .desk--decision .nametag { background: var(--yellow); color: var(--yellow-ink); }
 /* Phase 2: 보고서를 열 수 있는 결정 대기 책상은 버튼이다(디자인 6장 "Phase 2 이후" 열, 11장) */
 button.desk { cursor: pointer; font: inherit; color: inherit; }
-.desk .q-ring { opacity: 0; }
-button.desk:hover .q-ring, button.desk:focus-visible .q-ring { opacity: 1; }
 .desk .open-hint { display: none; }
 button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: inline; }
 
@@ -254,10 +256,10 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .floor--ended .floor-name { color: var(--muted); }
 
 /* 빈 층 */
-.floor--empty .room { justify-content: center; align-items: center; background: repeating-linear-gradient(45deg, var(--wall) 0 12px, #211e3a 12px 24px); }
+.floor--empty .room { justify-content: center; align-items: center; background: repeating-linear-gradient(45deg, var(--th-wall) 0 12px, var(--th-wall-shade) 12px 24px); }
 .vacant { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 12px; }
-.vacant .sign { border: 2px solid var(--muted); color: var(--muted); padding: 4px 12px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; }
-.vacant p { margin: 0; font-size: 11px; color: var(--muted); }
+.vacant .sign { background: var(--th-label-bg); border: 2px solid var(--th-label-border); color: var(--th-label-ink); padding: 4px 12px; font-family: "Galmuri14", var(--font-pixel); font-size: 14px; }
+.vacant p { margin: 0; padding: 2px 6px; font-size: 11px; background: var(--th-label-bg); color: var(--th-label-muted); } /* 사선 위가 아니라 판 위(§4.1a) */
 
 /* 캐릭터 층 시트(Phase 7 Task 5, SPEC §3): 칸 26×30 ×2, 행 --row, 프레임 steps(--frames), 한 바퀴 --ms. 밝기·투명도 변화 없음 */
 .character { position: absolute; width: 52px; height: 60px; image-rendering: pixelated; background-repeat: no-repeat; background-size: 208px 780px; background-position: 0 calc(var(--row) * -60px); animation: ch-loop var(--ms) steps(var(--frames)) infinite; }
@@ -280,8 +282,9 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .state-working .code { animation: blink .4s steps(1) infinite; }
 .state-idle .char, .bubble-idle { animation: nod 2s steps(1) infinite; }
 .hand .hop { animation: hop .9s steps(1) infinite; }
-.qmark { animation: bob 1.2s steps(1) infinite; filter: drop-shadow(0 0 1.5px #fff7a8); }
-.urgent .qmark { filter: drop-shadow(0 0 1.5px #ff5fa2); animation: bob 1.2s steps(1) infinite, blink .5s steps(1) infinite; }
+/* 결정 "!" 풍선(P7a-10 M2, 목업 .p7b-bang 24×24): 공통 노랑 판 + --yellow-ink. 급함은 분홍 판. 밝기 변화 없이 위아래로만 */
+.qmark { position: absolute; z-index: 2; left: 24px; top: 0; width: 24px; height: 24px; display: grid; place-items: center; box-sizing: border-box; font: 700 14px/1 var(--font-text); background: var(--yellow); color: var(--yellow-ink); border: 2px solid var(--yellow-ink); pointer-events: none; animation: bob 1.2s steps(1) infinite; }
+.urgent .qmark { background: var(--pink); color: var(--wall); }
 @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes frameB { 0% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes nod { 0% { transform: translateY(0); } 50% { transform: translateY(1px); } }
@@ -365,11 +368,11 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 
 /* ───────── 결정 보고서 (디자인 phase2 §1–§4, Phase 1 8.1) ───────── */
 .rp { position: fixed; z-index: 50; top: 0; right: 0; bottom: 0; width: var(--report-w); max-width: 100vw; background: var(--panel); color: var(--ink); border-left: 4px solid var(--yellow); box-shadow: -8px 0 0 rgba(11,10,23,.6); display: flex; flex-direction: column; font-family: var(--font-pixel); font-size: 12px; animation: slide-in .16s steps(4) both; }
-.rp-timebar { height: 6px; background: var(--slab); flex: none; }
+.rp-timebar { height: 6px; background: var(--line); flex: none; }
 .rp-timebar span { display: block; height: 100%; background: var(--yellow); }
 .rp-timebar.urgent span { background: var(--pink); animation: blink 1s steps(1) infinite; }
 .rp-head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px 10px; border-bottom: 2px solid var(--desk); flex: none; }
-.rp-avatar { flex: none; width: 48px; height: 48px; background: var(--wall); border: 2px solid var(--desk); display: grid; place-items: center; }
+.rp-avatar { flex: none; width: 48px; height: 48px; background: var(--field); border: 2px solid var(--line); display: grid; place-items: center; }
 .rp-avatar svg { width: 36px; height: 32px; }
 .rp-headtext { flex: 1; min-width: 0; }
 .rp-who { margin: 0 0 2px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -391,7 +394,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .rp-sec:last-child { border-bottom: 0; }
 .rp-sec h3 { margin: 0 0 6px; font-size: 11px; font-weight: normal; color: var(--muted); }
 .rp-tool { margin: 0 0 6px; font-size: 12px; }
-.rp-code { margin: 0; background: var(--slab); border: 2px solid var(--desk); padding: 6px 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5; max-height: 7.5em; overflow: hidden; white-space: pre-wrap; word-break: break-all; }
+.rp-code { margin: 0; background: var(--field); border: 2px solid var(--line); padding: 6px 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5; max-height: 7.5em; overflow: hidden; white-space: pre-wrap; word-break: break-all; }
 .rp-code.full { max-height: none; }
 .rp-more { margin-top: 4px; background: none; border: 0; padding: 0; color: var(--cyan); cursor: pointer; font: inherit; font-size: 11px; text-decoration: underline; }
 .rp-empty { margin: 0; font-family: var(--font-text); font-size: 13px; color: var(--muted); }
@@ -400,15 +403,15 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .rp-kv dt { color: var(--muted); min-width: 72px; }
 .rp-kv dd { margin: 0; word-break: break-all; }
 .rp-why { margin: 0; font-family: var(--font-text); font-size: 14px; line-height: 1.6; }
-.rp-plan { background: var(--slab); border: 2px solid var(--desk); padding: 8px 10px; font-family: var(--font-text); font-size: 13px; line-height: 1.6; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.rp-plan { background: var(--field); border: 2px solid var(--line); padding: 8px 10px; font-family: var(--font-text); font-size: 13px; line-height: 1.6; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
 .rp-plan-cut { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--desk); font-size: 12px; color: var(--muted); }
-.rp-quote { margin: 0; background: var(--slab); border-left: 2px solid var(--yellow); padding: 8px 10px; font-family: var(--font-text); font-size: 13px; line-height: 1.6; word-break: break-word; }
+.rp-quote { margin: 0; background: var(--field); border-left: 2px solid var(--yellow); padding: 8px 10px; font-family: var(--font-text); font-size: 13px; line-height: 1.6; word-break: break-word; }
 .rp-terminal { margin: 0; font-family: var(--font-text); font-size: 14px; border-left: 2px solid var(--yellow); padding-left: 10px; }
 .rp-sub, .rp-note { margin: 6px 0 0; font-family: var(--font-text); font-size: 12px; color: var(--muted); line-height: 1.6; }
 .rp-note { font-size: 13px; margin: 0 0 10px; }
 .rp-answer.locked .rp-reason, .rp-answer.locked .rp-buttons { opacity: .4; }
 .rp-reason { display: block; position: relative; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
-.rp-reason input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; }
+.rp-reason input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--field); border: 2px solid var(--line); color: var(--ink); font-family: var(--font-text); font-size: 13px; }
 .rp-reason input:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .rp-count { display: block; text-align: right; font-size: 10px; margin-top: 2px; }
 .rp-buttons { display: flex; gap: 8px; }
@@ -425,7 +428,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .qf-label { font-family: var(--font-text); font-size: 14px; }
 .qf-desc { grid-column: 2; font-family: var(--font-text); font-size: 12px; color: var(--muted); }
 .qf-other { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
-.qf-other textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; resize: vertical; }
+.qf-other textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; background: var(--field); border: 2px solid var(--line); color: var(--ink); font-family: var(--font-text); font-size: 13px; resize: vertical; }
 .qf-other textarea:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .qf-count { display: block; text-align: right; font-size: 10px; margin-top: 2px; }
 .qf-hint { margin: 0 0 6px; font-family: var(--font-text); font-size: 12px; color: var(--muted); }
@@ -442,14 +445,14 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .siren .siren-off { opacity: 0; animation: frameB .5s steps(1) infinite; }
 .floor--alarm .shaft { animation: alarm-wash .5s steps(1) infinite; }
 /* 경광등 켜짐 프레임(frameA 0%)과 같은 박자로 물든다 */
-@keyframes alarm-wash { 0% { background: var(--alarm-wash); } 50% { background: var(--shaft); } }
+@keyframes alarm-wash { 0% { background: var(--alarm-wash); } 50% { background: var(--th-shaft); } }
 .dlg { width: min(420px, calc(100vw - 32px)); box-sizing: border-box; background: var(--panel); color: var(--ink); border: 4px solid var(--desk); box-shadow: 0 6px 0 var(--slab); padding: 18px 20px; font-family: var(--font-pixel); font-size: 12px; }
 .dlg::backdrop { background: rgba(11,10,23,.7); }
 .dlg-title { margin: 0 0 14px; font-family: var(--font-text); font-size: 17px; font-weight: 700; }
 .dlg-field { margin-bottom: 14px; }
 .dlg-field label { display: block; margin-bottom: 4px; font-size: 12px; }
 .dlg-input { display: flex; align-items: center; gap: 8px; }
-.dlg-input input { flex: 1; min-width: 0; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 14px; }
+.dlg-input input { flex: 1; min-width: 0; padding: 6px 8px; background: var(--field); border: 2px solid var(--line); color: var(--ink); font-family: var(--font-text); font-size: 14px; }
 .dlg-input input:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .dlg-input input[aria-invalid="true"] { border-color: var(--red); }
 .dlg-input .unit { font-size: 12px; color: var(--muted); }
@@ -481,7 +484,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .auth-title { margin: 0 0 12px; font-family: "Galmuri14", var(--font-pixel); font-size: 18px; font-weight: normal; color: var(--ink); }
 .auth-title code { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--green); }
 .auth p { margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--muted); }
-.auth-cmd { display: inline-block; margin: 6px 0 0; background: var(--slab); border: 2px solid var(--desk); padding: 8px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--ink); }
+.auth-cmd { display: inline-block; margin: 6px 0 0; background: var(--field); border: 2px solid var(--line); padding: 8px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--ink); }
 
 /* ───────── 권한 정책: 에이전트 패널 (디자인 phase3 §1·§2·§3) ───────── */
 .desk--policy:hover .nametag { text-decoration: underline; text-decoration-color: var(--policy); text-underline-offset: 2px; }
@@ -626,7 +629,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
 .ch-note { color: var(--muted); font-size: 12px; }
 .ch-check { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; word-break: keep-all; }
 .ch-field { display: grid; gap: 4px; margin: 10px 0; font-size: 12px; color: var(--muted); }
-.ch-field input, .ch-field select, .ch-field textarea, .ch-text { width: 100%; box-sizing: border-box; background: var(--slab, #0b0a17); color: var(--ink, #e8e4ff); border: 2px solid var(--line, #3b3460); padding: 6px 8px; font: inherit; }
+.ch-field input, .ch-field select, .ch-field textarea, .ch-text { width: 100%; box-sizing: border-box; background: var(--field); color: var(--ink); border: 2px solid var(--line); padding: 6px 8px; font: inherit; }
 .ch-sub { font-size: 13px; margin: 8px 0 4px; }
 .brief-list { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 6px; }
 .brief-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -642,7 +645,7 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .ch-mode legend { padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
 .ch-mode label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-family: var(--font-text); font-size: 13px; color: var(--ink); }
 .ch-mode input { margin: 0; width: auto; padding: 0; border: 0; } /* .ch-field input(폭 100%·테두리)을 라디오에서 되돌린다 */
-.cmd { display: grid; grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: auto; column-gap: 8px; align-items: center; margin: 8px 0 0; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); }
+.cmd { display: grid; grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: auto; column-gap: 8px; align-items: center; margin: 8px 0 0; padding: 6px 8px; background: var(--field); border: 2px solid var(--line); }
 .cmd code { grid-column: 1; grid-row: 1; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--ink); word-break: break-all; user-select: all; }
 .cmd .pbtn { grid-column: 2; grid-row: 1; height: 28px; }
 .ch-team { border-left: 4px solid var(--yellow); padding: 4px 10px; margin: 8px 0; font-size: 12px; }
@@ -677,7 +680,7 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 .rf-help { flex-basis: 100%; margin: 0; font-family: var(--font-text); font-size: 12px; color: var(--muted); word-break: keep-all; }
 .rf-revise { flex-basis: 100%; }
 .rf-revise label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-.rf-revise textarea, .rd-free textarea { display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; background: var(--slab); border: 2px solid var(--desk); color: var(--ink); font-family: var(--font-text); font-size: 13px; line-height: 1.6; resize: vertical; }
+.rf-revise textarea, .rd-free textarea { display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; background: var(--field); border: 2px solid var(--line); color: var(--ink); font-family: var(--font-text); font-size: 13px; line-height: 1.6; resize: vertical; }
 .rf-revise textarea { min-height: 6.4em; }
 .rf-revise textarea:focus, .rd-free textarea:focus { border-color: var(--cyan); outline: 2px solid var(--focus); box-shadow: 0 0 0 6px var(--ink); } /* 두 겹 링(P7a-2) */
 .rf-limit { margin: 8px 0 0; font-size: 10px; color: var(--muted); }
@@ -747,10 +750,10 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 /* §2 책상 — 한 줄 자리는 모든 책상에 둔다(비어 있어도). 줄이 있는 책상만 위로 밀려 바닥선이 어긋나는 것을 막는다(렌더 확인) */
 .desk-extra { display: block; height: 14px; line-height: 14px; overflow: hidden; font-size: 10px; }
 .desk-folder { display: inline-block; vertical-align: top; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--yellow); color: var(--yellow-ink); }
-.desk-status { display: block; max-width: 92px; margin: 0 auto; font-size: 10px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desk-status { display: block; width: fit-content; max-width: 92px; margin: 0 auto; padding: 0 4px; font-size: 10px; line-height: 14px; background: var(--th-label-bg); color: var(--th-label-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desk-status.pink { color: var(--pink); }
 .desk--await .nametag { text-decoration: underline; text-decoration-color: var(--await); text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.desk--offduty .nametag { color: var(--muted); }
+.desk--offduty .nametag { color: var(--th-label-ink); border-style: dashed; border-color: var(--th-label-muted); } /* 점선 이름표: 글은 진하게, 비었다는 뜻은 점선 */
 
 /* §6 전임자 */
 .predecessors { position: relative; align-self: flex-end; margin-left: auto; flex: none; font-size: 11px; color: var(--muted); z-index: 1; }

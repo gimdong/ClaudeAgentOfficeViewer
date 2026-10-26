@@ -100,7 +100,8 @@
       "tile": [
         24,
         24
-      ]
+      ],
+      "files": "room-wall-N-<variant>.png"
     }
   },
   "slots": {

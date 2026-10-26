@@ -62,10 +62,6 @@ export function spriteRects(rows: string[], colors: Record<string, string>): Rec
 export const LOCK_DESK = [".xxx.", "x...x", "xxxxx", "xxaxx", "xxaxx", "xxxxx"];
 /** 방금 막힘(§6.3): 왼쪽에 느낌표 한 줄 + 빈 열을 붙인 7×6, (16, 3)에 그린다 — 몸통은 평소와 같은 x 18–22(B107, 색에만 의존하지 않기) */
 export const LOCK_DESK_DENIED = ["x..xxx.", "x.x...x", "x.xxxxx", "x.xxaxx", "..xxaxx", "x.xxxxx"];
-export const QMARK = [".yyyy.", "yy..yy", "yy..yY", "...yyY", "..yyY.", "..yY..", "......", "..yY.."];
-
-// 호버·포커스일 때만 보이는 점선 링 (10×10)
-export const QRING = ["y.y.y.y.y.", ".........y", "y.........", ".........y", "y.........", ".........y", "y.........", ".........y", "y.........", ".y.y.y.y.y"];
 
 // 아이콘 (7×7, 디자인 4.5). x 선, a 강조
 export const ICONS = {

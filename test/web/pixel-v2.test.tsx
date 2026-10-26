@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Icon } from "../../web/pixel/Icon";
 import { NEON } from "../../web/pixel/palette";
-import { BODY_UP, characterRows, ICONS, QMARK, QRING } from "../../web/pixel/sprites";
+import { BODY_UP, characterRows, ICONS } from "../../web/pixel/sprites";
 
 afterEach(cleanup);
 
@@ -23,17 +23,6 @@ describe("손들기 스프라이트 (디자인 4.2)", () => {
   it("v1 프레임은 바뀌지 않는다", () => {
     expect(characterRows("lead", "a")[7]).toBe("cccttccc");
     expect(characterRows("lead", "b")[7]).toBe("sccttccs");
-  });
-});
-
-describe("? 와 링 (디자인 4.3)", () => {
-  it("QMARK는 6×8, QRING은 10×10", () => {
-    expect(QMARK).toHaveLength(8);
-    expect(QMARK.every((r) => r.length === 6)).toBe(true);
-    expect(QMARK[0]).toBe(".yyyy.");
-    expect(QRING).toHaveLength(10);
-    expect(QRING.every((r) => r.length === 10)).toBe(true);
-    expect(QRING[9]).toBe(".y.y.y.y.y");
   });
 });
 

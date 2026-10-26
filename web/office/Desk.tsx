@@ -4,7 +4,7 @@ import type { BubbleHandlers } from "../bubble/types";
 import { formatTokens, modelLabel, stateLabel } from "../format";
 import { NEON } from "../pixel/palette";
 import { PixelSprite } from "../pixel/PixelSprite";
-import { FOLDER_DESK, LOCK_DESK, LOCK_DESK_DENIED, QMARK, QRING, spriteRects } from "../pixel/sprites";
+import { FOLDER_DESK, LOCK_DESK, LOCK_DESK_DENIED, spriteRects } from "../pixel/sprites";
 import type { SlotName } from "../themes/registry";
 import { ThemeContext } from "../themes/ThemeContext";
 import { Character, LOOKS, memberVariant, type ActionName } from "./Character";
@@ -126,15 +126,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   );
   const svg = (
     <svg className="desk-svg desk-marks" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
-      {decision && !paused ? (
-        <>
-          {/* 누를 수 있는 결정(id가 있음)만 호버·포커스일 때 점선 링을 보인다(디자인 4.4, 6장 "Phase 2 이후") */}
-          {openable && <PixelSprite rects={spriteRects(QRING, { y: NEON.yellow })} x={1} y={-2} className="q-ring" />}
-          <g className="qmark">
-            <PixelSprite rects={spriteRects(QMARK, urgent ? { y: NEON.pink, Y: NEON.pinkDeep } : { y: NEON.yellow, Y: NEON.yellowDeep })} x={3} y={0} />
-          </g>
-        </>
-      ) : awaiting ? null /* 답을 기다립니다는 아래 글자 말머리(B335 ①) */ : (
+      {decision && !paused ? null /* 결정은 아래 DOM "!" 풍선(P7a-10 M2) */ : awaiting ? null /* 답을 기다립니다는 아래 글자 말머리(B335 ①) */ : (
         !paused &&
         !offDuty && (
           <g transform="translate(1,0)">
@@ -143,11 +135,11 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         )
       )}
       {offDuty && !paused && !decision && (
-        // §2.4 퇴근 팻말: 휴업 셔터 팻말과 같은 색
+        // §2.4 퇴근 팻말: 장면 위 글이라 이름표 판(--th-label-*, §4.1a)
         <g data-testid="offduty-sign">
-          <rect x={2} y={10} width={9} height={5} fill="var(--shutter-bar)" />
-          <rect x={2} y={15} width={9} height={1} fill="var(--shutter-gap)" />
-          <text x={6.5} y={13.6} fontSize={3.5} textAnchor="middle" fill="var(--ink)">
+          <rect x={2} y={10} width={9} height={5} fill="var(--th-label-bg)" />
+          <rect x={2} y={15} width={9} height={1} fill="var(--th-label-border)" />
+          <text x={6.5} y={13.6} fontSize={3.5} textAnchor="middle" fill="var(--th-label-ink)">
             {CMD_TEXT.offSign}
           </text>
         </g>
@@ -166,6 +158,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       )}
     </svg>
   );
+  // 결정 표시: 공통 노랑 "!" 풍선(계약 §2 바뀌지 않는 칸, --yellow + --yellow-ink). 뜻은 책상 접근 이름이 전한다
+  const bang = decision && !paused ? <span className="qmark" aria-hidden="true">!</span> : null;
   const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} lead={leadDesk} vacant={vacant} />;
 
   // 이름표 아래 한 줄: 모델 · 토큰 합계(항상 보임). 둘 다 없으면 그리지 않는다
@@ -219,6 +213,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {awaitLabel}
       {scene}
       {svg}
+      {bang}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -244,6 +239,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {awaitLabel}
       {scene}
       {svg}
+      {bang}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -270,6 +266,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
         {awaitLabel}
       {scene}
       {svg}
+      {bang}
         <span className="nametag">
           {member.name}
           <span className="open-hint"> · 열기</span>
@@ -292,6 +289,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
       {awaitLabel}
       {scene}
       {svg}
+      {bang}
       <span className="nametag">{member.name}</span>
       {meta}
       {extra}

@@ -39,6 +39,11 @@ const SCENE = {
 };
 
 describe("공통 UI 두 벌(계약 §4.1)", () => {
+  it("P7a-9 표면 토큰 값(§4.1a): --page·--field·--line 두 벌", () => {
+    expect([dark["--page"], dark["--field"], dark["--line"]]).toEqual(["#12111f", "#0b0a17", "#6a63a0"]);
+    expect([light["--page"], light["--field"], light["--line"]]).toEqual(["#eef0f5", "#f4f1ea", "#6b7085"]);
+  });
+
   it("light 벌의 값은 계약대로(--wall 흰색, --green #0b7a52, --yellow #ffd84a, --yellow-ink #1f2233), dark는 --yellow #fff7a8·--yellow-ink #12111f", () => {
     expect([light["--wall"], light["--green"], light["--yellow"], light["--yellow-ink"]]).toEqual(["#ffffff", "#0b7a52", "#ffd84a", "#1f2233"]);
     expect([dark["--yellow"], dark["--yellow-ink"]]).toEqual(["#fff7a8", "#12111f"]);
@@ -58,6 +63,9 @@ describe("공통 UI 두 벌(계약 §4.1)", () => {
       ];
       // 서류철 종이(.rf-paper): 글자는 --yellow-ink(P7a-2 — --wall은 light에서 흰색)
       pairs.push(["--yellow-ink", "--paper", 4.5]);
+      // P7a-9 표면 토큰(계약 §4.1a): 입력칸·글 상자 --field, 페이지 --page, 테두리 --line
+      pairs.push(["--ink", "--field", 4.5], ["--muted", "--field", 4.5], ["--ink", "--page", 4.5], ["--line", "--panel", 3], ["--line", "--field", 3], ["--line", "--page", 3], ["--yellow", "--line", 3]);
+      pairs.push(["--wall", "--pink", 4.5]); // 급한 "!" 풍선·예산 칩·배너 글자
       for (const [fg, bg, min] of pairs) {
         expect(v[fg], fg).toMatch(/^#[0-9a-f]{6}$/);
         expect(ratio(v[fg], v[bg]), `${fg}/${bg}`).toBeGreaterThanOrEqual(min - 0.005);
@@ -74,7 +82,7 @@ describe("공통 UI 두 벌(계약 §4.1)", () => {
 
 describe("두 겹 포커스 링·노랑 위 글자(계약 §4.1·§6)", () => {
   /** 선택자 → 선언 */
-  const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].trim(), body: m[2] }));
+  const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].replace(/\/\*[\s\S]*?\*\//g, "").trim(), body: m[2] }));
 
   it("포커스 링은 어디서나(입력칸 :focus 포함) outline: 2px solid var(--focus) + box-shadow: 0 0 0 6px var(--ink)", () => {
     const focus = rules.filter((r) => r.sel.includes(":focus") && /outline\s*:/.test(r.body));
@@ -88,9 +96,26 @@ describe("두 겹 포커스 링·노랑 위 글자(계약 §4.1·§6)", () => {
 
   it("노랑 바탕(.q-chip·결재 칩·결정 이름표·셔터 팻말 등)의 글자색은 var(--yellow-ink)", () => {
     const yellow = rules.filter((r) => /background:\s*var\(--yellow\)/.test(r.body) && /(^|[;\s])color:/.test(r.body));
-    expect(yellow.map((r) => r.sel)).toEqual(expect.arrayContaining([".q-chip", ".desk-folder"]));
+    expect(yellow.map((r) => r.sel)).toEqual(expect.arrayContaining([".q-chip", ".desk-folder", ".qmark"])); // .qmark = "!" 풍선(P7a-10 M2)
     // 서류철 종이도 밝은 바탕이라 같은 글자색(P7a-2)
     expect(rules.find((r) => r.sel === ".rf-paper")!.body).toMatch(/(^|[;\s])color:\s*var\(--yellow-ink\)/);
     for (const r of yellow) expect(r.body, r.sel).toMatch(/(^|[;\s])color:\s*var\(--yellow-ink\)/);
+  });
+
+  it("P7a-9: 장면 토큰(--slab·--bg·--wall·--desk-dark·--shaft·--shell)을 바탕·글자색으로 쓰는 규칙이 없다 — UI는 --page·--field·--panel, 장면은 --th-*", () => {
+    const SCENE_TOKENS = /(?:background(?:-color)?|color)\s*:[^;]*var\(--(?:slab|bg|wall|desk-dark|shaft|shell)\b(?!-)/;
+    // 초록·분홍·하늘 판 위 글자 --wall(.pbtn--primary·.chip--budget·.desk-await·.banner·급한 "!")은 공통 UI(light 흰색, §4.1)라 허용
+    const allowed = /^\.(pbtn--primary|chip--budget|desk-await|banner|urgent \.qmark)$/;
+    const bad = rules.filter((r) => !r.sel.startsWith(":root") && !r.sel.startsWith("@") && SCENE_TOKENS.test(r.body.replace(/(^|;)\s*color:\s*var\(--wall\)/g, (m) => (allowed.test(r.sel) ? "" : m))));
+    expect(bad.map((r) => r.sel)).toEqual([]);
+  });
+
+  it("P7a-10 I2·C1: 장면 위 글(이름표·모델 줄·상태 줄·통로 층 번호·빈 층 글)은 --th-label-bg 판 위, 퇴근 이름표는 점선 --th-label-muted", () => {
+    const body = (sel: string) => rules.filter((r) => r.sel === sel).map((r) => r.body).join(";");
+    for (const sel of [".nametag", ".desk-meta", ".desk-status", ".fl-no", ".vacant .sign", ".vacant p"]) expect(body(sel), sel).toMatch(/background:\s*var\(--th-label-bg\)/);
+    expect(body(".nametag")).toMatch(/(^|[;\s])color:\s*var\(--th-label-ink\)/);
+    expect(body(".desk--offduty .nametag")).toMatch(/border-style:\s*dashed/);
+    expect(body(".desk--offduty .nametag")).toMatch(/border-color:\s*var\(--th-label-muted\)/);
+    expect(body(".desk--offduty .nametag")).toMatch(/(^|[;\s])color:\s*var\(--th-label-ink\)/);
   });
 });

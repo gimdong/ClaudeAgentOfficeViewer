@@ -14,6 +14,7 @@ import { App } from "../../web/App";
 import { UNAUTHORIZED_EVENT } from "../../web/useSnapshot";
 import { FLOOR_TEXT } from "../../web/floors/useFloors";
 import { floorWallVariant } from "../../web/building/Floor";
+import { loadTheme } from "../../web/themes/registry";
 
 const NBSP = " ";
 type Reply = { status: number; body?: unknown } | "network" | "hold";
@@ -181,6 +182,8 @@ describe("일시정지 층(§1.5·§1.6·§2)", () => {
     const n = floorWallVariant(s.id, 4);
     expect(room.dataset.wall).toBe(String(n));
     expect(room.querySelector(`.room-deco.deco-${n}`)?.getAttribute("aria-hidden")).toBe("true");
+    // 벽 바탕 = 같은 N의 벽지 타일(지금 변형)
+    expect(room.style.backgroundImage).toContain(loadTheme("office").sheets[`room-wall-${n}-${document.documentElement.dataset.variant}.png`]);
     const desks = [...floor().querySelectorAll(".desk")];
     expect(desks[0].className).toContain("desk--lead");
     expect(desks.slice(1).some((d) => d.className.includes("desk--lead"))).toBe(false);

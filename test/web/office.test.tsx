@@ -104,8 +104,7 @@ describe("Desk", () => {
     expect(desk.getAttribute("aria-haspopup")).toBe("dialog");
     expect(desk.getAttribute("title")).toBeNull();
     expect(act(desk)).toBe("hand_up");
-    expect(desk.querySelector(".qmark")).not.toBeNull();
-    expect(desk.querySelector(".q-ring")).not.toBeNull();
+    expect(desk.querySelector(".qmark")?.textContent).toBe("!");
     expect(desk.querySelector(".nametag")!.textContent).toBe("developer · 열기");
     expect(within(desk).queryByTestId("bubble")).toBeNull();
     expect(monitor(desk)).toBe("ask");
@@ -121,24 +120,22 @@ describe("Desk", () => {
     expect(desk.getAttribute("tabindex")).toBe("0");
     expect(desk.getAttribute("aria-label")).toBe("developer, 결정 필요");
     expect(desk.getAttribute("aria-haspopup")).toBeNull();
-    expect(desk.querySelector(".q-ring")).toBeNull();
-    expect(desk.querySelector(".qmark")).not.toBeNull();
+    expect(desk.querySelector(".qmark")?.textContent).toBe("!");
   });
 
-  it("남은 시간이 60초 이하이면 급함(urgent) 표시이고 ?가 분홍 팔레트다", () => {
+  it("P7a-10 M2: 결정 표시는 DOM \"!\" 풍선(장식, aria-hidden), 남은 시간이 60초 이하이면 책상에 urgent", () => {
     const soon = new Date(Date.now() + 30_000).toISOString();
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: soon } })} />);
     const desk = screen.getByTestId("desk-developer");
     expect(desk.className).toContain("urgent");
-    const fills = new Set([...desk.querySelectorAll(".qmark rect")].map((r) => r.getAttribute("fill")));
-    expect(fills).toEqual(new Set([NEON.pink, NEON.pinkDeep]));
+    const bang = desk.querySelector(".qmark")!;
+    expect([bang.tagName, bang.textContent, bang.getAttribute("aria-hidden"), bang.querySelector("rect")]).toEqual(["SPAN", "!", "true", null]);
   });
 
-  it("급하지 않으면 ?는 노랑 팔레트다", () => {
+  it("급하지 않으면 urgent가 없다", () => {
     const later = new Date(Date.now() + 300_000).toISOString();
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "permission", since: "t", id: "d1", deadline: later } })} />);
-    const fills = new Set([...screen.getByTestId("desk-developer").querySelectorAll(".qmark rect")].map((r) => r.getAttribute("fill")));
-    expect(fills).toEqual(new Set([NEON.yellow, NEON.yellowDeep]));
+    expect(screen.getByTestId("desk-developer").className).not.toContain("urgent");
   });
 
   it("같은 이름은 다시 그려도 같은 모습(variantIndex)", () => {
@@ -149,7 +146,7 @@ describe("Desk", () => {
     expect(look()).toBe(first);
   });
 
-  it("CSS로 움직이는 .qmark 그룹에는 transform 속성이 없다", () => {
+  it("CSS로 움직이는 .qmark에는 transform 속성이 없다", () => {
     render(<Desk member={makeMember({ state: "decision", decision: { kind: "plan", since: "t" } })} />);
     const desk = screen.getByTestId("desk-developer");
     expect(desk.querySelector(".qmark")!.getAttribute("transform")).toBeNull();

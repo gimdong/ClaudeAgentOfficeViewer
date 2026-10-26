@@ -89,8 +89,10 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   }, [paused]);
 
   const id = floorDomId(session.id);
-  const { theme } = useContext(ThemeContext);
+  const { theme, variant } = useContext(ThemeContext);
   const wall = floorWallVariant(session.id, Object.values(theme.slots["room-wall"])[0]?.layout?.wallVariants ?? 1);
+  // 벽지 타일 낱장(24칸 반복). 없으면 CSS의 --th-wall 줄무늬
+  const tile = theme.sheets[`room-wall-${wall}-${variant}.png`];
   const decisions = session.members.filter((m) => m.state === "decision").length;
   const working = session.members.filter((m) => m.state === "working").length;
   const ended = floorStatus === "ended";
@@ -179,7 +181,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             </span>
           )}
         </header>
-        <div className="room" id={`${id}-room`} data-wall={wall}>
+        <div className="room" id={`${id}-room`} data-wall={wall} style={tile ? { backgroundImage: `url(${tile})` } : undefined}>
           <i className="win" aria-hidden="true" />
           <SceneCell slot="room-wall" name={`room-deco-${wall}`} className={`sc room-deco deco-${wall}`} />
           {paused && (

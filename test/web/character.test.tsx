@@ -71,5 +71,7 @@ describe("floorWallVariant", () => {
     for (const v of vs) expect(v >= 0 && v < 4).toBe(true);
     expect(vs.size).toBeGreaterThan(1);
     expect(floorWallVariant("s-1", 0)).toBe(0);
+    // I4: 층이 여럿이면 변형 1–3도 실제로 나온다(0만 나오지 않게)
+    expect(new Set(Array.from({ length: 12 }, (_, i) => floorWallVariant(`s${i}`, 4)))).toEqual(new Set([0, 1, 2, 3]));
   });
 });

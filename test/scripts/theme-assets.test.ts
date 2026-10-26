@@ -10,7 +10,7 @@ const ROOT = join(__dirname, "../..");
 const THEMES = join(ROOT, "web/themes");
 const themes = readdirSync(THEMES).filter((d) => existsSync(join(THEMES, d, "theme.json")));
 
-const COMMON = ["ink", "wall", "panel", "muted", "green", "pink", "yellow", "yellow-ink", "cyan", "red", "violet", "focus"];
+const COMMON = ["ink", "wall", "panel", "muted", "green", "pink", "yellow", "yellow-ink", "cyan", "red", "violet", "focus", "page", "field", "line"]; // page·field·line: P7a-9 §4.1a
 /** tokens.css에 나온 공통 UI 토큰 이름(선언만) */
 const commonIn = (css: string) => [...css.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => COMMON.includes(n.slice(2)));
 /** --th-로 시작하지 않는 사용자 정의 속성(P7a-5: 테마는 --th-* 이름공간만) */
@@ -47,7 +47,7 @@ function variantBytes(dir: string, variant: string, variants: string[]): number 
 
 describe("검사 함수 자체(틀린 입력을 잡는다)", () => {
   it("공통 UI 토큰 이름·AA 미만 쌍을 찾는다", () => {
-    expect(commonIn(":root[data-theme=x][data-variant=day] { --th-bg: #fff; --ink: #000; --yellow-ink: #111; }")).toEqual(["--ink", "--yellow-ink"]);
+    expect(commonIn(":root[data-theme=x][data-variant=day] { --th-bg: #fff; --ink: #000; --yellow-ink: #111; --field: #222; --th-line: #333; }")).toEqual(["--ink", "--yellow-ink", "--field"]);
     expect(nonTh(":root { --th-bg: #fff; --sc-cable: #000; --th-sc-x: #111; }")).toEqual(["--sc-cable"]);
     // 낮은 대비 한 쌍 + 빠진 토큰(--th-paper) 한 쌍
     expect(failingPairs({ "--th-label-ink": "#777777", "--th-label-bg": "#888888", "--th-label-muted": "#000000", "--th-label-accent": "#000000", "--th-paper-ink": "#000000" })).toEqual(["--th-label-ink/--th-label-bg", "--th-paper-ink/--th-paper"]);
