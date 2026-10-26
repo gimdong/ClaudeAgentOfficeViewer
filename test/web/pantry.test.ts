@@ -45,6 +45,23 @@ describe("planPantry", () => {
     expect(spots(planPantry(s, [{ name: "a", state: "working" }], T0 + 2_000, false))).toEqual({ a: "desk" });
   });
 
+  it("멤버마다 walkMs(실제 거리)를 받으면 그 시간에 도착, 돌아설 때도 그 기준(§3.1a)", () => {
+    const m = [{ ...idle("a", T0 - 30_000), walkMs: 1_000 }];
+    const s1 = planPantry({}, m, T0, false);
+    expect(spots(planPantry(s1, m, T0 + 999, false))).toEqual({ a: "walking-out" });
+    expect(planPantry(s1, m, T0 + 1_000, false).a).toEqual({ spot: "pantry", since: T0 + 1_000 });
+    const back = planPantry(s1, [{ name: "a", state: "working" as const, walkMs: 1_000 }], T0 + 400, false);
+    expect(spots(planPantry(back, [{ name: "a", state: "working", walkMs: 1_000 }], T0 + 800, false))).toEqual({ a: "desk" });
+  });
+
+  it("차례를 기다리던 사람이 그사이 일을 시작하면 출발하지 않는다", () => {
+    const m = [idle("a", T0 - 2), idle("b", T0 - 1), idle("c", T0)];
+    const s1 = planPantry({}, m, T0 + 30_000, false);
+    expect(spots(s1)).toEqual({ a: "walking-out", b: "walking-out", c: "desk" });
+    const m2 = [idle("a", T0 - 2), idle("b", T0 - 1), { name: "c", state: "working" as const }];
+    expect(spots(planPantry(s1, m2, T0 + 30_000 + WALK_MS, false))).toEqual({ a: "pantry", b: "pantry", c: "desk" });
+  });
+
   it("탕비실에서 working → walking-back(끝까지 걸음) → desk", () => {
     const prev: PantryState = { a: { spot: "pantry", since: T0 } };
     const s = planPantry(prev, [{ name: "a", state: "working" }], T0 + 60_000, false);
@@ -99,6 +116,16 @@ describe("usePantry", () => {
     act(() => vi.advanceTimersByTime(30_000));
     expect(result.current.a.spot).toBe("walking-out");
     act(() => vi.advanceTimersByTime(WALK_MS));
+    expect(result.current.a.spot).toBe("pantry");
+  });
+
+  it("가짜 타이머: walkMs가 짧으면 그 시각에 도착한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const members = [{ ...idle("a", T0), walkMs: 1_000 }];
+    const { result } = renderHook(() => usePantry(members, false));
+    act(() => vi.advanceTimersByTime(30_000));
+    act(() => vi.advanceTimersByTime(1_000));
     expect(result.current.a.spot).toBe("pantry");
   });
 

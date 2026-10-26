@@ -4,12 +4,12 @@ import type { Member, MemberState } from "../../src/shared/types";
 export const IDLE_WALK_MS = 30_000;
 /** 한 층에서 동시에 걸어 나가는 사람 수(돌아가는 걷기는 세지 않음) */
 export const MAX_WALKERS = 2;
-/** 책상 ↔ 탕비실 걷는 시간(MOTION §3 스토리보드 78칸, 25칸/초) */
+/** 책상 ↔ 탕비실 기본 걷는 시간(MOTION §3 스토리보드 78칸, 25칸/초). 화면이 실제 거리로 멤버마다 walkMs를 줄 수 있다(§3.1a) */
 export const WALK_MS = 3_120;
 
 export type PantrySpot = "desk" | "walking-out" | "pantry" | "walking-back";
 export type PantryState = Record<string, { spot: PantrySpot; since: number }>;
-export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"] }
+export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number }
 
 /**
  * 한 층의 탕비실 걷기 계획(순수). 걷기는 WALK_MS 뒤 도착하고, 가다가 돌아서면 걸은 만큼만 되돌아온다.
@@ -23,14 +23,15 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
     const cur = prev[m.name] ?? { spot: "desk", since: now };
     const off = m.state === "offline" || m.duty === "off";
     const back = m.state === "working" || off;
+    const walk = m.walkMs ?? WALK_MS;
     let { spot, since } = cur;
-    if (spot === "walking-out" && now - since >= WALK_MS) [spot, since] = ["pantry", since + WALK_MS];
-    if (spot === "walking-back" && now - since >= WALK_MS) [spot, since] = ["desk", since + WALK_MS];
+    if (spot === "walking-out" && now - since >= walk) [spot, since] = ["pantry", since + walk];
+    if (spot === "walking-back" && now - since >= walk) [spot, since] = ["desk", since + walk];
     if (off || reduced) {
       if (back && spot !== "desk") [spot, since] = ["desk", now];
       else if (spot === "walking-out") spot = "pantry";
       else if (spot === "walking-back") spot = "desk";
-    } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - WALK_MS];
+    } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - walk];
     else if (spot === "pantry" && back) [spot, since] = ["walking-back", now];
     next[m.name] = { spot, since };
     if (spot === "desk" && !off && m.state === "idle" && m.idleSince !== undefined && now - m.idleSince >= IDLE_WALK_MS) out.push(m);
@@ -49,8 +50,9 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
 /** 다음에 계획이 바뀔 수 있는 시각(도착·30초 됨, 지금보다 뒤). 차례를 기다리는 사람은 앞 사람 도착 때 다시 본다. 없으면 Infinity */
 export function nextChange(state: PantryState, members: PantryMember[], now: number): number {
   let t = Infinity;
-  for (const v of Object.values(state)) if (v.spot === "walking-out" || v.spot === "walking-back") t = Math.min(t, v.since + WALK_MS);
   for (const m of members) {
+    const v = state[m.name];
+    if (v?.spot === "walking-out" || v?.spot === "walking-back") t = Math.min(t, v.since + (m.walkMs ?? WALK_MS));
     const due = (m.idleSince ?? -Infinity) + IDLE_WALK_MS;
     if (state[m.name]?.spot === "desk" && m.state === "idle" && due > now) t = Math.min(t, due);
   }
