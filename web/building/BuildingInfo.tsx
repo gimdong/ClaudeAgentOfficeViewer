@@ -9,6 +9,15 @@ export const NAME_MAX = 40;
 export const BUILDING_TEXT = {
   title: "빌딩 정보",
   name: "이름",
+  // 낮·밤 변형(Phase 7 Task 3, 계약 §1 — qa 확정, 묶음 이름은 P7a-6 "화면")
+  variant: "화면",
+  variantDay: "낮",
+  variantNight: "밤",
+  variantSystem: "시스템 따라",
+  variantHelp: "시스템 따라: 컴퓨터가 어두운 모드면 밤, 밝은 모드면 낮입니다. 시각에 따라 저절로 바뀌지는 않습니다.",
+  // 라벨에 조사를 붙이지 않는다("시스템 따라으로"가 되므로 세 문장을 따로 둠)
+  variantSaved: (v: "day" | "night" | "system") => (v === "day" ? "낮으로 바꿨습니다" : v === "night" ? "밤으로 바꿨습니다" : "시스템 설정을 따르도록 바꿨습니다"),
+  variantOnly: "이 테마는 한 가지 모습만 있어 낮·밤을 바꿀 수 없습니다",
   sign: (name: string) => `${name}의 회사`,
   signDefault: "User",
   signAria: (name: string) => `빌딩 정보 열기, ${name}의 회사`,
@@ -57,6 +66,12 @@ export function BuildingInfo(p: {
   appVersion: string;
   onSave(name: string): Promise<boolean>;
   onClose(): void;
+  /** 낮·밤 설정(Phase 7 Task 3). variantCount가 1이면 흐리게 두고 저장하지 않는다 */
+  variant?: "day" | "night" | "system";
+  variantCount?: number;
+  onSaveVariant?(v: "day" | "night" | "system"): Promise<boolean>;
+  /** 하나뿐인 상태 알림 노드로 보낼 글(App의 announce) */
+  announce?(text: string): void;
 }) {
   const T = BUILDING_TEXT;
   const ref = useRef<HTMLDialogElement>(null);
@@ -65,6 +80,22 @@ export function BuildingInfo(p: {
   const [name, setName] = useState(p.userName);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<"idle" | "saved" | "failed">("idle");
+  const [variant, setVariant] = useState(p.variant ?? "system");
+  const [variantMsg, setVariantMsg] = useState<string | null>(null);
+  const variantOff = (p.variantCount ?? 2) < 2;
+  const pickVariant = async (v: "day" | "night" | "system") => {
+    if (variantOff || v === variant) return;
+    setVariant(v);
+    setVariantMsg(null);
+    const ok = await (p.onSaveVariant ? p.onSaveVariant(v) : Promise.resolve(false)).catch(() => false);
+    if (!ok) {
+      setVariant(p.variant ?? "system");
+      setState("failed");
+      return;
+    }
+    setVariantMsg(T.variantSaved(v));
+    p.announce?.(T.variantSaved(v));
+  };
   useLayoutEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
@@ -132,6 +163,22 @@ export function BuildingInfo(p: {
             {T.empty}
           </p>
         )}
+      </div>
+      <div className="dlg-field bi-variant" role="radiogroup" aria-labelledby={`${id}-variant`} aria-describedby={variantOff ? `${id}-variant-off` : undefined}>
+        <span id={`${id}-variant`}>{T.variant}</span>
+        {(["day", "night", "system"] as const).map((v) => (
+          <label key={v}>
+            <input type="radio" name={`${id}-variant`} value={v} checked={variant === v} aria-disabled={variantOff || undefined} onChange={() => void pickVariant(v)} onClick={(e) => variantOff && e.preventDefault()} />
+            {v === "day" ? T.variantDay : v === "night" ? T.variantNight : T.variantSystem}
+          </label>
+        ))}
+        <p className="dlg-help">{T.variantHelp}</p>
+        {variantOff && (
+          <p id={`${id}-variant-off`} className="dlg-help">
+            {T.variantOnly}
+          </p>
+        )}
+        {variantMsg && <p className="bi-ok">{variantMsg}</p>}
       </div>
       <dl className="bi-kv" style={{ gridTemplateRows: `repeat(${rows.length}, auto)` }}>
         {rows.map(([k, v]) => (

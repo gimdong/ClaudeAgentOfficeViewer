@@ -43,7 +43,7 @@ export interface BuilderOptions {
   channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep"> & Partial<Pick<ChannelHub, "receiptCheck">>;
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
   /** 빌딩 설정(Phase 6b Task 10) */
-  building?: { userName(): string };
+  building?: { userName(): string; variant(): import("./building").Variant };
   /** 테스트용(statusline 연결 상태의 Windows 판정). 기본은 process.platform */
   platform?: NodeJS.Platform;
   /** 서류철 수(Phase 6b) — 층 id로 */
@@ -141,7 +141,7 @@ export class SnapshotBuilder {
 
   /** 간판 이름은 데이터 폴더를 못 읽어도 보인다 */
   private buildingField(): Pick<Snapshot, "building"> {
-    return this.opts.building ? { building: { userName: this.opts.building.userName() } } : {};
+    return this.opts.building ? { building: { userName: this.opts.building.userName(), variant: this.opts.building.variant() } } : {};
   }
   private versionField(): Pick<Snapshot, "serverVersion" | "plugin"> {
     const p = this.opts.plugin?.();

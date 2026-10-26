@@ -111,6 +111,8 @@ export const chApi = {
   reports: (id: string) => req<FolderView>("GET", at(id, "reports")),
   // Phase 6b Task 10 지붕 간판 이름
   setUserName: (userName: string) => req<{ userName: string; saved: boolean }>("PUT", "/api/building", { userName }),
+  // Phase 7 Task 3 낮·밤 변형
+  setVariant: (variant: "day" | "night" | "system") => req<{ variant: string; saved: boolean }>("PUT", "/api/building", { variant }),
 };
 const errText = (e: string) => CH_TEXT.errors[e] ?? CH_TEXT.failed;
 

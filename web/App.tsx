@@ -14,6 +14,11 @@ import { PolicyList } from "./policy/PolicyList";
 import { OpenPolicyContext, usePolicy } from "./policy/usePolicy";
 import { LeadDrawers, OpenLeadContext, useLead } from "./office/LeadUi";
 import { chApi } from "./floors/ChannelDialogs";
+import { loadTheme } from "./themes/registry";
+import { useVariant, type VariantSetting } from "./themes/useVariant";
+
+/** 지금 테마(Phase 7). 테마 고르기가 생기기 전에는 오피스 */
+const THEME = loadTheme("office");
 
 const AUTH_TITLE = "접속 열쇠 필요 · Claude Office";
 /** FB-7: 설치 뒤 옛 서버(메모리)가 새 화면(디스크)을 내보내면 저장 API가 없어 "저장하지 못했습니다"가 난다. 서버 버전이 없거나 다르면 알린다 */
@@ -71,9 +76,15 @@ export function App() {
   const lead = useLead();
   const openAgentAt = useCallback((t: string, el?: HTMLElement | null, floor?: string) => policy.openAgent(t, el, undefined, floor), [policy.openAgent]);
   useBudgetAlarm(snapshot, announce);
-  // 공통 UI 벌(Phase 7 계약 §4.1): 루트 data-ui가 :root[data-ui="light"] 토큰을 고른다. 테마·낮밤 설정(Task 3)이 오기 전에는 dark
-  useLayoutEffect(() => {
-    document.documentElement.dataset.ui = "dark";
+  // 낮·밤 변형(Phase 7 Task 3): 서버 설정(기본 system)과 테마로 변형·공통 UI 벌을 정하고 루트 data-theme·data-variant·data-ui를 단다
+  const serverVariant = snapshot?.building?.variant ?? "system";
+  const [savedVariant, setSavedVariant] = useState<VariantSetting | null>(null);
+  useEffect(() => setSavedVariant(null), [serverVariant]);
+  useVariant(savedVariant ?? serverVariant, THEME);
+  const saveVariant = useCallback(async (v: VariantSetting) => {
+    const r = await chApi.setVariant(v);
+    if (r.ok) setSavedVariant(v);
+    return r.ok;
   }, []);
   // 간판 이름(Task 10): 저장 직후 그 이름을 보이고, 서버 스냅샷 값이 바뀌면 그 값을 따른다
   const serverName = snapshot?.building?.userName;
@@ -140,7 +151,7 @@ export function App() {
           policyUnreadable={snapshot.policy?.unreadable === true}
           onPolicyToggle={(el) => (policy.open?.view === "list" ? policy.close() : policy.openList(el))}
         />
-        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} experimental={snapshot.experimental} snapshot={snapshot} userName={savedName ?? serverName} onSaveName={saveName} />
+        <Building sessions={snapshot.sessions} bubble={handlers} hiddenFloors={snapshot.hiddenFloors} experimental={snapshot.experimental} snapshot={snapshot} userName={savedName ?? serverName} onSaveName={saveName} variant={savedVariant ?? serverVariant} variantCount={Object.keys(THEME.manifest.variants).length} onSaveVariant={saveVariant} />
         <ActivityBubble target={target} sessions={snapshot.sessions} />
         <DecisionReport d={d} sessions={snapshot.sessions} announce={announce} />
         <AgentPanel policy={policy} snapshot={snapshot} announce={announce} />

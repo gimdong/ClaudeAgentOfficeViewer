@@ -220,7 +220,8 @@ export interface UsageSummary {
 
 export interface Snapshot {
   /** 빌딩 설정(Phase 6b 스펙 12장 f) — 지붕 간판 `{userName}의 회사` */
-  building?: { userName: string };
+  /** variant: 낮·밤 설정(Phase 7 Task 3) — system이면 화면이 prefers-color-scheme을 따른다 */
+  building?: { userName: string; variant: "day" | "night" | "system" };
   /** statusline 연결(스펙 12장 j): PLAN 바가 빈 이유를 고른다. on이면 "요금제가 알려 주지 않음", off면 "연결이 꺼져 있음"(다른 statusline이 덮은 것 포함) */
   statusline?: "on" | "off" | "unsupported";
   generatedAt: string;

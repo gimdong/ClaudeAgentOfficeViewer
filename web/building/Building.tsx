@@ -22,6 +22,9 @@ export function Building({
   snapshot,
   userName = BUILDING_TEXT.signDefault,
   onSaveName,
+  variant,
+  variantCount,
+  onSaveVariant,
 }: {
   sessions: SessionView[];
   bubble?: BubbleHandlers;
@@ -30,6 +33,10 @@ export function Building({
   snapshot?: Snapshot;
   userName?: string;
   onSaveName?(name: string): Promise<boolean>;
+  /** 낮·밤 설정(Phase 7 Task 3) — 빌딩 정보 창으로 넘긴다 */
+  variant?: "day" | "night" | "system";
+  variantCount?: number;
+  onSaveVariant?(v: "day" | "night" | "system"): Promise<boolean>;
 }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const signRef = useRef<HTMLButtonElement>(null);
@@ -98,6 +105,10 @@ export function Building({
           statusline={snapshot.statusline}
           appVersion={__APP_VERSION__}
           onSave={(name) => (onSaveName ? onSaveName(name) : Promise.resolve(false))}
+          variant={variant}
+          variantCount={variantCount}
+          onSaveVariant={onSaveVariant}
+          announce={announce}
           onClose={() => {
             setInfoOpen(false);
             requestAnimationFrame(() => signRef.current?.focus());

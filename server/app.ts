@@ -410,14 +410,13 @@ export function createApp(
   // 빌딩 이름(Phase 6b 스펙 12장 f). 쓰기 인증·같은 출처는 위 /api 미들웨어가 한다
   if (opts.building) {
     const building = opts.building;
-    app.get("/api/building", (_req, res) => void res.status(200).json({ userName: building.userName() }));
+    app.get("/api/building", (_req, res) => void res.status(200).json({ userName: building.userName(), variant: building.variant() }));
     app.put("/api/building", express.json({ limit: "1kb", type: () => true }), (req, res) => {
-      const b = req.body as Record<string, unknown> | undefined;
-      if (!b || typeof b !== "object" || Array.isArray(b) || Object.keys(b).some((k) => k !== "userName")) return void res.status(400).json({ error: "name" });
-      const r = building.set(b.userName);
-      if (!r.ok) return void res.status(400).json({ error: "name" });
+      // { userName?, variant? }(Phase 7 Task 3). 남는 키·빈 본문은 400 body, 틀린 이름 400 name, 틀린 변형 400 variant
+      const r = building.set(req.body);
+      if (!r.ok) return void res.status(400).json({ error: r.error });
       hub.poke?.();
-      res.status(200).json({ userName: r.userName, saved: r.saved });
+      res.status(200).json({ userName: r.userName, variant: r.variant, saved: r.saved });
     });
   }
 

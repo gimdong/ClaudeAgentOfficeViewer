@@ -101,7 +101,7 @@ describe("App", () => {
     if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (calls.push({ url, init }), new Response(JSON.stringify({ userName: "Acme", saved: true }), { status: 200 }))));
-    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()], building: { userName: "Kim" } }), live: true };
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()], building: { userName: "Kim", variant: "system" } }), live: true };
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: BUILDING_TEXT.signAria("Kim") }));
     expect(screen.getByRole("dialog", { name: BUILDING_TEXT.title })).toBeTruthy();
@@ -134,6 +134,22 @@ describe("App", () => {
       fireEvent.click(screen.getByRole("button", { name: LEAD_TEXT.approve }));
     });
     expect(posts).toEqual([{ url: "/api/floors/s1/lead", body: { kind: "approve", reportId: "r-11111111" } }]);
+    vi.unstubAllGlobals();
+  });
+
+  it("Phase 7 T3: 빌딩 정보에서 낮을 고르면 PUT /api/building {variant:\"day\"}이고 루트가 바로 낮(light)으로", async () => {
+    if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => (bodies.push(JSON.parse(String(init?.body ?? "null"))), new Response(JSON.stringify({ variant: "day", saved: true }), { status: 200 }))));
+    state.value = { snapshot: makeSnapshot({ sessions: [makeSession()], building: { userName: "Kim", variant: "night" } }), live: true };
+    render(<App />);
+    expect(document.documentElement.dataset).toMatchObject({ theme: "office", variant: "night", ui: "dark" });
+    fireEvent.click(screen.getByRole("button", { name: BUILDING_TEXT.signAria("Kim") }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: BUILDING_TEXT.variantDay }));
+    });
+    expect(bodies.filter(Boolean)).toEqual([{ variant: "day" }]);
+    expect(document.documentElement.dataset).toMatchObject({ variant: "day", ui: "light" });
     vi.unstubAllGlobals();
   });
 });
