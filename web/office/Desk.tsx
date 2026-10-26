@@ -28,6 +28,8 @@ interface DeskProps {
   folder?: { pending: number; total: number };
   /** 퇴사 중이면 channel 연결이 없음을 알린다(스펙 12장 m) */
   retireWait?: boolean;
+  /** 탕비실에 갔거나 걷는 중(Phase 7 T6b): 캐릭터만 빈 의자로. 버튼·이름표·결정 표시는 그대로 */
+  away?: boolean;
 }
 
 type Screen = "work" | "ask" | "think" | "rest";
@@ -47,7 +49,7 @@ export function SceneCell({ slot = "desk", name, className }: { slot?: SlotName;
 function DeskScene({ member, pose, vacant }: { member: Member; pose: [ActionName, Screen]; vacant: boolean }) {
   const screen = vacant ? "rest" : pose[1];
   return (
-    <div className="desk-scene" aria-hidden="true" data-testid={vacant ? "empty-chair" : undefined}>
+    <div className="desk-scene" aria-hidden="true" data-member={member.name} data-testid={vacant ? "empty-chair" : undefined}>
       <SceneCell name="chair" className="sc chair" />
       {!vacant && <Character name={member.name} action={pose[0]} effort={member.effort} variantIndex={memberVariant(member.name, LOOKS.length)} />}
       <SceneCell name={`desk-${screen}`} className={`sc desk-front monitor-${screen}`} />
@@ -89,7 +91,7 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
+function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, away = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
@@ -107,7 +109,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   // 퇴근함(§2.4): 사용자가 퇴근시킨 자리만 팻말 빈 의자
   const offDuty = member.duty === "off";
   const shown: MemberState = paused && !decision ? "idle" : offDuty && !decision ? "offline" : member.state;
-  const vacant = member.state === "offline" || paused || (offDuty && !decision);
+  const vacant = member.state === "offline" || paused || (offDuty && !decision) || away;
   const denied = !!member.policyDenied;
   const locked = !!member.policy || denied;
   // 접근 이름 덧붙임(phase3 §8.7)

@@ -779,3 +779,14 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .desk-folder-btn { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); border: 0; cursor: pointer; font: inherit; font-size: 10px; }
 .desk-folder-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; box-shadow: 0 0 0 6px var(--ink); }
 .rd-folder { display: block; margin: 0 0 8px; }
+
+/* 탕비실 걷기(Phase 7 T6b, 계약 SPEC §2 pantry·§3): 탕비실 80×46 ×2는 책상 줄 끝. 커피 자리 기준점 x14·소파 x57(캐릭터 기준점 13,28) */
+.pantry-scene { position: relative; flex: none; align-self: flex-start; width: 160px; height: 92px; margin: 28px 0 0 auto; }
+.pantry-scene > .character { left: 2px; top: 32px; }
+.pantry-scene > .pantry-back + .character { left: 88px; top: 8px; }
+/* 걷는 층: 방 위에 겹친다. 이동은 transform만(Walker가 transition·steps를 준다). 이름표는 따라가는 장식 복제 */
+.walk-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.walker { position: absolute; left: 0; top: 0; width: 52px; height: 60px; }
+.walker > .character { left: 0; top: 0; }
+.walk-tag { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--wall); color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .walk-layer { display: none; } }

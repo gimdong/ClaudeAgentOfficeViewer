@@ -88,6 +88,11 @@ describe("planPantry", () => {
     expect(spots(planPantry(walking, [idle("b", T0 - 30_000)], T0 + 1, true))).toEqual({ b: "pantry" });
   });
 
+  it("reduced에서 걸어 나가는 중 손듦 → 탕비실이 아니라 바로 desk(책상에서 hand_up)", () => {
+    const walking: PantryState = { a: { spot: "walking-out", since: T0 } };
+    expect(planPantry(walking, [{ name: "a", state: "decision" }], T0 + 500, true).a).toEqual({ spot: "desk", since: T0 + 500 });
+  });
+
   it("duty off·offline은 대상 아님. 탕비실에 있다가 퇴근하면 걷지 않고 바로 desk", () => {
     const m: PantryMember[] = [{ ...idle("a", T0 - 60_000), duty: "off" }, { name: "b", state: "offline", idleSince: T0 - 60_000 }];
     expect(spots(planPantry({}, m, T0, false))).toEqual({ a: "desk", b: "desk" });

@@ -28,7 +28,8 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
     if (spot === "walking-out" && now - since >= walk) [spot, since] = ["pantry", since + walk];
     if (spot === "walking-back" && now - since >= walk) [spot, since] = ["desk", since + walk];
     if (off || reduced) {
-      if (back && spot !== "desk") [spot, since] = ["desk", now];
+      // 걸어 나가는 중 손들기는 걷지 않아도 책상으로(SPEC §3)
+      if ((back || (spot === "walking-out" && m.state === "decision")) && spot !== "desk") [spot, since] = ["desk", now];
       else if (spot === "walking-out") spot = "pantry";
       else if (spot === "walking-back") spot = "desk";
     } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - walk];
