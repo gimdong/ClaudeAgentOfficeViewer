@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type PointerEvent } from "react";
 import type { Member, MemberState } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { formatTokens, modelLabel, stateLabel } from "../format";
@@ -7,7 +7,8 @@ import { PixelSprite } from "../pixel/PixelSprite";
 import { FOLDER_DESK, LOCK_DESK, LOCK_DESK_DENIED, spriteRects } from "../pixel/sprites";
 import type { SlotName } from "../themes/registry";
 import { ThemeContext } from "../themes/ThemeContext";
-import { Character, LOOKS, memberVariant, type ActionName } from "./Character";
+import { ACTIONS, Character, LOOKS, memberVariant, type ActionName } from "./Character";
+import { useReducedMotion } from "./usePantry";
 import { CMD_TEXT } from "./leadCmdText";
 import { OpenLeadContext } from "./LeadUi";
 import { remainingSeconds } from "../report/text";
@@ -46,15 +47,35 @@ export function SceneCell({ slot = "desk", name, className }: { slot?: SlotName;
 }
 
 /** 책상 장면(§3 겹침: 의자 등받이 → 오라 → 캐릭터 → 모니터·책상). 빈 자리면 의자 + 쉼 모니터. 모두 장식 */
-function DeskScene({ member, pose, vacant }: { member: Member; pose: [ActionName, Screen]; vacant: boolean }) {
+function DeskScene({ member, pose, vacant, shift }: { member: Member; pose: [ActionName, Screen]; vacant: boolean; shift: Shift }) {
   const screen = vacant ? "rest" : pose[1];
   return (
-    <div className="desk-scene" aria-hidden="true" data-member={member.name} data-testid={vacant ? "empty-chair" : undefined}>
+    <div className="desk-scene" aria-hidden="true" data-member={member.name} data-shift={shift ?? undefined} data-testid={vacant ? "empty-chair" : undefined}>
       <SceneCell name="chair" className="sc chair" />
-      {!vacant && <Character name={member.name} action={pose[0]} effort={member.effort} variantIndex={memberVariant(member.name, LOOKS.length)} />}
+      {!vacant && <Character name={member.name} action={shift ? "sit_down" : pose[0]} effort={member.effort} variantIndex={memberVariant(member.name, LOOKS.length)} />}
       <SceneCell name={`desk-${screen}`} className={`sc desk-front monitor-${screen}`} />
     </div>
   );
+}
+
+type Shift = "stand" | "sit" | null;
+/**
+ * 탕비실 걷기의 일어서기·앉기(SPEC §3, designer-motion I2): away가 켜지면 sit_down 거꾸로(일어섬), 꺼지면 sit_down을 한 번(앉음).
+ * 시트 행 sit_down 한 바퀴 동안만. 움직임 줄이기면 없음
+ */
+function useShift(away: boolean): Shift {
+  const reduced = useReducedMotion();
+  const [shift, setShift] = useState<Shift>(null);
+  const was = useRef(away);
+  useLayoutEffect(() => {
+    if (was.current === away) return;
+    was.current = away;
+    if (reduced) return setShift(null);
+    setShift(away ? "stand" : "sit");
+    const t = setTimeout(() => setShift(null), ACTIONS.sit_down.ms);
+    return () => clearTimeout(t);
+  }, [away, reduced]);
+  return shift;
 }
 
 /**
@@ -109,7 +130,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   // 퇴근함(§2.4): 사용자가 퇴근시킨 자리만 팻말 빈 의자
   const offDuty = member.duty === "off";
   const shown: MemberState = paused && !decision ? "idle" : offDuty && !decision ? "offline" : member.state;
-  const vacant = member.state === "offline" || paused || (offDuty && !decision) || away;
+  const shift = useShift(away);
+  const vacant = member.state === "offline" || paused || (offDuty && !decision) || (away && shift !== "stand");
   // 탕비실에 간 팀원의 빈 책상: 점선 이름표 "탕비실 →"(테마 낱말, P7a-14 ①). 접근 이름은 그대로 이름
   const { theme } = useContext(ThemeContext);
   const tagText = away ? `${theme.words.pantry.ko} →` : member.name;
@@ -131,7 +153,8 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
     <svg className="desk-svg desk-marks" viewBox="0 0 24 30" shapeRendering="crispEdges" aria-hidden="true">
       {decision && !paused ? null /* 결정은 아래 DOM "!" 풍선(P7a-10 M2) */ : awaiting ? null /* 답을 기다립니다는 아래 글자 말머리(B335 ①) */ : (
         !paused &&
-        !offDuty && (
+        !offDuty &&
+        !away && (
           <g transform="translate(1,0)">
             <StatusBubble state={member.state} unread={member.unread} />
           </g>
@@ -163,7 +186,7 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   );
   // 결정 표시: 공통 노랑 "!" 풍선(계약 §2 바뀌지 않는 칸, --yellow + --yellow-ink). 뜻은 책상 접근 이름이 전한다
   const bang = decision && !paused ? <span className="qmark" aria-hidden="true">!</span> : null;
-  const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} vacant={vacant} />;
+  const scene = <DeskScene member={member} pose={POSE[member.state === "offline" ? "idle" : member.state]} vacant={vacant} shift={shift} />;
 
   // 이름표 아래 한 줄: 모델 · 토큰 합계(항상 보임). 둘 다 없으면 그리지 않는다
   // 92px 폭에서 숫자가 잘리지 않게 모델과 토큰을 두 줄로 둔다(정적 렌더 확인)

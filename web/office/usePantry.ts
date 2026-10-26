@@ -13,7 +13,8 @@ export function usePantry(members: PantryMember[], reduced: boolean): PantryStat
     if (planned !== state) return setState(planned);
     const at = nextChange(state, members, now);
     if (at === Infinity) return;
-    const t = setTimeout(() => setState((p) => planPantry(p, members, Date.now(), reduced)), at - now);
+    // 타이머는 조금 일찍 깰 수 있다. 그때 "바뀐 것 없음"이면 다음 타이머가 생기지 않으니 적어도 at으로 본다(C1)
+    const t = setTimeout(() => setState((p) => planPantry(p, members, Math.max(Date.now(), at), reduced)), at - now);
     return () => clearTimeout(t);
   }, [state, members, reduced]);
   return state;

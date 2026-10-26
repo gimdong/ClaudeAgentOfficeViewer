@@ -141,6 +141,19 @@ describe("usePantry", () => {
     expect(result.current.a.spot).toBe("pantry");
   });
 
+  it("타이머가 1ms 일찍 깨도 계획이 멈추지 않는다(designer-motion C1)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    const cbs: Array<() => void> = [];
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((f: () => void) => (cbs.push(f), 0)) as unknown as typeof setTimeout);
+    const members = [idle("a", T0)];
+    const { result } = renderHook(() => usePantry(members, false));
+    vi.setSystemTime(T0 + IDLE_WALK_MS - 1);
+    act(() => cbs.at(-1)!());
+    expect(result.current.a.spot).toBe("walking-out");
+    vi.restoreAllMocks();
+  });
+
   it("가짜 타이머: walkMs가 짧으면 그 시각에 도착한다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);

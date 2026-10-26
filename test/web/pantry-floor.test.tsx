@@ -25,7 +25,48 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// jsdom은 배치가 없으니 칸 위치를 정해 준다: 방 (0,0), 탕비실 (500,10), 책상 data-member마다 x
+function fakeLayout(desks: Record<string, number>) {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const el = this as HTMLElement;
+    const x = el.classList.contains("pantry-scene") ? 500 : el.classList.contains("desk-scene") ? (desks[el.dataset.member ?? ""] ?? 0) : 0;
+    return { left: x, top: el.classList.contains("pantry-scene") ? 10 : 0, right: x, bottom: 0, width: 0, height: 0, x, y: 0, toJSON: () => ({}) } as DOMRect;
+  });
+}
+const walkTo = () => [...document.querySelectorAll<HTMLElement>(".walk-layer .walker")].map((w) => /translate\((-?\d+)px/.exec(w.style.transform)?.[1]).sort();
+
 describe("Floor 탕비실 걷기", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("둘이 걸어 나가면 먼저 닿을 사람은 커피 자리(x+2), 다음은 소파 자리(x+88)로 걷는다(designer-motion I1)", () => {
+    fakeLayout({ a: 0, b: 150 });
+    render(<Floor session={floor([resting("a"), resting("b")])} />);
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    act(() => vi.advanceTimersByTime(300));
+    expect(walkTo()).toEqual(["502", "588"]);
+    const tx = (n: string) => document.querySelector<HTMLElement>(`.walker[data-name="${n}"]`)!.style.transform;
+    expect(tx("b")).toContain("502px"); // b가 더 가까워 먼저 닿는다
+    expect(tx("a")).toContain("588px");
+  });
+
+  it("일어서기·앉기(I2): 출발하면 300ms 책상에서 sit_down 거꾸로, 돌아오면 300ms sit_down 뒤 type. 빈 책상에 z z 없음(M2)", () => {
+    const { rerender } = render(<Floor session={floor([resting()])} />);
+    const deskAct = () => screen.getByTestId("desk-dev").querySelector(".character")?.getAttribute("data-action") ?? null;
+    act(() => vi.advanceTimersByTime(IDLE_WALK_MS));
+    expect(deskAct()).toBe("sit_down");
+    expect(screen.getByTestId("desk-dev").querySelector(".desk-scene")!.getAttribute("data-shift")).toBe("stand");
+    act(() => vi.advanceTimersByTime(300));
+    expect(deskAct()).toBeNull();
+    expect(screen.getByTestId("desk-dev").querySelector('[data-testid="bubble"]')).toBeNull();
+    act(() => vi.advanceTimersByTime(WALK_MS));
+    rerender(<Floor session={floor([makeMember({ name: "dev", state: "working" })])} />);
+    act(() => vi.advanceTimersByTime(WALK_MS));
+    expect(deskAct()).toBe("sit_down");
+    expect(screen.getByTestId("desk-dev").querySelector(".desk-scene")!.getAttribute("data-shift")).toBe("sit");
+    act(() => vi.advanceTimersByTime(300));
+    expect(deskAct()).toBe("type");
+  });
+
   it("쉼 30초 → 책상은 빈 의자, 걷는 층에 walk_*; 도착하면 커피 자리 coffee. 책상 버튼·접근 이름·순서는 그대로", () => {
     render(<Floor session={floor([resting()])} />);
     const desk = screen.getByTestId("desk-dev");
@@ -36,8 +77,9 @@ describe("Floor 탕비실 걷기", () => {
     expect(walkers()).toHaveLength(1);
     expect(walkers()[0]).toMatch(/^walk_(left|right)$/);
     expect(document.querySelector(".walk-layer")!.getAttribute("aria-hidden")).toBe("true");
+    act(() => vi.advanceTimersByTime(300)); // 일어서기(I2) 뒤 빈 의자
     expect(screen.getByTestId("desk-dev").querySelector(".character")).toBeNull();
-    act(() => vi.advanceTimersByTime(WALK_MS));
+    act(() => vi.advanceTimersByTime(WALK_MS - 300));
     expect(walkers()).toEqual([]);
     expect(inPantry()).toEqual(["coffee"]);
     expect(screen.getByTestId("desk-dev").getAttribute("aria-label")).toBe(label);

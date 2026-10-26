@@ -9,7 +9,7 @@ import { LEAD_TEXT, shortTime } from "../office/leadText";
 import { openReopen, useReopening } from "../floors/ReopenDialog";
 import { SubDesks } from "../office/SubDesks";
 import { PantryScene, Walker, walkMsOf } from "../office/Pantry";
-import { WALK_MS, type PantryMember } from "../office/pantryPlan";
+import { PANTRY_SEATS, WALK_MS, type PantryMember } from "../office/pantryPlan";
 import { usePantry, useReducedMotion } from "../office/usePantry";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
@@ -120,6 +120,16 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const planMembers = useMemo(() => plan, [planKey]);
   const pantry = usePantry(planMembers, useReducedMotion());
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
+  const walkMs = (name: string) => planMembers.find((p) => p.name === name)?.walkMs ?? WALK_MS;
+  // 걷는 사람의 탕비실 쪽 끝 = 앉을 자리(I1). 나가는 사람은 빈 자리를 닿는 순으로(계획기가 도착 때 주는 순서와 같다), 돌아오는 사람은 앉았던 자리
+  const lastSeat = useRef<Record<string, string>>({});
+  for (const [n, v] of Object.entries(pantry)) if (v.seat) lastSeat.current[n] = v.seat;
+  const freeSeats = PANTRY_SEATS.filter((s) => !Object.values(pantry).some((v) => v.seat === s));
+  const outOrder = Object.entries(pantry)
+    .filter(([, v]) => v.spot === "walking-out")
+    .sort(([a, x], [b, y]) => x.since + walkMs(a) - y.since - walkMs(b) || a.localeCompare(b))
+    .map(([n]) => n);
+  const seatX = (name: string) => ((pantry[name]?.spot === "walking-out" ? freeSeats[outOrder.indexOf(name)] : lastSeat.current[name]) === "sofa" ? 86 : 0);
 
   const id = floorDomId(session.id);
   const { theme, variant } = useContext(ThemeContext);
@@ -241,8 +251,9 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
               const s = pantry[m.name];
               const g = geo[m.name] ?? [0, 0, 0];
               if (s?.spot !== "walking-out" && s?.spot !== "walking-back") return null;
-              const [from, to] = s.spot === "walking-out" ? [g[0], g[1]] : [g[1], g[0]];
-              return <Walker key={m.name} member={m} from={from} to={to} y={g[2]} since={s.since} ms={planMembers.find((p) => p.name === m.name)?.walkMs ?? WALK_MS} />;
+              const seat = g[1] + seatX(m.name);
+              const out = s.spot === "walking-out";
+              return <Walker key={m.name} member={m} from={out ? g[0] : seat} to={out ? seat : g[0]} y={g[2]} since={s.since} ms={walkMs(m.name)} out={out} />;
             })}
           </div>
           {(session.predecessors?.length ?? 0) > 0 && (

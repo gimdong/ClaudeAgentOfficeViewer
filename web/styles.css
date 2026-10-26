@@ -788,6 +788,8 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px va
 .walk-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .walker { position: absolute; left: 0; top: 0; width: 52px; height: 60px; }
 .walker > .character { left: 0; top: 0; }
+@keyframes walker-wait { from { visibility: hidden; } } /* 책상에서 일어서는 동안 숨음(I2) */
+.desk-scene[data-shift="stand"] > .character { animation-direction: reverse; } /* sit_down 거꾸로 = 일어서기 */
 .walk-tag { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 장면 위 글은 판 위(§4.1a) */
 .nametag--away { color: var(--th-label-ink); border-style: dashed; border-color: var(--th-label-muted); } /* 탕비실에 간 빈 책상: 글은 진하게, 비었다는 뜻은 점선(P7a-14 ①) */
 @media (prefers-reduced-motion: reduce) { .walk-layer { display: none; } }
