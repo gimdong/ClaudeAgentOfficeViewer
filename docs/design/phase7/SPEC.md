@@ -3,7 +3,7 @@
 담당 designer(Phase 7 리드). **구현 전 계약 초안**입니다. 화면 글자는 모두 「안」이고 qa 검토 전입니다(규칙 9).
 
 입력:
-- designer-motion `design/p7-motion` 104470b(행 9·10 `walk_down`·`walk_up`, 행 11·12 `ride`·`ride_lurch`(이번 Phase에서 씀, 67ba302 §3.2·§3.3), 엘리베이터 상자 크기 office와 합의 c7f5d02): `docs/design/phase7/motion/MOTION.md`(프레임·층·오라·성능)
+- designer-motion: `docs/design/phase7/motion/MOTION.md`(feat/v2-phase7 06f7766, 원본 design/p7-motion 5584fb1 — 프레임·층·오라·성능, 행 9·10 `walk_down`·`walk_up`, 행 11·12 `ride`·`ride_lurch`, 엘리베이터 상자 크기). 앞으로 MOTION.md는 feat에서만 고칩니다.
 - designer-themes `design/p7-themes` 1cf46fa(74ff0c2 + `--th-*` 이름 맞춤), 3a0b0bc `docs/design/phase7/office-exterior/`(오피스 바깥 시트·`extras.json`·`make-exterior.mjs`): `docs/design/phase7/themes/SPEC.md`(슬롯 대응표·팔레트·대비)
 - designer-office `design/p7-office` b2bfdd4(1ac7d29 + 칸 기준점·`--th-*` 값·포커스 제안): `docs/design/phase7/office/NOTES.md`(장면 칸·크기·움직임·대비), `mock/tokens.js`(낮·밤 색), `mock/contrast.cjs`(AA 검사)
 - 출발점: 본 트리 `docs/design/themes/SPEC.md`(79045fc, 4446d1a) §4·§5 초안. 이 문서가 그것을 대신하고, 그쪽은 더 고치지 않습니다. 그 파일 §3 걷기 띠는 참고로만 두고 시트 규칙은 MOTION.md 하나를 따릅니다.
@@ -163,6 +163,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
   - 걸어 나가는 중에 손들면 책상으로 돌아가 앉아 `hand_up`. 탕비실에 도착한 뒤면 그 자리 `hand_up_stand`.
   - 같은 때 쉼 30초가 된 사람이 셋 이상이면 `idleSince`가 이른 순, 같으면 이름 순으로 2명. 기다리던 사람은 차례가 와도 그사이 일이 시작되었으면 출발하지 않습니다.
   - offline·퇴근은 대상이 아닙니다. 탕비실에 있다가 퇴근하면 걷지 않고 바로 빈 의자입니다.
+  - 탕비실 정원 2명(먼저 출발한 사람이 커피 자리, 다음 사람이 소파), 셋째부터는 책상에서 쉬며 차례를 기다림, 걷기 전 `stand_up`·도착 뒤 `sit_down`(team-lead, P7a-17).
   - 걸어 나간 팀원의 빈 책상에는 점선 이름표 「안」`탕비실 →`(`--th-label-*`, 글자는 `--th-label-ink` 진한 글자, 점선 테두리만 `--th-label-muted`)를 둡니다(P7a-14).
 
 ## 4. 팔레트 토큰
