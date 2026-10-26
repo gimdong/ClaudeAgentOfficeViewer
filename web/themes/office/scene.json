@@ -1,0 +1,420 @@
+{
+  "generator": "make-scene.mjs",
+  "contract": 1,
+  "px": 1,
+  "sheet": {
+    "width": 256,
+    "height": 580,
+    "day": "scene-day.png",
+    "night": "scene-night.png"
+  },
+  "wallVariants": 4,
+  "wallVariant": "floorWallVariant(floorId, 4) — 층 id 해시. room-wall-N과 room-deco-N을 같은 N으로",
+  "anchors": {
+    "desk/chair": {
+      "character": [
+        4,
+        4
+      ],
+      "foot": [
+        17,
+        32
+      ],
+      "coverLine": 28,
+      "note": "책상 앞면 윗선 y28 = 캐릭터 y24 이하를 가림"
+    },
+    "desk-lead/chair-lead": {
+      "size": [
+        84,
+        46
+      ],
+      "character": [
+        4,
+        4
+      ],
+      "foot": [
+        17,
+        32
+      ]
+    },
+    "pantry": {
+      "coffee": [
+        14,
+        44
+      ],
+      "sofa": [
+        57,
+        32
+      ],
+      "order": "pantry-back → 소파 사람 → pantry-front → 커피 자리 사람"
+    },
+    "rest-table": {
+      "character": [
+        9,
+        5
+      ],
+      "foot": [
+        22,
+        33
+      ],
+      "seats": 2
+    },
+    "rest-counter": {
+      "barista": [
+        53,
+        32
+      ]
+    },
+    "lobby-desk": {
+      "guard": [
+        33,
+        56
+      ],
+      "deskTop": 50
+    },
+    "elevator-box": {
+      "size": [
+        30,
+        34
+      ],
+      "character": [
+        2,
+        4
+      ],
+      "foot": [
+        15,
+        32
+      ],
+      "doors": [
+        "elevator-door-0 닫힘",
+        "elevator-door-1 반",
+        "elevator-door-2 열림"
+      ],
+      "doorFrameMs": 100
+    },
+    "team-zone-partition": {
+      "repeatX": 34,
+      "height": 26
+    },
+    "room-wall": {
+      "tile": [
+        24,
+        24
+      ]
+    }
+  },
+  "slots": {
+    "chair": [
+      0,
+      0,
+      64,
+      46
+    ],
+    "chair-lead": [
+      65,
+      0,
+      84,
+      46
+    ],
+    "desk-work": [
+      150,
+      0,
+      64,
+      46
+    ],
+    "desk-ask": [
+      0,
+      47,
+      64,
+      46
+    ],
+    "desk-think": [
+      65,
+      47,
+      64,
+      46
+    ],
+    "desk-rest": [
+      130,
+      47,
+      64,
+      46
+    ],
+    "desk-lead-work": [
+      0,
+      94,
+      84,
+      46
+    ],
+    "desk-lead-ask": [
+      85,
+      94,
+      84,
+      46
+    ],
+    "desk-lead-think": [
+      170,
+      94,
+      84,
+      46
+    ],
+    "desk-lead-rest": [
+      0,
+      141,
+      84,
+      46
+    ],
+    "monitor-work": [
+      85,
+      141,
+      26,
+      23
+    ],
+    "monitor-ask": [
+      112,
+      141,
+      26,
+      23
+    ],
+    "monitor-think": [
+      139,
+      141,
+      26,
+      23
+    ],
+    "monitor-rest": [
+      166,
+      141,
+      26,
+      23
+    ],
+    "pantry-back": [
+      0,
+      188,
+      80,
+      46
+    ],
+    "pantry-front": [
+      81,
+      188,
+      80,
+      46
+    ],
+    "team-zone-partition": [
+      162,
+      188,
+      34,
+      26
+    ],
+    "elevator-box-back": [
+      197,
+      188,
+      30,
+      34
+    ],
+    "elevator-door-0": [
+      0,
+      235,
+      30,
+      34
+    ],
+    "elevator-door-1": [
+      31,
+      235,
+      30,
+      34
+    ],
+    "elevator-door-2": [
+      62,
+      235,
+      30,
+      34
+    ],
+    "elevator-lobby-door": [
+      93,
+      235,
+      22,
+      42
+    ],
+    "elevator-motor": [
+      116,
+      235,
+      24,
+      34
+    ],
+    "rest-counter-back": [
+      0,
+      278,
+      120,
+      46
+    ],
+    "rest-counter-front": [
+      121,
+      278,
+      120,
+      46
+    ],
+    "rest-table": [
+      0,
+      325,
+      44,
+      46
+    ],
+    "lobby-door": [
+      45,
+      325,
+      70,
+      88
+    ],
+    "lobby-desk-back": [
+      116,
+      325,
+      66,
+      88
+    ],
+    "lobby-desk-front": [
+      183,
+      325,
+      66,
+      88
+    ],
+    "lobby-sign": [
+      0,
+      414,
+      40,
+      14
+    ],
+    "lobby-plant": [
+      41,
+      414,
+      24,
+      50
+    ],
+    "roof-tank": [
+      66,
+      414,
+      34,
+      44
+    ],
+    "roof-ac": [
+      101,
+      414,
+      30,
+      22
+    ],
+    "roof-tree": [
+      132,
+      414,
+      32,
+      48
+    ],
+    "roof-bench": [
+      165,
+      414,
+      34,
+      18
+    ],
+    "roof-antenna": [
+      200,
+      414,
+      10,
+      62
+    ],
+    "roof-railing": [
+      211,
+      414,
+      16,
+      12
+    ],
+    "room-wall-0": [
+      228,
+      414,
+      24,
+      24
+    ],
+    "room-wall-1": [
+      0,
+      477,
+      24,
+      24
+    ],
+    "room-wall-2": [
+      25,
+      477,
+      24,
+      24
+    ],
+    "room-wall-3": [
+      50,
+      477,
+      24,
+      24
+    ],
+    "room-deco-0": [
+      75,
+      477,
+      16,
+      16
+    ],
+    "room-deco-1": [
+      92,
+      477,
+      44,
+      26
+    ],
+    "room-deco-2": [
+      137,
+      477,
+      30,
+      22
+    ],
+    "room-deco-3": [
+      168,
+      477,
+      40,
+      30
+    ],
+    "vacant-scaffold": [
+      209,
+      477,
+      40,
+      56
+    ],
+    "vacant-barrier": [
+      0,
+      534,
+      36,
+      20
+    ],
+    "vacant-cone": [
+      37,
+      534,
+      12,
+      16
+    ],
+    "vacant-ladder": [
+      50,
+      534,
+      14,
+      46
+    ],
+    "vacant-bucket": [
+      65,
+      534,
+      12,
+      12
+    ],
+    "vacant-bulb": [
+      78,
+      534,
+      8,
+      30
+    ],
+    "report": [
+      87,
+      534,
+      16,
+      16
+    ]
+  }
+}

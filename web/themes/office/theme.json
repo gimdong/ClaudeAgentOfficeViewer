@@ -1,0 +1,19 @@
+{
+  "id": "office",
+  "name": { "ko": "오피스", "en": "Office" },
+  "contract": 1,
+  "px": 2,
+  "variants": { "day": { "ui": "light" }, "night": { "ui": "dark" } },
+  "pantrySpot": 14,
+  "words": {
+    "floor": { "ko": "{n}층", "en": "Floor {n}" },
+    "lobby": { "ko": "로비", "en": "Lobby" },
+    "rest": { "ko": "카페", "en": "Cafe" },
+    "pantry": { "ko": "탕비실", "en": "Pantry" },
+    "elevator": { "ko": "엘리베이터", "en": "Elevator" },
+    "guard": { "ko": "관리실", "en": "Front desk" },
+    "team": { "ko": "팀 · {team}", "en": "Team · {team}" },
+    "report": { "ko": "보고서", "en": "Report" }
+  },
+  "palette": {}
+}

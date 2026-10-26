@@ -1,0 +1,178 @@
+{
+  "contract": 1,
+  "note": "designer-motion 층 시트(body·outfit·hands·hair-*·glasses·prop)에 palette 슬롯 색만 바꿔 겹침. cap은 cap.png를 hair 위에, apron은 apron.png를 outfit 위에 겹침. extra-<id>.png는 그렇게 겹친 팔레트 판.",
+  "layersFrom": "design/p7-motion docs/design/phase7/motion/layers/",
+  "extras": [
+    {
+      "id": "passerby-1",
+      "role": "행인",
+      "hair": "short",
+      "glasses": false,
+      "rows": [
+        "walk_left",
+        "walk_right"
+      ],
+      "palette": {
+        "C1": "#ffc08a",
+        "C2": "#f08a3c",
+        "C3": "#b8602a",
+        "P1": "#4a5a80",
+        "P2": "#33405e",
+        "K": "#3a3030",
+        "H1": "#8a5a34",
+        "H2": "#5e3a20",
+        "H3": "#3a2412"
+      }
+    },
+    {
+      "id": "passerby-2",
+      "role": "행인",
+      "hair": "bob",
+      "glasses": false,
+      "rows": [
+        "walk_left",
+        "walk_right"
+      ],
+      "palette": {
+        "C1": "#9fe6d2",
+        "C2": "#3fb896",
+        "C3": "#2a8068",
+        "P1": "#8a8f9c",
+        "P2": "#646a78",
+        "K": "#4a4050",
+        "H1": "#f2d27a",
+        "H2": "#d0a848",
+        "H3": "#8a6a28"
+      }
+    },
+    {
+      "id": "passerby-3",
+      "role": "행인",
+      "hair": "spiky",
+      "glasses": true,
+      "rows": [
+        "walk_left",
+        "walk_right"
+      ],
+      "palette": {
+        "C1": "#8a9ad0",
+        "C2": "#4a5a8a",
+        "C3": "#2e3a60",
+        "P1": "#2e3448",
+        "P2": "#1e2232",
+        "K": "#141420",
+        "H1": "#4a4a58",
+        "H2": "#2a2a34",
+        "H3": "#16161e"
+      }
+    },
+    {
+      "id": "customer-1",
+      "role": "카페 손님",
+      "hair": "bob",
+      "glasses": false,
+      "rows": [
+        "idle",
+        "coffee"
+      ],
+      "palette": {
+        "C1": "#a8c8f8",
+        "C2": "#5a8ad8",
+        "C3": "#3a5ea0",
+        "P1": "#5a4a40",
+        "P2": "#3e322a",
+        "K": "#2a2020",
+        "H1": "#c0603a",
+        "H2": "#8a3e22",
+        "H3": "#5a2414"
+      }
+    },
+    {
+      "id": "customer-2",
+      "role": "카페 손님",
+      "hair": "short",
+      "glasses": true,
+      "rows": [
+        "idle",
+        "coffee"
+      ],
+      "palette": {
+        "C1": "#f4f4f4",
+        "C2": "#d8dce4",
+        "C3": "#a0a8b8",
+        "P1": "#3a6a4a",
+        "P2": "#2a4e36",
+        "K": "#3a3030",
+        "H1": "#e8e8ec",
+        "H2": "#b8bcc8",
+        "H3": "#80869a"
+      }
+    },
+    {
+      "id": "barista",
+      "role": "바리스타",
+      "hair": "bob",
+      "glasses": false,
+      "apron": true,
+      "rows": [
+        "sit_down",
+        "coffee"
+      ],
+      "palette": {
+        "C1": "#4a4a5a",
+        "C2": "#2e2e3a",
+        "C3": "#1c1c26",
+        "P1": "#3a3040",
+        "P2": "#2a2230",
+        "K": "#1a1418",
+        "H1": "#4a3020",
+        "H2": "#2e1c12",
+        "H3": "#1a0e08"
+      }
+    },
+    {
+      "id": "visitor",
+      "role": "로비 방문객",
+      "hair": "short",
+      "glasses": false,
+      "rows": [
+        "walk_left",
+        "walk_right"
+      ],
+      "palette": {
+        "C1": "#d8b8f8",
+        "C2": "#9b6ad8",
+        "C3": "#6a44a8",
+        "P1": "#3a3a4a",
+        "P2": "#26262e",
+        "K": "#1a1a20",
+        "H1": "#c08a5a",
+        "H2": "#8a5a34",
+        "H3": "#5a3a1e"
+      }
+    },
+    {
+      "id": "guard",
+      "role": "경비",
+      "hair": "short",
+      "glasses": false,
+      "cap": true,
+      "rows": [
+        "sit_down",
+        "walk_left",
+        "walk_right"
+      ],
+      "palette": {
+        "C1": "#6a7ec8",
+        "C2": "#2f3f78",
+        "C3": "#1e2a54",
+        "P1": "#2a3050",
+        "P2": "#1a1e36",
+        "K": "#101018",
+        "H1": "#3a2a24",
+        "H2": "#241a16",
+        "H3": "#140e0c"
+      }
+    }
+  ]
+}
