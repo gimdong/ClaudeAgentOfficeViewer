@@ -18,17 +18,14 @@ export interface StoredEvent {
 }
 
 const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
-/** 그 에이전트의 마지막 노력 정도(서브에이전트 이벤트는 빼고). 값이 있는 이벤트만 보므로 이상한 값은 이전 값을 지우지 않는다 */
-export function lastEffort(list: readonly StoredEvent[]): EffortLevel | undefined {
-  for (let i = list.length - 1; i >= 0; i--) if (!list[i].sub && list[i].effort) return list[i].effort;
-  return undefined;
-}
 
 export const PER_AGENT = 20;
 const DAY = 86_400_000;
 
 interface SessionBucket {
   agents: Map<string, StoredEvent[]>;
+  /** 에이전트별 마지막 노력 정도 — 원형 버퍼와 따로 둬서 값 없는 이벤트가 이어져도 잃지 않는다(P7a-3) */
+  effort: Map<string, EffortLevel>;
   lastAt: number;
   endedAt?: number;
 }
@@ -64,7 +61,7 @@ export class EventStore {
 
     let bucket = this.sessions.get(sessionId);
     if (!bucket) {
-      bucket = { agents: new Map(), lastAt: now };
+      bucket = { agents: new Map(), effort: new Map(), lastAt: now };
       this.sessions.set(sessionId, bucket);
     }
     bucket.lastAt = now;
@@ -73,7 +70,13 @@ export class EventStore {
     list.push(e);
     if (list.length > this.perAgent) list.splice(0, list.length - this.perAgent);
     bucket.agents.set(agent.name, list);
+    if (e.effort && !e.sub) bucket.effort.set(agent.name, e.effort);
     return true;
+  }
+
+  /** 그 에이전트의 마지막 노력 정도(/hooks/v2·알려진 값·서브에이전트 아님만, Phase 7 Task 4) */
+  effort(sessionId: string, agent: string): EffortLevel | undefined {
+    return this.sessions.get(sessionId)?.effort.get(agent);
   }
 
   agents(sessionId: string): ReadonlyMap<string, readonly StoredEvent[]> {

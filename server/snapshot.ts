@@ -8,7 +8,7 @@ import type { BudgetStore } from "./budget/store";
 import type { DecisionQueue } from "./decisions/queue";
 import { contextInfo } from "./collectors/context";
 import { deriveAgent, lastSentence, type Derived } from "./events/derive";
-import { lastEffort, type EventStore } from "./events/store";
+import type { EventStore } from "./events/store";
 import { readLimits, readStatusline } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
@@ -29,7 +29,7 @@ export interface BuilderOptions {
   /** pid 재사용 확인(Phase 4a B128). 테스트는 가짜를 넣는다. 기본은 실제 ps */
   matchProcStart?: ProcStartMatcher;
   /** hook 이벤트 저장소. 없으면 v1과 같이 파일로만 판정한다 */
-  events?: Pick<EventStore, "agents" | "prune">;
+  events?: Pick<EventStore, "agents" | "prune" | "effort">;
   /** 결정 큐(Phase 2). 연결되면 손들기는 큐의 pending만 본다(Ruling B28·B40) — derive의 decision은 쓰지 않는다 */
   decisions?: Pick<DecisionQueue, "list">;
   /** 층 예산(Phase 2 스펙 5장). 빌드마다 사용량을 관문에 넣고 처음 본 세션을 저장소에 알린다 */
@@ -387,7 +387,7 @@ export class SnapshotBuilder {
     }
     // 노력 정도(Phase 7 Task 4): 리드·팀원 각자의 마지막 v2 값
     for (let i = 0; i < members.length; i++) {
-      const effort = lastEffort(agents?.get(members[i].name) ?? []);
+      const effort = this.opts.events?.effort(conv, members[i].name);
       if (effort) members[i] = { ...members[i], effort };
     }
     const predecessors = duty?.predecessors(s.sessionId).map((p) => ({ name: p.name, retiredAt: iso(p.retiredAt), ...(p.startedAt !== undefined ? { startedAt: iso(p.startedAt) } : {}) })) ?? [];

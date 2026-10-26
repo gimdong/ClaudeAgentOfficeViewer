@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EventStore, lastEffort } from "../../server/events/store";
+import { EventStore } from "../../server/events/store";
 import { SnapshotBuilder } from "../../server/snapshot";
 import { auraRow } from "../../web/themes/aura";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
@@ -14,7 +14,7 @@ afterEach(() => h.cleanup());
 
 const ev = (o: object) => ({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Read", ...o });
 
-describe("EventStore·lastEffort", () => {
+describe("EventStore.effort", () => {
   it("/hooks/v2 이벤트의 effort.level만 담고, 옛 입구·알 수 없는 값·숫자는 버린다(이전 값 유지)", () => {
     const s = new EventStore();
     s.add(ev({ effort: { level: "high" } }), NOW - 400, true);
@@ -22,16 +22,24 @@ describe("EventStore·lastEffort", () => {
     s.add(ev({ effort: { level: "turbo" } }), NOW - 200, true);
     s.add(ev({ effort: { level: 3 } }), NOW - 100, true);
     s.add(ev({}), NOW - 50, true);
-    expect(lastEffort(s.agents("s1").get("team-lead") ?? [])).toBe("high");
+    expect(s.effort("s1", "team-lead")).toBe("high");
     s.add(ev({ effort: { level: "xhigh" } }), NOW, true);
-    expect(lastEffort(s.agents("s1").get("team-lead") ?? [])).toBe("xhigh");
+    expect(s.effort("s1", "team-lead")).toBe("xhigh");
   });
 
   it("서브에이전트 이벤트의 값은 리드 것이 아니다", () => {
     const s = new EventStore();
     s.add(ev({ effort: { level: "low" } }), NOW - 100, true);
     s.add(ev({ effort: { level: "max" }, agent_id: "a0123456789abcdef", agent_type: "Explore" }), NOW, true);
-    expect(lastEffort(s.agents("s1").get("team-lead") ?? [])).toBe("low");
+    expect(s.effort("s1", "team-lead")).toBe("low");
+  });
+
+  it("P7a-3: effort 없는 v2 이벤트가 원형 버퍼(20개)를 넘게 이어져도 마지막 값을 잃지 않는다", () => {
+    const s = new EventStore();
+    s.add(ev({ effort: { level: "max" } }), NOW - 1000, true);
+    for (let i = 0; i < 25; i++) s.add(ev({}), NOW - 900 + i, true);
+    expect(s.agents("s1").get("team-lead")!.some((e) => e.effort)).toBe(false); // 버퍼에서는 밀려났다
+    expect(s.effort("s1", "team-lead")).toBe("max");
   });
 });
 
@@ -42,6 +50,7 @@ describe("스냅샷 Member.effort", () => {
     await h.write("teams/t/config.json", { name: "t", leadSessionId: "s1", members: [{ name: "team-lead", agentType: "team-lead" }, { name: "developer", agentType: "general-purpose" }, { name: "reviewer", agentType: "general-purpose" }] });
     const events = new EventStore();
     events.add(ev({ effort: { level: "high" } }), NOW - 500, true);
+    for (let i = 0; i < 25; i++) events.add(ev({}), NOW - 490 + i, true); // 스냅샷도 Map 값을 쓴다
     events.add(ev({ effort: { level: "low" }, agent_id: "adeveloper-1a2b3c", agent_type: "developer" }), NOW - 400, true);
     const snap = await new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, isAlive: () => true, events }).build(NOW);
     const members = snap.sessions.find((s) => s.id === "s1")!.members;
