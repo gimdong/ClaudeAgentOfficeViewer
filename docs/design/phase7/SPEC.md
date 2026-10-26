@@ -163,6 +163,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
   - 걸어 나가는 중에 손들면 책상으로 돌아가 앉아 `hand_up`. 탕비실에 도착한 뒤면 그 자리 `hand_up_stand`.
   - 같은 때 쉼 30초가 된 사람이 셋 이상이면 `idleSince`가 이른 순, 같으면 이름 순으로 2명. 기다리던 사람은 차례가 와도 그사이 일이 시작되었으면 출발하지 않습니다.
   - offline·퇴근은 대상이 아닙니다. 탕비실에 있다가 퇴근하면 걷지 않고 바로 빈 의자입니다.
+  - 걸어 나간 팀원의 빈 책상에는 점선 이름표 「안」`탕비실 →`(`--th-label-*`, 글자는 `--th-label-ink` 진한 글자, 점선 테두리만 `--th-label-muted`)를 둡니다(P7a-14).
 
 ## 4. 팔레트 토큰
 
@@ -190,6 +191,7 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `--page` | `html, body` 바탕(지금 `--bg`) | `#12111f` | `#eef0f5` |
 | `--field` | 입력칸·글 상자 바탕(지금 `--slab`): `.rp-reason input`, `.qf-other textarea`, `.dlg-input input`, `.rf-revise textarea`, `.rd-free textarea`, `.rp-code`, `.rp-plan`, `.rp-quote`, `.auth-cmd`, `.cmd` 등 | `#0b0a17` | `#f4f1ea` |
 | `--line` | 입력칸·글 상자·스위치 테두리(지금 `--desk`), 꺼진 표시 | `#6a63a0` | `#6b7085` |
+| `--pick` | 고른 항목·목록 줄 hover 바탕(`.qf-opt` 고름, `.pr-opt` 고름, `.rf-row:hover`) | `#1c1a2c` | `#eeecf5` |
 
 기존 토큰으로 되는 곳(새 토큰 없이):
 
@@ -213,6 +215,8 @@ themes 대응표(74ff0c2)와 office 장면 칸(1ac7d29 NOTES §2.2)을 합쳤습
 | `--line` / `--field` | 3 | 3.65 | 4.35 |
 | `--line` / `--page` | 3 | 3.47 | 4.30 |
 | `--yellow` / `--line`(시간 막대 채움) | 3 | 4.90 | 3.54 |
+| `--ink` / `--pick` | 4.5 | — | 13.45 |
+| 강조색 글(`--green` 도장 등) / `--pick` | 4.5 | — | 4.58(`--green`, 가장 낮음) |
 
 - 장면 쪽(`.floor`, `.empty`, `.floor--empty`, `.ground`)은 공통 토큰이 아니라 `--th-*`로 옮깁니다(designer-office와 맞춤, 계약 §4.2).
 - **장면 위 글자**(designer-office T5 판정, #710 보충): 낮에 통로 층 번호(`--shaft` 바탕 1.14:1), 빈 층 사선 위 글, 판 없는 이름·모델 줄이 읽히지 않았습니다. §6 "글자는 늘 판 위"대로, 장면 위 글은 모두 `--th-label-bg` 판 + `--th-label-ink`(보조 글 `--th-label-muted`)로 그립니다. 사선·무늬 위에 글을 바로 두지 않습니다. 단, 빈 층의 [새 세션 시작] 같은 버튼은 장면 글이 아니라 앱 조작이라 공통 UI(`--field`·`--line`·`--ink`)입니다.
