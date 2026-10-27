@@ -1,5 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { ThemeContext } from "../themes/ThemeContext";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Character, LOOKS, memberVariant, type ActionName } from "../office/Character";
 import { SceneCell } from "../office/Desk";
 import { BOARD_MS, DOOR_FRAME_MS, hudMoveMs, LURCH_MS, ridePhases, type ElevatorState, type HudMove } from "./elevatorPlan";
@@ -52,7 +51,7 @@ function doorFrames(opens: number[], closes: number[], total: number): [Range[],
 export function ElevatorCar({ state, hud, riderName }: { state: ElevatorState; hud?: HudMove | null; riderName?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const a = state.active;
-  const moving = !a && hud && hud.from !== hud.to && Date.now() < hud.start + hudMoveMs(hud) + 2 * F ? hud : null;
+  const moving = !a && hud && hud.from !== hud.to && Date.now() < hud.start + hudMoveMs(hud) + 5 * F ? hud : null;
   const [resized, setResized] = useState(0);
   useEffect(() => {
     const tower = ref.current?.parentElement?.parentElement;
@@ -75,14 +74,15 @@ export function ElevatorCar({ state, hud, riderName }: { state: ElevatorState; h
     };
     const [d0, d1, d2] = [".car-door-0", ".car-door-1", ".car-door-2"].map((q) => el.querySelector(q));
     if (moving) {
+      // 닿으면 문이 반 → 열림(그 뒤 스크롤), 탈 사람이 없으니 열림 → 반 → 닫힘으로 닫는다(designer-motion 2b M1). 끝 그림이 닫힘이라 다시 그리지 않아도 열린 채 남지 않음(reviewer 2b m1)
       const ms = hudMoveMs(moving);
-      const total = ms + 2 * F;
+      const total = ms + 5 * F;
       const [y0, y1] = [yOf(layer, moving.from), yOf(layer, moving.to)];
       el.style.transform = t(y1);
       el.animate?.([{ transform: t(y0), offset: 0, easing: `steps(${Math.abs(moving.to - moving.from)}, end)` }, { transform: t(y1), offset: ms / total }, { transform: t(y1), offset: 1 }], { duration: total, fill: "forwards" });
-      showDuring(d0, [[0, ms]], total);
-      showDuring(d1, [[ms, ms + F]], total);
-      showDuring(d2, [[ms + F, total]], total);
+      showDuring(d0, [[0, ms], [ms + 4 * F, total]], total);
+      showDuring(d1, [[ms, ms + F], [ms + 3 * F, ms + 4 * F]], total);
+      showDuring(d2, [[ms + F, ms + 3 * F]], total);
       sync(moving.start);
       return;
     }
@@ -169,26 +169,13 @@ export function ElevatorCar({ state, hud, riderName }: { state: ElevatorState; h
 }
 
 /**
- * 로비 층수 표시 「2F ▲」(SPEC §2 lobby — 칸 위치를 따라가는 DOM). 원본은 계획 상태: 서 있으면 상자가 있는 층,
- * 움직이는 중(탑승·HUD)이면 갈 층과 방향. 로비 통로의 "로비" 글 바로 아래(문 그림 윗부분)에 판(--th-label-*)으로. 장식(층 이동은 HUD 버튼이 함)
+ * 로비 층수 표시 「2F ▲」 글(SPEC §2 lobby — 칸 위치를 따라가는 DOM, 자리는 T7 LobbyFloor indicator). 원본은 계획 상태:
+ * 서 있으면 상자가 있는 층, 움직이는 중(탑승·HUD)이면 갈 층과 방향
  */
-export function LiftNo({ state, hud }: { state: ElevatorState; hud?: HudMove | null }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const { theme } = useContext(ThemeContext);
-  const name = (n: number) => (n === CAFE_FLOOR ? theme.words.rest.ko : n === LOBBY_FLOOR ? theme.words.lobby.ko : `${n}F`);
+export function liftText(state: ElevatorState, hud: HudMove | null | undefined, words: { rest: string; lobby: string }): string {
+  const name = (n: number) => (n === CAFE_FLOOR ? words.rest : n === LOBBY_FLOOR ? words.lobby : `${n}F`);
   const a = state.active;
   const moving = !a && hud && hud.from !== hud.to && Date.now() < hud.start + hudMoveMs(hud) ? hud : null;
   const [from, to] = a ? [a.pick, a.to] : moving ? [moving.from, moving.to] : [state.car, state.car];
-  const text = from === to ? name(to) : `${name(to)} ${to > from ? "▲" : "▼"}`;
-  useLayoutEffect(() => {
-    const el = ref.current!;
-    const layer = el.parentElement!;
-    const label = layer.parentElement?.querySelector('.shaft[data-lift="lobby"] .fl-no');
-    if (label) el.style.transform = `translateY(${Math.round(label.getBoundingClientRect().bottom - layer.getBoundingClientRect().top + 4)}px)`;
-  });
-  return (
-    <span ref={ref} className="lift-no" data-testid="lift-no">
-      {text}
-    </span>
-  );
+  return from === to ? name(to) : `${name(to)} ${to > from ? "▲" : "▼"}`;
 }

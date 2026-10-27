@@ -49,6 +49,23 @@ describe("HUD 층 바로가기와 장면 엘리베이터", () => {
     expect(liftNo()).toBe("2F");
   });
 
+  it("빠르게 두 번 누르면 마지막 층으로만 스크롤한다(앞 지연 스크롤은 지움)", () => {
+    const s = sessions();
+    render(
+      <>
+        <Elevator sessions={s} />
+        <Building sessions={s} />
+      </>,
+    );
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    fireEvent.click(screen.getByRole("button", { name: "2층 beta" }));
+    act(() => vi.advanceTimersByTime(130));
+    fireEvent.click(screen.getByRole("button", { name: "1층 alpha" }));
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(scroll.mock.contexts).toEqual([document.getElementById("floor-a")]);
+  });
+
   it("움직임 줄이기면 상자는 바로 그 층, 스크롤도 바로", () => {
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), media: q }));
     const s = sessions();

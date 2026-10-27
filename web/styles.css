@@ -861,4 +861,3 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-decoration: underl
 /* 화면 밖 카페는 걷지 않고 바로 자리(탕비실과 같은 규칙, reviewer T7) */
 .floor--offscreen .cafe-sitter { animation: none !important; }
 .floor--offscreen .walk-layer { display: none; }
-.lift-no { position: absolute; left: 50%; top: 0; translate: -50% 0; white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 로비 「2F ▲」(SPEC §2 lobby), 판 위(§4.1a) */

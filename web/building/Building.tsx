@@ -8,12 +8,13 @@ import { remainingOf } from "../hud/remaining";
 import { BuildingInfo, BUILDING_TEXT } from "./BuildingInfo";
 import { CafeFloor, LobbyFloor, RoofRow, Sky, Street } from "./Exterior";
 import { Floor } from "./Floor";
-import { ElevatorCar, LiftNo } from "./ElevatorCar";
+import { ElevatorCar, liftText } from "./ElevatorCar";
 import { CafeContext, cafeKey, useCafe } from "./useCafe";
 import { Character, LOOKS, memberVariant } from "../office/Character";
 import { Walker, walkMsOf } from "../office/Pantry";
 import { WALK_MS } from "../office/pantryPlan";
 import { useReducedMotion } from "../office/usePantry";
+import { ThemeContext } from "../themes/ThemeContext";
 import { DOOR_FRAME_MS, ridePhases } from "./elevatorPlan";
 import { VacantFloor } from "./VacantFloor";
 
@@ -53,6 +54,7 @@ export function Building({
   const floors = [...h.visible].sort((a, b) => b.floor - a.floor);
   // 카페 오래 쉬기와 엘리베이터(Phase 7b Task 8). ponytail: 탑승 행(11·12)은 오피스 시트에 늘 있다(없는 장은 오피스 것) — 행을 빼는 테마가 생기면 매니페스트 표시로
   const reduced = useReducedMotion();
+  const { theme } = useContext(ThemeContext);
   // 카페 방 안 자리 위치(걷는 층 x·y). 문 = 방 왼쪽 끝
   const [cafeGeo, setCafeGeo] = useState<Array<[number, number]>>([]);
   useLayoutEffect(() => {
@@ -177,11 +179,10 @@ export function Building({
             {cafeWalkers}
           </div>
         </CafeFloor>
-        <LobbyFloor />
+        <LobbyFloor indicator={<span data-testid="lift-no">{liftText(cafe.elevator, reduced ? null : cafe.hud, { rest: theme.words.rest.ko, lobby: theme.words.lobby.ko })}</span>} />
         {/* 엘리베이터 상자(통로 위, Task 8). 위치의 원본은 계획 상태 */}
         <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer">
           <ElevatorCar state={cafe.elevator} hud={reduced ? null : cafe.hud} riderName={memberOf(cafe.elevator.active?.name)?.name} />
-          <LiftNo state={cafe.elevator} hud={reduced ? null : cafe.hud} />
         </div>
       </div>
       {(h.count > 0 || h.reloading) && (
