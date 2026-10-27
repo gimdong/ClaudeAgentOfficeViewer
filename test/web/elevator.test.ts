@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOOR_FRAME_MS, HUD_FLOOR_MS, HUD_MAX_MS, hudMoveMs, nextElevatorChange, planElevator, RIDE_FLOOR_MS, rideMs, type ElevatorState, type Ride } from "../../web/building/elevatorPlan";
+import { BOARD_MS, DOOR_FRAME_MS, HUD_FLOOR_MS, HUD_MAX_MS, hudMoveMs, nextElevatorChange, planElevator, RIDE_FLOOR_MS, rideMs, type ElevatorState, type Ride } from "../../web/building/elevatorPlan";
 import { ACTIONS } from "../../web/office/Character";
 import { CAFE_SEATS, cafeGuests, LONG_IDLE_MS, nextGuestChange, planPantry, WALK_MS, type PantryMember, type PantryState } from "../../web/office/pantryPlan";
 
@@ -14,8 +14,17 @@ const start = (car = 0): ElevatorState => ({ car, settled: 0, done: {} });
 describe("elevatorPlan", () => {
   it("상수는 계획 값, 문은 3프레임, 출발·도착 흔들림은 시트 ride_lurch 한 바퀴", () => {
     expect([RIDE_FLOOR_MS, HUD_FLOOR_MS, HUD_MAX_MS, DOOR_FRAME_MS]).toEqual([2_640, 120, 600, 100]);
-    // 빈 상자가 3층 → 2층(1층) + 태우고 2층 → 카페(-1, 3층) = 4층 이동, 문 세 번(열림·닫힘·도착 열림), 흔들림 두 번
-    expect(rideMs(3, out("a", 2, 0))).toBe(4 * 2_640 + 3 * 3 * DOOR_FRAME_MS + 2 * ACTIONS.ride_lurch.ms);
+    // 빈 상자가 3층 → 2층(1층) + 태우고 2층 → 카페(-1, 3층) = 4층 이동, 문 세 번(열림·닫힘·도착 열림), 흔들림 두 번, 타고 내리는 걸음 4프레임씩
+    expect(BOARD_MS).toBe(4 * 120);
+    expect(rideMs(3, out("a", 2, 0))).toBe(4 * 2_640 + 3 * 3 * DOOR_FRAME_MS + 2 * ACTIONS.ride_lurch.ms + 2 * BOARD_MS);
+  });
+
+  it("문 앞에 닿기 전(enq가 아직)이면 상자가 비어도 타지 않고, 닿는 시각이 다음 바뀔 시각", () => {
+    const wants = [out("a", 1, T0 + 2_500)];
+    const s = planElevator(start(0), wants, null, T0 + 7);
+    expect(s.active).toBeUndefined();
+    expect(nextElevatorChange(s, wants, null, T0 + 7)).toBe(T0 + 2_500);
+    expect(planElevator(s, wants, null, T0 + 2_500).active?.name).toBe("a");
   });
 
   it("HUD 층 이동 시간 = min(층 수 × 120ms, 600ms)", () => {

@@ -5,7 +5,7 @@ import type { Member } from "../../src/shared/types";
 import { Building } from "../../web/building/Building";
 import { rideMs } from "../../web/building/elevatorPlan";
 import { CAFE_FLOOR, LOBBY_FLOOR } from "../../web/building/useCafe";
-import { LONG_IDLE_MS } from "../../web/office/pantryPlan";
+import { LONG_IDLE_MS, WALK_MS } from "../../web/office/pantryPlan";
 import { makeMember, makeSession } from "./fixtures";
 
 // Phase 7b Task 8 2단계(계약 SPEC §2b, MOTION §3.2·§3.3): 1시간 쉰 팀원이 엘리베이터로 카페에 가고, 일·손들기면 엘리베이터로 돌아온다.
@@ -19,7 +19,8 @@ const rider = () => document.querySelector(".elevator-car")?.getAttribute("data-
 const seated = () => [...document.querySelectorAll(".cafe-seat")].map((s) => s.querySelector(".character")?.getAttribute("data-name") ?? null);
 const tagOf = (n: string) => screen.getByTestId(`desk-${n}`).querySelector(".nametag")!.textContent;
 const step = (ms: number) => act(() => vi.advanceTimersByTime(ms));
-// 1층 → 카페: 상자가 로비에서 1층으로 올라와 태우고 카페로(로비 -1, 카페 0)
+// 문 앞에 닿아야 탄다(jsdom은 배치가 없어 걷는 시간은 기본 WALK_MS). 1층 → 카페: 상자가 로비에서 1층으로 올라와 태우고 카페로(로비 -1, 카페 0)
+const TO_DOOR = WALK_MS + 10;
 const UP = rideMs(LOBBY_FLOOR, { name: "", from: 1, to: CAFE_FLOOR, dir: "out", enq: 0 });
 
 beforeEach(() => {
@@ -38,6 +39,8 @@ describe("카페 오래 쉬기(엘리베이터)", () => {
     const label = screen.getByTestId("desk-dev").getAttribute("aria-label");
     step(10);
     expect(tagOf("dev")).toContain("카페 ↑");
+    expect(rider()).toBeNull(); // 아직 문까지 걷는 중
+    step(TO_DOOR);
     expect(rider()).toBe("s1\ndev");
     step(UP);
     expect(rider()).toBeNull();
@@ -50,12 +53,12 @@ describe("카페 오래 쉬기(엘리베이터)", () => {
 
   it("카페에서 손들면 책상 결정 표시는 첫 렌더부터, 사람은 엘리베이터로 돌아온다(카페에서 손들지 않음)", () => {
     const { rerender } = render(<Building sessions={[floor1([rest("dev", LONG_IDLE_MS + 700)])]} />);
-    step(10);
+    step(TO_DOOR);
     step(UP);
     expect(seated()).toEqual(["dev", null]);
     rerender(<Building sessions={[floor1([makeMember({ name: "dev", state: "decision", decision: { since: ago(0) } as Member["decision"] })])]} />);
     expect(screen.getByTestId("desk-dev").className).toContain("desk--decision");
-    step(10);
+    step(TO_DOOR); // 자리에서 문까지 걸은 뒤 탄다
     expect(rider()).toBe("s1\ndev");
     expect(document.querySelector(".cafe-seat .character")?.getAttribute("data-action")).not.toBe("hand_up");
   });
@@ -63,7 +66,7 @@ describe("카페 오래 쉬기(엘리베이터)", () => {
   it("셋째의 1시간이 다른 사람이 타는 중에 와도(자리 꽉 참, 바뀐 것 없음) 탑승은 끝까지 이어진다(7a C1 교훈)", () => {
     // a·b는 이미 1시간, c는 a가 타는 도중 1시간이 된다. 카페 자리는 둘이라 c는 받지 못한다
     render(<Building sessions={[floor1([rest("a", LONG_IDLE_MS + 900), rest("b", LONG_IDLE_MS + 400), rest("c", LONG_IDLE_MS - 2_300)])]} />);
-    step(10);
+    step(TO_DOOR);
     expect(rider()).toBe("s1\na");
     for (let t = 0; t < UP + 50; t += 250) step(250);
     expect(seated()[0]).toBe("a");

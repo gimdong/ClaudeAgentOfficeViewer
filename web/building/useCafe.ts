@@ -18,8 +18,8 @@ export interface CafeView {
   hud: HudMove | null;
   /** 카페 자리마다 그 자리 사람(cafeKey)과 단계: cafe = 내려서 자리로 걷거나 앉음, from-cafe = 자리에서 문으로 걷거나 상자를 기다림 */
   seats: Array<{ key: string; spot: "cafe" | "from-cafe"; since: number } | undefined>;
-  /** 층이 자기 탕비실 계획을 알린다(누가 카페로 가는지·돌아가는지) */
-  report(floorId: string, state: PantryState): void;
+  /** 층이 자기 탕비실 계획을 알린다(누가 카페로 가는지·돌아가는지). atDoor = 카페로 가는 사람이 엘리베이터 문 앞에 닿는 시각 */
+  report(floorId: string, state: PantryState, atDoor: Record<string, number>): void;
 }
 export const CafeContext = createContext<CafeView | null>(null);
 
@@ -27,21 +27,30 @@ export const CafeContext = createContext<CafeView | null>(null);
  * 건물의 카페 자리와 엘리베이터(Phase 7b Task 8, SPEC §2b). 층들이 알린 계획에서 탈 사람을 모아 planElevator로 한 번에 1명씩 태운다.
  * 다음 바뀔 시각(1시간 됨·내림)에 타이머가 깨면, 계획이 바뀌지 않아도(자리가 꽉 차 기다림 등) 효과를 다시 돌려 다음 타이머를 건다(7a C1)
  */
-export function useCafe(sessions: SessionView[], canRide: boolean, reduced: boolean): CafeView {
-  const [spots, setSpots] = useState<Record<string, PantryState>>({});
-  const report = useCallback((id: string, s: PantryState) => setSpots((p) => (p[id] === s ? p : { ...p, [id]: s })), []);
+/** cafeWalkMs = 카페 자리마다 자리 ↔ 문 걷는 시간(돌아갈 사람이 문 앞에 닿는 때) */
+export function useCafe(sessions: SessionView[], canRide: boolean, reduced: boolean, cafeWalkMs: number[] = []): CafeView {
+  const [spots, setSpots] = useState<Record<string, { state: PantryState; atDoor: Record<string, number> }>>({});
+  const report = useCallback(
+    (id: string, state: PantryState, atDoor: Record<string, number>) => setSpots((p) => (p[id]?.state === state && JSON.stringify(p[id].atDoor) === JSON.stringify(atDoor) ? p : { ...p, [id]: { state, atDoor } })),
+    [],
+  );
   const people = sessions.flatMap((s) =>
     s.members.map((m) => {
-      const v = spots[s.id]?.[m.name];
+      const v = spots[s.id]?.state[m.name];
       const idle = m.state === "idle" && m.lastActivityAt ? Date.parse(m.lastActivityAt) : NaN;
-      return { name: cafeKey(s.id, m.name), state: m.state, duty: m.duty, idleSince: Number.isFinite(idle) ? idle : undefined, spot: v?.spot ?? ("desk" as const), since: v?.since ?? 0, floor: s.floor };
+      return { name: cafeKey(s.id, m.name), state: m.state, duty: m.duty, idleSince: Number.isFinite(idle) ? idle : undefined, spot: v?.spot ?? ("desk" as const), since: v?.since ?? 0, floor: s.floor, atDoor: spots[s.id]?.atDoor[m.name] };
     }),
   );
+  // 엘리베이터는 문 앞에 닿은 사람만 태운다(enq = 문 앞 도착, MOTION §3.2): 층에서 걸어오는 사람은 층이 알린 시각, 카페에서 돌아갈 사람은 자리 → 문 걷기 뒤
+  const [plan, setPlan] = useState(() => ({ guests: cafeGuests({}, people, Date.now(), canRide), elevator: { car: LOBBY_FLOOR, settled: 0, done: {} } as ElevatorState }));
   const wants: Ride[] = people.flatMap((p): Ride[] =>
-    p.spot === "to-cafe" ? [{ name: p.name, from: p.floor, to: CAFE_FLOOR, dir: "out", enq: p.since }] : p.spot === "from-cafe" ? [{ name: p.name, from: CAFE_FLOOR, to: p.floor, dir: "back", enq: p.since }] : [],
+    p.spot === "to-cafe"
+      ? [{ name: p.name, from: p.floor, to: CAFE_FLOOR, dir: "out", enq: p.atDoor ?? p.since }]
+      : p.spot === "from-cafe"
+        ? [{ name: p.name, from: CAFE_FLOOR, to: p.floor, dir: "back", enq: p.since + (cafeWalkMs[plan.guests[p.name] ?? 0] ?? 0) }]
+        : [],
   );
   const key = JSON.stringify([people, wants, canRide]);
-  const [plan, setPlan] = useState(() => ({ guests: cafeGuests({}, people, Date.now(), canRide), elevator: { car: LOBBY_FLOOR, settled: 0, done: {} } as ElevatorState }));
   const [wake, setWake] = useState(0);
   // HUD 층 버튼: 상자가 빈 때만 그 층으로 간다(탄 사람이 있으면 스크롤만). 움직임 줄이기면 그 자리에 바로(이동 0)
   const [hud, setHud] = useState<HudMove | null>(null);

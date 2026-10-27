@@ -13,7 +13,7 @@ import { PantryScene, SOFA_DX, Walker, walkMsOf } from "../office/Pantry";
 import { WALK_MS, type PantryMember } from "../office/pantryPlan";
 import { usePantry, useReducedMotion } from "../office/usePantry";
 import { CafeContext, cafeKey } from "./useCafe";
-import { DOOR_FRAME_MS, RIDE_FLOOR_MS } from "./elevatorPlan";
+import { DOOR_FRAME_MS, ridePhases } from "./elevatorPlan";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
@@ -143,12 +143,22 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const offscreen = useOffscreen(sectionRef);
   const pantry = usePantry(planMembers, useReducedMotion() || offscreen);
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
+  // 카페로 가는 사람: 책상(또는 떠난 탕비실 자리)에서 엘리베이터 문까지 걷는 길과 문 앞에 닿는 때(그 뒤에야 탄다)
+  const toDoor = (name: string) => {
+    const s = pantry[name];
+    const g = geo[name] ?? [0, 0, 0];
+    const from = s?.seat ? g[1] + (s.seat === "sofa" ? SOFA_DX : 0) : g[0];
+    return { from, ms: walkMsOf(Math.abs(from - DOOR_X)) ?? WALK_MS };
+  };
+  const atDoor: Record<string, number> = {};
+  for (const [n, s] of Object.entries(pantry)) if (s.spot === "to-cafe") atDoor[n] = s.since + toDoor(n).ms;
+  const atDoorKey = JSON.stringify(atDoor);
   const report = cafe?.report;
-  useEffect(() => report?.(session.id, pantry), [report, session.id, pantry]);
+  useEffect(() => report?.(session.id, pantry, JSON.parse(atDoorKey)), [report, session.id, pantry, atDoorKey]);
   // 자리 없이 돌아오는 걷기 = 엘리베이터에서 내려 오는 길이라 "카페 ↑" 그대로
   const awayOf = (name: string) => (spotOf(name) === "desk" ? false : ["to-cafe", "cafe", "from-cafe"].includes(spotOf(name)) || (spotOf(name) === "walking-back" && !pantry[name].seat) ? "cafe" : true);
-  // 엘리베이터 문에 들어가는 때: 상자가 태우러 와서 문이 다 열린 뒤(MOTION §3.2)
-  const boardAt = (name: string) => (active?.name === cafeKey(session.id, name) ? active.start + Math.abs(active.from - active.pick) * RIDE_FLOOR_MS + 3 * DOOR_FRAME_MS : undefined);
+  // 층에서 사라지는 때: 상자가 태우러 와서 문이 다 열린 뒤 상자 안으로 걸어 들어갈 때(MOTION §3.2, 그다음은 상자 안 그림)
+  const boardAt = (name: string) => (active?.name === cafeKey(session.id, name) ? active.start + ridePhases(active.pick, active).pick + 3 * DOOR_FRAME_MS : undefined);
   // 걷는 사람의 탕비실 쪽 끝 = 계획기가 출발 때 정한 자리(I1). 걷는 시간도 그 자리까지 거리(속도 3칸/120ms 고정)
   const seatX = (name: string) => (pantry[name]?.seat === "sofa" ? SOFA_DX : 0);
   const walkMs = (name: string) => {
@@ -280,8 +290,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
               // 카페로: 책상(또는 떠난 탕비실 자리)에서 엘리베이터 문까지 걷고, 문이 열리면 상자에 탄다(그때 숨음). 돌아오면 문에서 책상까지
               if (s?.spot === "to-cafe") {
                 if ((boardAt(m.name) ?? Infinity) <= Date.now()) return null;
-                const from = s.seat ? seat : g[0];
-                return <Walker key={m.name} member={m} from={from} to={DOOR_X} y={g[2]} since={s.since} ms={walkMsOf(Math.abs(from - DOOR_X)) ?? WALK_MS} out hideAt={boardAt(m.name)} />;
+                const d = toDoor(m.name);
+                return <Walker key={m.name} member={m} from={d.from} to={DOOR_X} y={g[2]} since={s.since} ms={d.ms} out hideAt={boardAt(m.name)} />;
               }
               if (s?.spot !== "walking-out" && s?.spot !== "walking-back") return null;
               const out = s.spot === "walking-out";
