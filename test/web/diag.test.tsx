@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticsChip } from "../../web/diag/DiagnosticsChip";
 import { DiagnosticsPanel } from "../../web/diag/DiagnosticsPanel";
-import { hookLine } from "../../web/diag/format";
+import { eventCounts, hookLine } from "../../web/diag/format";
 import { Hud } from "../../web/hud/Hud";
 import type { DiagnosticsSummary } from "../../src/shared/types";
 import { makeSnapshot } from "./fixtures";
@@ -67,6 +67,21 @@ describe("hookLine", () => {
   });
 });
 
+describe("eventCounts", () => {
+  it("이벤트별 수를 이름순으로, Notification 아래에 종류별 수를 붙인다. byNotification이 없는 옛 서버도 견딘다", () => {
+    const h = { ...summary().hooks, byEvent: { Stop: 2, Notification: 3, PreToolUse: 7 }, byNotification: { worker_permission_prompt: 2, idle_prompt: 1 } };
+    expect(eventCounts(h)).toEqual([
+      ["Notification", 3],
+      ["Notification(idle_prompt)", 1],
+      ["Notification(worker_permission_prompt)", 2],
+      ["PreToolUse", 7],
+      ["Stop", 2],
+    ]);
+    expect(eventCounts({ ...h, byNotification: undefined })).toEqual([["Notification", 3], ["PreToolUse", 7], ["Stop", 2]]);
+    expect(eventCounts(summary().hooks)).toEqual([]);
+  });
+});
+
 describe("Hud의 진단 칩과 패널", () => {
   it("칩을 누르면 패널이 열리고 doctor 항목이 상태별로 보인다(fail이 위, ok는 fix 없이)", async () => {
     render(<Hud snapshot={makeSnapshot()} live />);
@@ -93,6 +108,21 @@ describe("Hud의 진단 칩과 패널", () => {
     render(<Hud snapshot={makeSnapshot()} live />);
     fireEvent.click(await screen.findByRole("button", { name: "진단 열기" }));
     expect(await screen.findByText("최근 10분 5건, 마지막 수신 2분 전, 거부 0건")).toBeTruthy();
+  });
+
+  it("hook 수신 아래에 이벤트별 수와 팀원 권한 질문 안내", async () => {
+    diag = () => json(summary({ hooks: { ...summary().hooks, byEvent: { Notification: 2 }, byNotification: { worker_permission_prompt: 2 } } }));
+    render(<Hud snapshot={makeSnapshot()} live />);
+    fireEvent.click(await screen.findByRole("button", { name: "진단 열기" }));
+    const panel = await screen.findByRole("dialog", { name: "진단" });
+    const counts = await waitFor(() => {
+      const li = [...panel.querySelectorAll(".dp-count")];
+      expect(li.length).toBe(2);
+      return li;
+    });
+    expect(counts.map((x) => x.textContent)).toEqual(["Notification2건", "Notification(worker_permission_prompt)2건"]);
+    expect(panel.textContent).toContain("Notification(worker_permission_prompt)");
+    expect(panel.querySelector(".dp-hook-note")?.textContent).toBe("Notification(worker_permission_prompt) 수가 늘었다면 팀원이 권한을 물은 것입니다. 이 질문은 대시보드에서 답할 수 없고, 리드의 터미널에서 답합니다.");
   });
 
   it("오류가 있으면 칩에 빨간 점(요약을 가져온 뒤)", async () => {

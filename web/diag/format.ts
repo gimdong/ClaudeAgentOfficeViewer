@@ -26,5 +26,16 @@ export function hookLine(h: HookStatsView, now = Date.now()): string {
   return `최근 10분 ${h.last10min}건, ${h.lastAt ? `마지막 수신 ${ago(h.lastAt, now)}` : "마지막 수신 없음"}, 거부 ${rejected}건`;
 }
 
+/** 진단 탭 hook 수신 아래 안내(beta.20, qa 확정). 설명서 테스트가 이 글자와 대조한다 */
+export const HOOK_NOTE = "Notification(worker_permission_prompt) 수가 늘었다면 팀원이 권한을 물은 것입니다. 이 질문은 대시보드에서 답할 수 없고, 리드의 터미널에서 답합니다.";
+
+/** 이벤트별 수(이름순). Notification 바로 아래에 notification_type별 수를 "Notification(종류)"로 붙인다 */
+export function eventCounts(h: HookStatsView): Array<[string, number]> {
+  const kinds = Object.entries(h.byNotification ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  return Object.entries(h.byEvent)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([name, n]): Array<[string, number]> => [[name, n], ...(name === "Notification" ? kinds.map(([k, c]): [string, number] => [`Notification(${k})`, c]) : [])]);
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 export const hhmm = (ms: number) => `${pad(new Date(ms).getHours())}:${pad(new Date(ms).getMinutes())}`;

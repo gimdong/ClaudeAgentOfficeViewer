@@ -205,6 +205,7 @@ export function createApp(
     const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
     const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
     opts.stats?.accept(input.hook_event_name as string);
+    if (!legacy && input.hook_event_name === "Notification") opts.stats?.acceptNotification(input.notification_type);
     try {
       // 버전 문자열은 부르는 쪽이 40자로 자른다(스냅샷이 커지지 않게)
       opts.onPluginVersion?.(pluginVersion, legacy, input.session_id as string);

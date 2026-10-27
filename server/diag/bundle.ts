@@ -56,9 +56,13 @@ const EMPTY_POLICY = (): PolicyStats => ({ targets: 0, rulesByKind: { lead: 0, a
 
 const DAY = 86_400_000;
 const OFFICE_LOG = /^office-(\d{4})-(\d{2})-(\d{2})\.log$/; // 날짜는 UTC(로그 줄의 t와 같다)
-const INSTALL_LOG = /^install-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.log$/; // Ruling B10, 로컬 시각
+const INSTALL_LOG = /^install-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.log$/; // Ruling B10, 설치 스크립트의 로컬 시각
 
-/** 로그 파일 이름에서 [시작 시각, 정렬용 시각]. 실행 로그는 그날 전체를 담으므로 정렬은 그날 끝으로 한다 */
+/**
+ * 로그 파일 이름에서 [시작 시각, 정렬용 시각]. 실행 로그는 그날 전체를 담으므로 정렬은 그날 끝으로 한다.
+ * 두 종류 모두 이름의 날짜를 UTC로 읽는다(beta.20). 그래야 이 프로세스의 TZ와 관계없이 고르는 파일·순서가 같다.
+ * ponytail: 설치 로그 이름은 로컬 시각이라 실제와 최대 ±14시간 어긋난다. 7일 범위·정렬에는 지장 없음. 정확해야 하면 설치 스크립트가 UTC 이름을 쓰게 바꾼다
+ */
 function logTime(name: string): [number, number] | null {
   const o = OFFICE_LOG.exec(name);
   if (o) {
@@ -67,7 +71,7 @@ function logTime(name: string): [number, number] | null {
   }
   const i = INSTALL_LOG.exec(name);
   if (i) {
-    const t = new Date(+i[1], +i[2] - 1, +i[3], +i[4], +i[5], +i[6]).getTime();
+    const t = Date.UTC(+i[1], +i[2] - 1, +i[3], +i[4], +i[5], +i[6]);
     return [t, t];
   }
   return null;
