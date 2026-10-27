@@ -119,10 +119,9 @@ describe("buildBundle", () => {
   });
 
   it("설치 로그(install-YYYYMMDD-HHMMSS.log)도 넣고, 경로·비밀값은 가리며, 8일 전 것은 뺀다", async () => {
-    const local = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
-    const recent = `install-${local(new Date(NOW - 3_600_000))}.log`;
-    const old = `install-${local(new Date(NOW - 8 * 86_400_000))}.log`;
+    // 이름은 고정값(프로세스 TZ에 기대지 않게)
+    const recent = "install-20261001-020000.log";
+    const old = "install-20260923-020000.log";
     writeFileSync(
       join(logDir, recent),
       [
@@ -153,6 +152,27 @@ describe("buildBundle", () => {
     const size = Buffer.byteLength(JSON.stringify(all, null, 2));
     const cut = await base({ maxBytes: size - 100 });
     expect(cut.logs.map((l) => l.file)).toEqual(["office-2026-10-01.log", "install-20260930-120000.log"]);
+  });
+
+  it("로그 이름의 날짜는 종류와 관계없이 UTC로 읽는다 — 프로세스 TZ가 달라도 고르는 파일과 순서가 같다", async () => {
+    writeLog("2026-09-29", [line("2026-09-29T01:00:00.000Z", "a")]);
+    writeLog("2026-10-01", [line("2026-10-01T01:00:00.000Z", "b")]);
+    writeFileSync(join(logDir, "install-20260930-120000.log"), "x\n");
+    // 기준(NOW-7일 = 09-24T03:00Z) 바로 앞뒤
+    writeFileSync(join(logDir, "install-20260924-010000.log"), "x\n");
+    writeFileSync(join(logDir, "install-20260924-050000.log"), "x\n");
+    const saved = process.env.TZ;
+    try {
+      for (const tz of ["Pacific/Kiritimati", "UTC", "America/Los_Angeles"]) {
+        process.env.TZ = tz;
+        expect(new Date(Date.UTC(2026, 0, 1)).getHours(), tz).toBe(tz === "UTC" ? 0 : tz === "Pacific/Kiritimati" ? 14 : 16); // TZ가 실제로 바뀌었는지
+        const b = await base();
+        expect(b.logs.map((l) => l.file), tz).toEqual(["office-2026-10-01.log", "install-20260930-120000.log", "office-2026-09-29.log", "install-20260924-050000.log"]);
+      }
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
   });
 
   it("로그 폴더가 없으면 로그 없이 만든다", async () => {
