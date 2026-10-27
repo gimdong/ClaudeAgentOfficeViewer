@@ -17,6 +17,7 @@
    - 사용자 답(allow·deny)을 `permission_response`로 팀원 메일함에 돌려준다.
    - 이 길에는 `executePermissionRequestHooks`(PermissionRequest hook 실행) 호출이 없다. 리더 자신의 도구 호출 길에만 있다.
    → **대시보드가 PermissionRequest hook으로 붙잡는 결정 대기열에 팀원 질문이 들어올 길이 없다.** 사용자가 본 증상과 맞다.
+   - 범위(reviewer #742): 정적으로 확인한 것은 이 구간에 **직접** 호출이 없다는 데까지다. 대화상자 큐를 거친 간접 호출이 없다는 것은 실측 항목 3에서 닫는다.
 3. **[확인] 대신 리더는 Notification hook을 부른다.** 같은 코드가 대화상자를 띄운 뒤, 어떤 조건(코드 안의 두 플래그, 뜻은 미확인)이 맞으면 알림 함수를 부른다. 그 함수는 Notification hook 입력 `{hook_event_name:"Notification", message:"<팀원> needs permission for <도구>", notification_type:"worker_permission_prompt"}`를 실행한 뒤 터미널 알림을 띄운다. 이 hook은 **리더 세션의 session_id**로 온다(리더 프로세스에서 실행). 네트워크 접근 질문은 같은 종류로 `"<팀원> needs network access to <호스트>"`이다.
    - 참고로 리더 자신의 권한 질문도 일정 시간 답이 없으면 `notification_type:"permission_prompt"` Notification을 부른다(`CLAUDE_CODE_DISABLE_PERMISSION_PROMPT_NOTIFY_HOOKS`로 끌 수 있음).
 4. **[추정 — 실측 필요] 팀원 프로세스가 질문을 리더에게 넘기기 전에 자기 PermissionRequest hook을 먼저 부르는지는 정적으로 닫지 못했다.** 부른다면 팀원 세션 id·agent 정보로 relay를 거쳐 대시보드에 왔을 것이다. 사용자 증상(손들기 없음)으로 보면 부르지 않거나, 불러도 대시보드가 모르는 세션 id라 층에 붙지 않았을 수 있다. 실측 항목 1이다.
@@ -24,7 +25,7 @@
 6. **allow 답의 적용:** 2번 길에서는 hook이 아니라 리더 대화상자의 답이 팀원에게 돌아간다. 그래서 대시보드가 hook으로 allow를 내도 그 길에는 끼어들 수 없다. 4번이 참이라면(팀원이 자기 hook을 먼저 부름) 그때의 allow는 팀원 쪽에 적용된다(일반 PermissionRequest 규칙). 실측 항목 3이다.
 
 ## 해결 방향 (2~3안)
-- **안 A — Notification으로 "팀원이 권한을 묻는 중" 손들기(답은 터미널):** 플러그인은 이미 13개 이벤트에 Notification을 포함한다. 서버가 리더 세션의 `notification_type:"worker_permission_prompt"`를 받으면 message에서 팀원 이름과 도구를 꺼내 그 팀원 책상에 손들기를 표시한다. 버튼 대신 "리더 터미널에서 답하세요" 안내를 띄운다. 해제는 그 팀원의 다음 PostToolUse·PostToolUseFailure·PermissionDenied 이벤트(팀원 세션), 또는 일정 시간 뒤다. 한계:
+- **안 A — Notification으로 "팀원이 권한을 묻는 중" 손들기(답은 터미널):** 플러그인은 이미 13개 이벤트에 Notification을 포함한다. 서버가 리더 세션의 `notification_type:"worker_permission_prompt"`를 받으면 message에서 팀원 이름과 도구를 꺼내 그 팀원 책상에 손들기를 표시한다. 버튼 대신 "리더 터미널에서 답하세요" 안내를 띄운다. 해제는 그 팀원의 다음 PostToolUse·PostToolUseFailure·PermissionDenied 이벤트(팀원 세션), 또는 일정 시간 뒤다. 별도 프로세스 팀원은 session_id가 리더와 다르므로, 리더 세션의 Notification과 그 팀원의 이벤트는 **층 안 팀원 이름으로 짝짓는다**(B71 원칙과 같음). 짝을 찾지 못하면 시간 해제로만 끝낸다. 이 짝짓기와 시간 해제를 구현 계획에 적는다(reviewer #742). 한계:
   - 대시보드에서 답할 수 없다.
   - message 글자 형식은 문서에 없는 내부 문자열이라 바뀔 수 있다. 형식이 맞지 않으면 리드 책상에 "팀원 권한 질문" 하나로 표시한다.
   - 3번의 발화 조건 두 개를 실측해야 한다(포커스 중이면 안 오는지 등).
