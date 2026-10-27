@@ -32,8 +32,8 @@ function showDuring(el: Element | null, ranges: Range[], total: number) {
  * 문 프레임 셋이 시각마다 정확히 하나만 보이게(빈 프레임 없음, designer-motion M1). opens·closes = 여는·닫는 시작 시각.
  * 여는 동안 닫힘 → 반 → 열림(100ms씩), 닫는 동안 열림 → 반 → 닫힘
  */
-function doorFrames(opens: number[], closes: number[], total: number): [Range[], Range[], Range[]] {
-  const marks: Array<[number, 0 | 1 | 2]> = [[0, 0]];
+export function doorFrames(opens: number[], closes: number[], total: number, startOpen = false): [Range[], Range[], Range[]] {
+  const marks: Array<[number, 0 | 1 | 2]> = [[0, startOpen ? 2 : 0]];
   for (const t of opens) marks.push([t + F, 1], [t + 2 * F, 2]);
   for (const t of closes) marks.push([t + F, 1], [t + 2 * F, 0]);
   marks.sort((a, b) => a[0] - b[0]);
@@ -112,7 +112,9 @@ export function ElevatorCar({ state, hud, riderName }: { state: ElevatorState; h
       ],
       { duration: total, fill: "forwards" },
     );
-    const [f0, f1, f2] = doorFrames([p.pick, p.arrive], [p.close], total);
+    // 앞 사람이 막 내린 층에서 이어 타면 문은 열린 채로(닫았다 다시 열지 않음, designer-motion T8 M1)
+    const stillOpen = p.pick === 0 && a.start - state.settled < DOOR && Object.values(state.done).includes(state.settled);
+    const [f0, f1, f2] = doorFrames(stillOpen ? [p.arrive] : [p.pick, p.arrive], [p.close], total, stillOpen);
     showDuring(d0, f0, total);
     showDuring(d1, f1, total);
     showDuring(d2, f2, total);
