@@ -1108,6 +1108,26 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     for (const s of ["<code>low</code>는 1단계", "<code>medium</code>은 2단계", "<code>high</code>는 3단계", "<code>xhigh</code>·<code>max</code>는 4단계", "값을 알 수 없으면 1단계", "멈춘(휴업) 층에서는 아무도 걷지 않습니다", "움직임 줄이기"]) expect(m, s).toContain(s);
     for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(m, w).not.toContain(w);
   });
+  it("Phase 7b 빌딩 바깥·카페 절이 코드 상수와 같다", () => {
+    const x = sec('<h3 id="exterior">', "<h3>위쪽 막대의 숫자</h3>");
+    const rd = (f: string) => readFileSync(join(__dirname, "../..", f), "utf8");
+    const plan = rd("web/office/pantryPlan.ts");
+    expect(plan).toContain("export const LONG_IDLE_MS = 3_600_000;");
+    expect(plan).toContain("export const CAFE_SEATS = 2;");
+    expect(x).toContain("1시간 넘게 쉰 팀원");
+    expect(x).toContain("카페 자리는 빌딩 전체에서 둘");
+    const el = rd("web/building/elevatorPlan.ts");
+    expect(el).toContain("export const HUD_FLOOR_MS = 120;");
+    expect(el).toContain("export const HUD_MAX_MS = 600;");
+    expect(el).toContain("한 번에 1명. 기다리는 사람 중 돌아가는 사람(back)이 먼저");
+    expect(x).toContain("층마다 0.12초, 길어도 0.6초");
+    const theme = JSON.parse(rd("web/themes/office/theme.json"));
+    expect(x).toContain(`<code>${theme.words.rest.ko} ↑</code>`);
+    expect(x).toContain(`<code>${theme.words.rest.ko}</code> 층`);
+    expect(rd("web/building/Desk.tsx".replace("building", "office"))).toContain("`${theme.words.rest.ko} ↑`");
+    expect(rd("web/building/ElevatorCar.tsx")).toContain('"▲"');
+    for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(x, w).not.toContain(w);
+  });
   it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
     const b = sec('<h3 id="building-info">', "<h3>위쪽 막대의 숫자</h3>");
     expect(b).toContain(`<code>${BUILDING_TEXT.sign("User")}</code>`);
