@@ -94,7 +94,7 @@ describe("planPantry 카페 단계", () => {
   it("카페 자리를 받으면 to-cafe → 내리면 cafe → 일 시작 → from-cafe → 내리면 walking-back → desk", () => {
     const m = longIdle("a", T0, { cafe: true });
     const s1 = planPantry({ a: { spot: "pantry", since: T0, seat: "coffee" } }, [m], T, false);
-    expect(s1.a).toEqual({ spot: "to-cafe", since: T }); // 탕비실 자리는 놓는다
+    expect(s1.a).toEqual({ spot: "to-cafe", since: T, seat: "coffee" }); // 탕비실 자리는 출발점으로만(정원에 세지 않음)
     const s2 = planPantry(s1, [{ ...m, boarded: T + 3, rideDone: T + 9_000 }], T + 9_001, false);
     expect(s2.a).toEqual({ spot: "cafe", since: T + 9_000 });
     const w: PantryMember = { name: "a", state: "working", rideDone: T + 9_000 };

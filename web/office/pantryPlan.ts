@@ -20,14 +20,14 @@ export type PantrySpot = "desk" | "walking-out" | "pantry" | "walking-back" | "t
 export type PantryState = Record<string, { spot: PantrySpot; since: number; seat?: PantrySeat }>;
 /**
  * walkMs = 커피 자리까지, sofaWalkMs = 소파 자리까지 걷는 시간(실제 거리, §3.1a). 없으면 WALK_MS.
- * cafe = 건물이 카페 자리를 줌(cafeGuests), boarded·rideDone = 그 사람의 마지막 엘리베이터 탄 시각·내린 시각(elevatorPlan)
+ * doorWalkMs = 엘리베이터 문 ↔ 책상(자리 없이 돌아오는 걷기 = 엘리베이터에서 내린 뒤). cafe = 건물이 카페 자리를 줌(cafeGuests), boarded·rideDone = 그 사람의 마지막 엘리베이터 탄 시각·내린 시각(elevatorPlan)
  */
-export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number; sofaWalkMs?: number; cafe?: boolean; boarded?: number; rideDone?: number }
+export interface PantryMember { name: string; state: MemberState; idleSince?: number; duty?: Member["duty"]; walkMs?: number; sofaWalkMs?: number; doorWalkMs?: number; cafe?: boolean; boarded?: number; rideDone?: number }
 
 const CAFE_SPOTS: readonly PantrySpot[] = ["to-cafe", "cafe", "from-cafe"];
 const after = (t: number | undefined, since: number) => t !== undefined && t > since;
 
-const walkOf = (m: PantryMember, seat?: PantrySeat) => (seat === "sofa" ? m.sofaWalkMs : undefined) ?? m.walkMs ?? WALK_MS;
+const walkOf = (m: PantryMember, seat?: PantrySeat) => (seat === "sofa" ? m.sofaWalkMs : seat ? undefined : m.doorWalkMs) ?? m.walkMs ?? WALK_MS;
 
 /**
  * 한 층의 탕비실 걷기 계획(순수). 걷기는 WALK_MS 뒤 도착하고, 가다가 돌아서면 걸은 만큼만 되돌아온다.
@@ -65,8 +65,9 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
       else if (spot === "walking-back") spot = "desk";
     } else if (spot === "walking-out" && (back || m.state === "decision")) [spot, since] = ["walking-back", 2 * now - since - walk];
     else if (spot === "pantry" && back) [spot, since] = ["walking-back", now];
-    if ((spot === "desk" || spot === "pantry") && m.cafe && m.state === "idle" && !off) [spot, since] = [reduced ? "cafe" : "to-cafe", now]; // 탕비실 자리는 놓는다
-    next[m.name] = (spot === "walking-out" || spot === "pantry" || spot === "walking-back") && cur.seat ? { spot, since, seat: cur.seat } : { spot, since };
+    if ((spot === "desk" || spot === "pantry") && m.cafe && m.state === "idle" && !off) [spot, since] = [reduced ? "cafe" : "to-cafe", now];
+    // to-cafe는 떠난 탕비실 자리를 출발점으로만 기억한다(정원에는 세지 않음)
+    next[m.name] = (spot === "walking-out" || spot === "pantry" || spot === "walking-back" || spot === "to-cafe") && cur.seat ? { spot, since, seat: cur.seat } : { spot, since };
     if (spot === "desk" && !off && m.state === "idle" && m.idleSince !== undefined && now - m.idleSince >= IDLE_WALK_MS) out.push(m);
   }
   // 30초가 된 사람: 오래 쉰 사람 → 이름 순. 걸어 나가는 사람 + 탕비실에 있는 사람이 자리 수(2)면 나머지는 책상에서 기다린다

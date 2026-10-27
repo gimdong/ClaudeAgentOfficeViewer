@@ -12,6 +12,8 @@ import { SubDesks } from "../office/SubDesks";
 import { PantryScene, SOFA_DX, Walker, walkMsOf } from "../office/Pantry";
 import { WALK_MS, type PantryMember } from "../office/pantryPlan";
 import { usePantry, useReducedMotion } from "../office/usePantry";
+import { CafeContext, cafeKey } from "./useCafe";
+import { DOOR_FRAME_MS, RIDE_FLOOR_MS } from "./elevatorPlan";
 import { Icon } from "../pixel/Icon";
 import { FloorControls } from "./FloorControls";
 import { readFold, writeFold } from "./foldStore";
@@ -22,6 +24,9 @@ import { OpenDecisionContext } from "../report/useDecisions";
 import { FLOOR_TEXT, useFloorHide, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
 import { BriefingDialog, CH_TEXT, InstructDialog } from "../floors/ChannelDialogs";
+
+/** 엘리베이터 문 = 방 왼쪽 끝(통로 옆). 걷는 층 x */
+const DOOR_X = 0;
 
 export const floorDomId = (sessionId: string) => `floor-${sessionId}`;
 
@@ -109,12 +114,27 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
     addEventListener("resize", measure);
     return () => removeEventListener("resize", measure);
   }, [names, collapsed]);
+  // 카페(Phase 7b): 건물이 준 카페 자리·이 사람의 엘리베이터 탄 시각·내린 시각
+  const cafe = useContext(CafeContext);
+  const active = cafe?.elevator.active;
   const plan: PantryMember[] = paused
     ? []
     : session.members.map((m) => {
         const since = m.state === "idle" && m.lastActivityAt ? Date.parse(m.lastActivityAt) : NaN;
         const g = geo[m.name];
-        return { name: m.name, state: m.state, duty: m.duty, idleSince: Number.isFinite(since) ? since : undefined, walkMs: g && walkMsOf(Math.abs(g[1] - g[0])), sofaWalkMs: g && walkMsOf(Math.abs(g[1] + SOFA_DX - g[0])) };
+        const k = cafeKey(session.id, m.name);
+        return {
+          name: m.name,
+          state: m.state,
+          duty: m.duty,
+          idleSince: Number.isFinite(since) ? since : undefined,
+          walkMs: g && walkMsOf(Math.abs(g[1] - g[0])),
+          sofaWalkMs: g && walkMsOf(Math.abs(g[1] + SOFA_DX - g[0])),
+          doorWalkMs: g && walkMsOf(Math.abs(DOOR_X - g[0])),
+          cafe: cafe?.guests[k] !== undefined || undefined,
+          boarded: active?.name === k ? active.start : undefined,
+          rideDone: cafe?.elevator.done[k],
+        };
       });
   // 스냅샷마다 새 배열이면 계획 타이머를 다시 맞추므로, 내용이 같으면 같은 배열(reviewer m2)
   const planKey = JSON.stringify(plan);
@@ -123,11 +143,18 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const offscreen = useOffscreen(sectionRef);
   const pantry = usePantry(planMembers, useReducedMotion() || offscreen);
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
+  const report = cafe?.report;
+  useEffect(() => report?.(session.id, pantry), [report, session.id, pantry]);
+  // 자리 없이 돌아오는 걷기 = 엘리베이터에서 내려 오는 길이라 "카페 ↑" 그대로
+  const awayOf = (name: string) => (spotOf(name) === "desk" ? false : ["to-cafe", "cafe", "from-cafe"].includes(spotOf(name)) || (spotOf(name) === "walking-back" && !pantry[name].seat) ? "cafe" : true);
+  // 엘리베이터 문에 들어가는 때: 상자가 태우러 와서 문이 다 열린 뒤(MOTION §3.2)
+  const boardAt = (name: string) => (active?.name === cafeKey(session.id, name) ? active.start + Math.abs(active.from - active.pick) * RIDE_FLOOR_MS + 3 * DOOR_FRAME_MS : undefined);
   // 걷는 사람의 탕비실 쪽 끝 = 계획기가 출발 때 정한 자리(I1). 걷는 시간도 그 자리까지 거리(속도 3칸/120ms 고정)
   const seatX = (name: string) => (pantry[name]?.seat === "sofa" ? SOFA_DX : 0);
   const walkMs = (name: string) => {
     const p = planMembers.find((x) => x.name === name);
-    return (pantry[name]?.seat === "sofa" ? p?.sofaWalkMs : p?.walkMs) ?? WALK_MS;
+    const seat = pantry[name]?.seat;
+    return (seat === "sofa" ? p?.sofaWalkMs : seat ? p?.walkMs : (p?.doorWalkMs ?? p?.walkMs)) ?? WALK_MS;
   };
 
   const id = floorDomId(session.id);
@@ -238,7 +265,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           <div className="desks">
             {session.members.map((m, i) => (
               <Fragment key={m.name}>
-                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} away={spotOf(m.name) !== "desk"} />
+                <Desk member={m} paused={paused} bubbleKey={`${session.id}:${m.name}`} bubble={bubble} floorId={session.id} folder={i === 0 ? session.folder : undefined} retireWait={!session.channel?.connected} away={awayOf(m.name)} />
                 {/* 임시 책상 묶음은 리드 바로 오른쪽(서브에이전트 임시 책상 SPEC §1) */}
                 {i === 0 && <SubDesks list={session.subagents ?? []} paused={paused} />}
               </Fragment>
@@ -249,10 +276,17 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             {session.members.map((m) => {
               const s = pantry[m.name];
               const g = geo[m.name] ?? [0, 0, 0];
-              if (s?.spot !== "walking-out" && s?.spot !== "walking-back") return null;
               const seat = g[1] + seatX(m.name);
+              // 카페로: 책상(또는 떠난 탕비실 자리)에서 엘리베이터 문까지 걷고, 문이 열리면 상자에 탄다(그때 숨음). 돌아오면 문에서 책상까지
+              if (s?.spot === "to-cafe") {
+                if ((boardAt(m.name) ?? Infinity) <= Date.now()) return null;
+                const from = s.seat ? seat : g[0];
+                return <Walker key={m.name} member={m} from={from} to={DOOR_X} y={g[2]} since={s.since} ms={walkMsOf(Math.abs(from - DOOR_X)) ?? WALK_MS} out hideAt={boardAt(m.name)} />;
+              }
+              if (s?.spot !== "walking-out" && s?.spot !== "walking-back") return null;
               const out = s.spot === "walking-out";
-              return <Walker key={m.name} member={m} from={out ? g[0] : seat} to={out ? seat : g[0]} y={g[2]} since={s.since} ms={walkMs(m.name)} out={out} />;
+              const start = out ? g[0] : s.seat ? seat : DOOR_X;
+              return <Walker key={m.name} member={m} from={start} to={out ? seat : g[0]} y={g[2]} since={s.since} ms={walkMs(m.name)} out={out} />;
             })}
           </div>
           {(session.predecessors?.length ?? 0) > 0 && (

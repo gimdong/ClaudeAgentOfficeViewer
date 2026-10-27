@@ -38,7 +38,7 @@ function shownX(el: HTMLElement): number | null {
  * 걷는 사람 하나(walk-layer 안). from → to 가로로, since부터 ms 동안. 다시 그려지면 지금 있어야 할 자리에서 남은 시간만 걷는다.
  * 나갈 때는 처음 sit_down 한 바퀴(책상에서 일어서는 동안) 숨어 기다렸다 걷는다(I2). 이동은 transform만, 3칸(6px)마다 한 걸음(steps)
  */
-export function Walker({ member, from, to, y, since, ms, out }: { member: Member; from: number; to: number; y: number; since: number; ms: number; out: boolean }) {
+export function Walker({ member, from, to, y, since, ms, out, hideAt }: { member: Member; from: number; to: number; y: number; since: number; ms: number; out: boolean; hideAt?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const lastTo = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -55,12 +55,13 @@ export function Walker({ member, from, to, y, since, ms, out }: { member: Member
     const x = seen ?? from + (to - from) * k;
     const left = seen === null ? (ms - wait) * (1 - k) : Math.max(0, since + ms - now);
     el.style.transition = "none";
-    el.style.animation = delay ? `walker-wait ${delay}ms step-end` : "";
+    // hideAt: 그 시각에 사라짐(엘리베이터 상자에 탐, Phase 7b)
+    el.style.animation = [delay && `walker-wait ${delay}ms step-end`, hideAt !== undefined && `walker-gone 1ms step-end ${Math.max(0, hideAt - now)}ms forwards`].filter(Boolean).join(", ");
     el.style.transform = `translate(${Math.round(x)}px, ${y}px)`;
     void el.offsetWidth;
     el.style.transition = `transform ${Math.round(left)}ms steps(${Math.max(1, Math.round(Math.abs(to - x) / 6))}, end) ${delay}ms`;
     el.style.transform = `translate(${Math.round(to)}px, ${y}px)`;
-  }, [from, to, y, since, ms, out]);
+  }, [from, to, y, since, ms, out, hideAt]);
   return (
     <div ref={ref} className="walker" data-name={member.name}>
       <Character name={member.name} action={to < from ? "walk_left" : "walk_right"} variantIndex={look(member.name)} />
