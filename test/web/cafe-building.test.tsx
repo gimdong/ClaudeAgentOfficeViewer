@@ -51,7 +51,7 @@ describe("카페 오래 쉬기(엘리베이터)", () => {
     expect(screen.getByTestId("desk-dev").getAttribute("aria-label")).toBe(label);
   });
 
-  it("카페에서 손들면 책상 결정 표시는 첫 렌더부터, 사람은 엘리베이터로 돌아온다(카페에서 손들지 않음)", () => {
+  it("hand-up in cafe returns by elevator and shows desk mark immediately — 카페에서 손들면 책상 결정 표시는 첫 렌더부터, 사람은 엘리베이터로 돌아온다(카페에서 손들지 않음)", () => {
     const { rerender } = render(<Building sessions={[floor1([rest("dev", LONG_IDLE_MS + 700)])]} />);
     step(TO_DOOR);
     step(UP);
