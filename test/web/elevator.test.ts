@@ -58,6 +58,19 @@ describe("elevatorPlan", () => {
     expect(s2.active).toMatchObject({ name: "a", dir: "back" });
   });
 
+  it("상자가 비고 HUD도 없는데 기다리는 사람이 있으면 다음 바뀔 시각은 지금이고, 그 시각에 계획하면 반드시 태운다(0ms 고리 없음)", () => {
+    const hud = { from: 0, to: 2, start: T0 };
+    const wants = [out("a", 1, T0 + 3)];
+    const s1 = planElevator(start(0), wants, hud, T0 + 100);
+    expect(s1.active).toBeUndefined();
+    const at = nextElevatorChange(s1, wants, hud, T0 + 100);
+    expect(at).toBe(T0 + 240);
+    const s2 = planElevator(s1, wants, hud, at);
+    expect(s2.active?.name).toBe("a");
+    expect(nextElevatorChange(planElevator(start(0), [], null, T0), wants, null, T0 + 7)).toBe(T0 + 7);
+    expect(planElevator(start(0), wants, null, T0 + 7).active?.name).toBe("a");
+  });
+
   it("바뀐 것이 없으면 같은 객체, 탈 사람이 없으면 다음 바뀔 시각 Infinity", () => {
     const s = start(2);
     expect(planElevator(s, [], null, T0)).toBe(s);

@@ -854,4 +854,7 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-decoration: underl
 .elevator-car .car-door { visibility: hidden; }
 .car-rider > .character { left: 4px; top: 8px; }
 .cafe-sitter > .character { left: 0; top: 0; }
-.cafe-tag { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 장면 위 글은 판 위(§4.1a) */
+.cafe-name { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 앉은 팀원 이름표 복제. 장면 위 글은 판 위(§4.1a). 방 안 "카페" 판(.cafe-tag)과 다른 이름 */
+/* 화면 밖 카페는 걷지 않고 바로 자리(탕비실과 같은 규칙, reviewer T7) */
+.floor--offscreen .cafe-sitter { animation: none !important; }
+.floor--offscreen .walk-layer { display: none; }

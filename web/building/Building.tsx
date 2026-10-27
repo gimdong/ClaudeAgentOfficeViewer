@@ -76,14 +76,16 @@ export function Building({
   cafe.seats.forEach((p, i) => {
     const m = memberOf(p?.key);
     if (!p || !m) return;
-    const [x, y] = cafeGeo[i] ?? [0, 0];
+    // 걷는 사람은 바닥선 위에: 테이블 칸(44×46 ×2) 바닥 = 앉은 칸 top − 10 + 92, 서 있는 발 = 칸 y + 56 → 앉은 칸보다 26px 아래
+    const [x, seatY] = cafeGeo[i] ?? [0, 0];
+    const y = seatY + 26;
     const ms = walkMsOf(x) ?? WALK_MS;
     if (p.spot === "cafe") {
       const left = p.since + ms - now;
       seatNodes[i] = (
         <span className="cafe-sitter" style={left > 0 ? { animation: `walker-wait ${left}ms step-end` } : undefined}>
           <Character name={m.name} action="idle" variantIndex={memberVariant(m.name, LOOKS.length)} />
-          <span className="cafe-tag">{m.name}</span>
+          <span className="cafe-name">{m.name}</span>
         </span>
       );
       if (left > 0) cafeWalkers.push(<Walker key={p.key} member={m} from={0} to={x} y={y} since={p.since} ms={ms} out={false} hideAt={p.since + ms} />);
