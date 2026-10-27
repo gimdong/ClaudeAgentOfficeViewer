@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BOARD_MS, DOOR_FRAME_MS, HUD_FLOOR_MS, HUD_MAX_MS, hudMoveMs, nextElevatorChange, planElevator, RIDE_FLOOR_MS, rideMs, type ElevatorState, type Ride } from "../../web/building/elevatorPlan";
 import { ACTIONS } from "../../web/office/Character";
+import { doorFrames } from "../../web/building/ElevatorCar";
 import { CAFE_SEATS, cafeGuests, LONG_IDLE_MS, nextGuestChange, planPantry, WALK_MS, type PantryMember, type PantryState } from "../../web/office/pantryPlan";
 
 // Phase 7b Task 8(계약 SPEC §2b, MOTION §3.2·§3.3): 오래 쉬면(1시간) 엘리베이터로 카페, 한 번에 1명, 돌아가는 사람이 먼저, HUD 이동이 먼저
@@ -25,6 +26,15 @@ describe("elevatorPlan", () => {
     expect(s.active).toBeUndefined();
     expect(nextElevatorChange(s, wants, null, T0 + 7)).toBe(T0 + 2_500);
     expect(planElevator(s, wants, null, T0 + 2_500).active?.name).toBe("a");
+  });
+
+  it("문 프레임: 어느 때든 하나만, 열 때 닫힘 → 반 → 열림, 닫을 때 열림 → 반 → 닫힘. 열린 채 이어 타면 처음부터 열림", () => {
+    const covered = (r: Array<Array<[number, number]>>) => r.flat().sort((a, b) => a[0] - b[0]);
+    const f = doorFrames([100, 900], [500], 1_300);
+    expect(covered(f)).toEqual([[0, 200], [200, 300], [300, 600], [600, 700], [700, 1_000], [1_000, 1_100], [1_100, 1_300]]);
+    const open = doorFrames([900], [500], 1_300, true);
+    expect(open[2][0]).toEqual([0, 600]); // 열림 → (닫을 때) 반 → 닫힘
+    expect(open[0][0][0]).toBe(700);
   });
 
   it("HUD 층 이동 시간 = min(층 수 × 120ms, 600ms)", () => {
