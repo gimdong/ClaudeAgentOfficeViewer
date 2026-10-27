@@ -336,6 +336,15 @@ Claude Agent Office: http://127.0.0.1:4317  (data: /Users/&lt;user name&gt;/.cla
   <li>If your computer's <strong>reduce motion</strong> setting is on, characters move to their spot at once without walking. Changing the setting takes effect right away.</li>
 </ul>
 
+<h3 id="exterior">Outside the building and the cafe</h3>
+<ul>
+  <li><strong>Outside the building</strong>: above the building is the sky, and at the top the roof with its sign (click it for <a href="#building-info">building info</a>). The empty floor at the top looks like a construction site; new sessions start there. Below the session floors are the <code>카페</code> (cafe) floor and the lobby. The lobby has the elevator door and the guard's booth (<code>관리실</code>), and shows where the elevator car is, such as <code>2F ▲</code>. At the bottom, people and cars pass along the street. The outside is decoration and has nothing to do with session state.</li>
+  <li><strong>Going to the cafe</strong>: a teammate that has rested for more than an hour takes the elevator to the cafe. The cafe has two seats for the whole building, so from the third on they stay in their own floor's pantry. Whoever has rested longest gets a seat first (by name if equal). The elevator carries one person at a time, and among those waiting, someone going back rides first. The empty desk of someone at the cafe shows a dotted name tag <code>카페 ↑</code> ("Cafe ↑").</li>
+  <li><strong>Coming back</strong>: when a teammate at the cafe starts work or needs to raise a hand, it takes the elevator back and sits at its desk (it does not raise a hand in the cafe). The decision mark shows on the desk right away, so you can answer without waiting for it to come back. If work starts while it is riding to the cafe, it gets back in as soon as it steps out at the cafe door; if it has not boarded yet, it walks back to its desk without the elevator.</li>
+  <li><strong>Floor shortcuts</strong> (the floor buttons in the top bar): pressing one first moves the building's elevator car to that floor (0.12 seconds per floor, at most 0.6 seconds), opens the door, and then scrolls to that floor. Keyboard focus moves to the floor as soon as you press. If you press several times quickly, it goes to the last floor you pressed.</li>
+  <li>Floors outside the visible area move characters at once without walking. If <strong>reduce motion</strong> is on, characters move at once without walking, and floor shortcuts show the floor at once without moving the car.</li>
+</ul>
+
 <h2 id="checks">5. Appendix: checking an installed copy (beta.14)</h2>
 <p>These checks confirm, in a real Claude Code session, what the tests could not. Install beta.14 from the archive, start the dashboard, and open a new Claude Code session.</p>
 <ol>
