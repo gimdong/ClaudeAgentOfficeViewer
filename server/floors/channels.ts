@@ -22,13 +22,15 @@ export interface ChannelView {
   last?: "sent" | "delivered";
   /** 보낸 지시를 세션이 받은 흔적이 없음(B343, 확실하지 않은 판정) */
   unreceived?: true;
+  /** 대화가 bg job으로 옮겨 가(parkedJobId) 이 층의 channel로는 지시가 닿지 않음 — 보내지 않는다 */
+  parked?: true;
   /** 재시작 때 등록 파일에서 복원했고 아직 다시 붙지 않음(증명 성공 전, 복원 뒤 UNSEEN_MS 안 — 그 뒤엔 정리, #658·B341) */
   reconnecting?: true;
 }
 /** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
 /** meta: 보관한 팀리더 지시가 실제로 나갈 때 쓰는 값(퇴근 기록 등, Phase 6b 11장 a). 화면에는 쓰지 않는다 */
 export interface HeldItem { id: string; text: string; at: string; key?: string; meta?: unknown }
-export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "not-connected" | "held-full" };
+export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "parked" | "not-connected" | "held-full" };
 
 interface Pending { nonce: string; snonce: string; at: number }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
@@ -111,7 +113,14 @@ export class ChannelHub {
     }
   }
   /** keyDir: 층 열쇠 파일을 둘 폴더(0700). 없으면 파일을 쓰지 않는다(테스트) */
-  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string }) {}
+  /**
+   * parked: 그 층의 대화가 bg job으로 옮겨 갔는가(B192 합친 층). 앞면 프로세스의 channel은 붙어 있어도 받은 지시를 대기열에만 쌓고 돌리지 않는다
+   * (2026-10-28 관찰 — 화면은 "전달됨", 실제로는 아무 일도 없음). 그래서 보내지도 보관해 뒀다 보내지도 않고, 수신 판정도 하지 않는다(bg job의 hook이 거짓 "받음"을 만든다)
+   */
+  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string; parked?: (sessionId: string) => boolean }) {}
+  private isParked(sessionId: string): boolean {
+    return this.o.parked?.(sessionId) ?? false;
+  }
 
   load(): void {
     // 지난 실행의 층을 등록 파일과 열쇠 파일에서 되살린다(스펙 12장 n). 재연결은 늘 새 핸드셰이크(상태는 저장하지 않음)
@@ -360,6 +369,7 @@ export class ChannelHub {
   instruct(sessionId: string, text: string, paused: boolean, holdKey?: string, meta?: unknown): InstructResult {
     const f = this.floors.get(sessionId);
     if (!f) return { ok: false, error: "not-launched" };
+    if (this.isParked(sessionId)) return { ok: false, error: "parked" };
     if (paused) {
       if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey); // 대체(같은 키 — 질문 표시는 새 보관으로 그대로 held)
       if (f.held.length >= MAX_HELD) return { ok: false, error: "held-full" };
@@ -398,7 +408,7 @@ export class ChannelHub {
   /** 재개 때 보관 지시를 순서대로 보낸다. 연결이 없으면 보관한 채로 두고 0 */
   flushHeld(sessionId: string): number {
     const f = this.floors.get(sessionId);
-    if (!f?.conn || f.held.length === 0) return 0;
+    if (!f?.conn || f.held.length === 0 || this.isParked(sessionId)) return 0;
     const items = f.held.splice(0);
     for (const h of items) this.push(f, h.id, h.text);
     this.heldGone(items, true);
@@ -412,7 +422,7 @@ export class ChannelHub {
     if (!f) return undefined;
     // 복원 뒤 UNSEEN_MS 안: "다시 연결하는 중". 그 뒤엔 sweep이 정리해 등록에 없는 층(W3·옮겨 열기)이 된다(B341 — 사이에 "확인 창" 글이 보이지 않게)
     const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt <= UNSEEN_MS;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}) };
+    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}) };
   }
   /**
    * 스냅샷 빌드마다(B343): 판정 중인 지시가 있는 층만. leadEvents는 그 층 리드의 hook 이벤트(서브에이전트는 여기서 뺀다),
@@ -422,6 +432,7 @@ export class ChannelHub {
     const f = this.floors.get(sessionId);
     const p = f?.probe;
     if (!f || !p) return;
+    if (this.isParked(sessionId)) return void (f.probe = undefined);
     const now = (this.o.now ?? Date.now)();
     const lead = c.leadEvents.filter((e) => !e.sub);
     if (p.startAt === undefined && !p.checked) {

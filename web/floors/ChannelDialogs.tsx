@@ -4,6 +4,8 @@ import type { Snapshot } from "../../src/shared/types";
 import { UNAUTHORIZED_EVENT } from "../useSnapshot";
 
 /** Phase 4b 화면 문구(스펙 3·4·6·7장). 설명서·테스트가 이 상수와 대조한다 */
+/** 옮겨진 층(B192 합친 층) 안내 — 칩 title·버튼 title·오류에 같은 글 */
+const PARKED = "이 층의 대화가 백그라운드 작업으로 옮겨 가 대시보드 지시가 닿지 않습니다. 대화를 이어 쓰는 터미널에서 직접 지시해 주세요.";
 export const CH_TEXT = {
   expButton: "실험 기능",
   expTitle: "실험 기능: 작업 지시와 새 층",
@@ -62,6 +64,9 @@ export const CH_TEXT = {
   chipUnreceived: "받았는지 확인 안 됨",
   unreceived: '보낸 지시를 세션이 받았는지 확인하지 못했습니다(30초 동안 일을 시작한 흔적이 없음). 로그인 방식(회사 중계 주소 등)이나 조직 설정에 따라 작업 지시가 동작하지 않을 수 있습니다. 설명서 6장 "작업 지시가 세션에 닿지 않는 것 같아요"를 봐 주세요.',
   chipDelivered: "전달됨",
+  // 합친 층(B192): 대화가 bg job으로 옮겨 가 앞면 프로세스는 지시를 쌓기만 한다 — 서버가 보내지 않는다
+  chipParked: "백그라운드로 옮겨짐",
+  parked: PARKED,
   briefTitle: (name: string) => `${name} 층 재개 전 확인`,
   briefHeld: "휴업 중 보관한 지시",
   briefDecisions: (n: number) => `기다리는 결정 ${n}건`,
@@ -82,6 +87,7 @@ export const CH_TEXT = {
     tmux: "tmux로 띄우지 못했습니다. tmux가 설치되어 있는지 확인해 주세요.",
     "held-full": "보관함이 가득 찼습니다(20개). 재개해서 보낸 뒤 다시 해 주세요.",
     "not-connected": "channel이 아직 연결되지 않았습니다. 터미널에서 확인 창을 확인했는지 봐 주세요.",
+    parked: PARKED,
   } as Record<string, string>,
 } as const;
 

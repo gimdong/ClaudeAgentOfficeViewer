@@ -127,7 +127,7 @@ export function ReplyDialog(p: {
           </p>
         )}
         {p.unreceived && !off && <p className="rd-off">{T.unreceived}</p>}
-        {off && <p className="rd-off">{p.channel === "not-connected" || p.channel === "reconnecting" ? off : T.replyOff}</p>}
+        {off && <p className="rd-off">{p.channel === "not-connected" || p.channel === "reconnecting" || p.channel === "parked" ? off : T.replyOff}</p>}
         <button type="button" className="pbtn pbtn--primary rf-right" aria-disabled={!ready || undefined} aria-busy={p.sending || undefined} onClick={send}>
           {p.sending ? T.sending : T.send}
         </button>

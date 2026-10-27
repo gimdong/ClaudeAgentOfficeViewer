@@ -286,6 +286,11 @@ async function main(): Promise<void> {
     keyDir: floorKeyDir,
     available: platform() === "win32" ? { ok: false, reason: "windows" } : !tmuxBin ? { ok: false, reason: "tmux" } : !claudeBin ? { ok: false, reason: "claude" } : { ok: true },
     onChange: () => hub.poke(),
+    // 합친 층(B192)이면 대화는 bg job에 있다 — 마지막 빌드의 기록으로 본다(builder는 아래에서 만들고, 지시는 서버가 뜬 뒤에만 온다)
+    parked: (id) => {
+      const r = builder.record(id);
+      return !!r?.convId && r.convId !== id;
+    },
   });
   channels.load();
   // 새 층과 옮겨 열기가 같은 경로를 쓴다: 층 열쇠 등록 → tmux(셸 없음) → 실패하면 등록을 되돌린다

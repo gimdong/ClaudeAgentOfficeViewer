@@ -600,7 +600,10 @@ export function createApp(
       if (!floors.record(id)?.alive) return void res.status(409).json({ error: "ended" });
       const sendHeld = (req.body as { sendHeld?: unknown } | undefined)?.sendHeld === true;
       // 연결 전이면 보낼 수 없으니 재개하지 않는다 — 재개만 되고 보관 지시가 남는 어긋남을 막는다(리뷰 #410 M2)
-      if (sendHeld && opts.channels && (opts.channels.hub.view(id)?.held ?? 0) > 0 && !opts.channels.hub.connected(id)) return void res.status(409).json({ error: "not-connected" });
+      // 옮겨진 층(parked)은 연결돼 있어도 보내지 않는다 — 같은 이유로 재개하지 않는다
+      const held = opts.channels?.hub.view(id);
+      if (sendHeld && opts.channels && (held?.held ?? 0) > 0 && held?.parked) return void res.status(409).json({ error: "parked" });
+      if (sendHeld && opts.channels && (held?.held ?? 0) > 0 && !opts.channels.hub.connected(id)) return void res.status(409).json({ error: "not-connected" });
       const before = floors.isPaused(id);
       floors.resume(id);
       if (floors.isPaused(id) !== before) poke();

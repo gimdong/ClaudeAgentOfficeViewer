@@ -183,7 +183,8 @@ export interface SessionView {
   /** 대시보드가 channel을 붙여 띄운 층만(Phase 4b) */
   /** reconnecting: 대시보드를 다시 켠 뒤 복원한 층이 아직 다시 붙지 않음(2분 안, #658) */
   /** unreceived: 보낸 지시를 세션이 받은 흔적(리드 hook)이 없음(B343, 확실하지 않음) */
-  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean };
+  /** parked: 대화가 bg job으로 옮겨 가 이 층의 channel로는 지시가 닿지 않음(서버가 보내지 않는다) */
+  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean; parked?: boolean };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
   pausedDenied?: number;
   /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */
@@ -268,7 +269,7 @@ export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string
 export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }>; unreadable?: true }
 
 /** 팀리더 지시 통로 상태(Phase 6b 화면, designer SPEC §1.2) */
-export type LeadChannel = "ok" | "not-launched" | "not-connected" | "reconnecting";
+export type LeadChannel = "ok" | "not-launched" | "not-connected" | "reconnecting" | "parked";
 /** 보고서 도장(started: 인수인계로 새 팀원을 시작함) */
 /** held: 휴업 중 보관한 결재(실제로 나가면 approved·revise, 보관함에서 지우면 pending — 스펙 12장 l) */
 export type ReportState = "pending" | "held" | "approved" | "revise" | "started";

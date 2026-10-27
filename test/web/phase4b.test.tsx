@@ -98,6 +98,16 @@ describe("작업 지시(스펙 6장)", () => {
     expect(instructBtn().getAttribute("aria-disabled")).not.toBe("true");
   });
 
+  it("옮겨진 층(대화가 bg job으로 감): 칩은 '백그라운드로 옮겨짐'(전달됨·보관보다 먼저, title에 이유), 작업 지시 버튼은 꺼지고 같은 이유", () => {
+    show([floorOf({ channel: { connected: true, tmux: "co-1", held: 1, last: "delivered", parked: true } })]);
+    render(<App />);
+    const chip = screen.getByTestId("channel-chip");
+    expect(chip.textContent).toBe(`대시보드가 띄움 · 연결됨 · ${CH_TEXT.chipParked} · ${CH_TEXT.chipHeld(1)}`);
+    expect(chip.getAttribute("title")).toBe(CH_TEXT.parked);
+    expect(instructBtn().getAttribute("aria-disabled")).toBe("true");
+    expect(instructBtn().getAttribute("title")).toBe(CH_TEXT.parked);
+  });
+
   it("연결된 층: 창에서 보내면 POST instruct, 작업 중이면 안내 한 줄, 칩은 전달됨", async () => {
     show([floorOf({ floorStatus: "working", members: [lead({ state: "working" })], channel: { connected: true, tmux: "co-1", held: 0, last: "delivered" } })]);
     render(<App />);

@@ -23,6 +23,7 @@ let launched: LaunchInput[];
 let launchReply: { ok: true; sessionId: string; tmux: string } | { ok: false; error: "limit" | "tmux" };
 let available: { ok: boolean; reason?: string };
 let skew: number;
+let parkedIds: Set<string>;
 const rec = (p: Partial<SessionRecord> = {}): SessionRecord => ({ pid: 2001, sessionId: "s1", name: "alpha", cwd: "/x", status: "busy", startedAt: 1, updatedAt: 2, alive: true, procStart: "x", ...p });
 
 beforeEach(async () => {
@@ -30,7 +31,8 @@ beforeEach(async () => {
   setLogger(new Logger({ dir: "" }));
   available = { ok: true };
   skew = 0;
-  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } }, now: () => Date.now() + skew });
+  parkedIds = new Set();
+  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } }, now: () => Date.now() + skew, parked: (id) => parkedIds.has(id) });
   floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 4242 });
   launched = [];
   launchReply = { ok: true, sessionId: "new-1", tmux: "co-abcd1234" };
@@ -216,6 +218,73 @@ describe("새 층·지시·보관(스펙 4·6·7장)", () => {
     hub.register("s1", "co-1");
     expect((await post("/api/floors/s1/instruct", { text: "  " })).status).toBe(400);
     expect((await post("/api/floors/s1/instruct", { text: "x".repeat(8001) })).status).toBe(400);
+  });
+});
+
+describe("옮겨진 층(대화가 bg job으로 옮겨 감, parkedJobId) — 지시가 닿지 않는다", () => {
+  beforeEach(() => hub.setEnabled(true));
+  const ev = (event: string, at: number) => ({ at, event });
+
+  it("연결돼 있어도 보내지 않고 409 parked, 휴업 중에도 보관하지 않는다. view는 parked", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const s = openStream(key);
+    await s.ready;
+    await until(() => hub.view("s1")?.connected === true);
+    parkedIds.add("s1");
+    const r = await post("/api/floors/s1/instruct", { text: "x" });
+    expect(r.status).toBe(409);
+    expect(JSON.parse(r.body)).toEqual({ error: "parked" });
+    expect(hub.instruct("s1", "휴업 중", true)).toEqual({ ok: false, error: "parked" });
+    expect(hub.view("s1")).toMatchObject({ connected: true, held: 0, parked: true });
+    expect(s.got.join("")).not.toContain("instruction");
+  });
+
+  it("옮겨지기 전에 보관한 지시는 재개 때 보내지 않고 남긴다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const s = openStream(key);
+    await s.ready;
+    hub.instruct("s1", "보관", true);
+    parkedIds.add("s1");
+    expect(hub.flushHeld("s1")).toBe(0);
+    expect(hub.view("s1")?.held).toBe(1);
+    expect(s.got.join("")).not.toContain("instruction");
+  });
+
+  it("[보내고 재개]는 409 parked로 재개하지 않는다(재개만 되고 보관 지시가 남는 어긋남, 리뷰 #410 M2와 같은 이유). 그냥 재개는 된다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const s = openStream(key);
+    await s.ready;
+    await until(() => hub.view("s1")?.connected === true);
+    floors.pause("s1");
+    hub.instruct("s1", "보관", true);
+    parkedIds.add("s1");
+    const r = await post("/api/floors/s1/resume", { sendHeld: true });
+    expect(r.status).toBe(409);
+    expect(JSON.parse(r.body)).toEqual({ error: "parked" });
+    expect(floors.isPaused("s1")).toBe(true);
+    expect(JSON.parse((await post("/api/floors/s1/resume", {})).body)).toEqual({ paused: false });
+    expect(hub.view("s1")?.held).toBe(1);
+  });
+
+  it("옮겨진 뒤 bg job의 리드 이벤트로 받음(seen)을 만들지 않는다 — 판정을 버리고, 돌아와도 옛 판정을 잇지 않는다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const s = openStream(key);
+    await s.ready;
+    const t0 = Date.now();
+    hub.instruct("s1", "일", false);
+    parkedIds.add("s1");
+    hub.receiptCheck("s1", { leadEvents: [ev("Stop", t0 - 5_000), ev("UserPromptSubmit", t0 + 10)], blocked: false });
+    parkedIds.delete("s1");
+    skew = RECEIPT_MS + 1;
+    hub.receiptCheck("s1", { leadEvents: [ev("Stop", t0 - 5_000)], blocked: false });
+    expect(hub.view("s1")?.unreceived).toBeUndefined();
+    expect(hub.view("s1")?.parked).toBeUndefined();
+    // 옛 판정이 seen으로 끝났다면 다음 지시를 재지 않는다 — 버렸으므로 다음 지시는 다시 잰다
+    hub.instruct("s1", "다음", false);
+    hub.receiptCheck("s1", { leadEvents: [ev("Stop", t0 - 5_000)], blocked: false });
+    skew = 2 * RECEIPT_MS + 2;
+    hub.receiptCheck("s1", { leadEvents: [ev("Stop", t0 - 5_000)], blocked: false });
+    expect(hub.view("s1")?.unreceived).toBe(true);
   });
 });
 

@@ -10,9 +10,9 @@ import { RetireDialog } from "./RetireDialog";
 
 /** 지시 통로 상태(designer SPEC §1.2): 대시보드가 띄우지 않은 층 → not-launched, 연결 없음 → not-connected */
 export function channelOf(s: Pick<SessionView, "channel">): LeadChannel {
-  return !s.channel ? "not-launched" : s.channel.connected ? "ok" : s.channel.reconnecting ? "reconnecting" : "not-connected";
+  return !s.channel ? "not-launched" : s.channel.parked ? "parked" : s.channel.connected ? "ok" : s.channel.reconnecting ? "reconnecting" : "not-connected";
 }
-const failText = (e: string) => (e === "not-connected" ? CH_TEXT.notConnected : CH_TEXT.failed);
+const failText = (e: string) => (e === "not-connected" ? CH_TEXT.notConnected : e === "parked" ? CH_TEXT.parked : CH_TEXT.failed);
 
 /** 열 수 있는 것(서랍은 한 번에 하나, designer SPEC §3·§4·§5) */
 export type LeadOpen = { kind: "folder"; floor: string } | { kind: "reply"; floor: string; member: string; qid: string } | { kind: "retire"; floor: string; member: string } | null;
@@ -107,7 +107,7 @@ export function LeadCommands({ session, member, announce, lead }: { session: Ses
       {why ? (
         <p id={whyId} className="ap-cmd-why">
           {/* 퇴사는 다시 연결되면 이어 간다(SPEC §1.1 W2a, 「스펙」 12장 m) */}
-          {member.retiring && channel !== "ok" ? C.retireResume : why}
+          {member.retiring && channel !== "ok" && channel !== "parked" ? C.retireResume : why}
         </p>
       ) : (
         paused && <p className="ap-cmd-why">{CH_TEXT.instructPaused}</p>
