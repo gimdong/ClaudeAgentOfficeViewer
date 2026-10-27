@@ -26,5 +26,13 @@ export function hookLine(h: HookStatsView, now = Date.now()): string {
   return `최근 10분 ${h.last10min}건, ${h.lastAt ? `마지막 수신 ${ago(h.lastAt, now)}` : "마지막 수신 없음"}, 거부 ${rejected}건`;
 }
 
+/** 이벤트별 수(이름순). Notification 바로 아래에 notification_type별 수를 "Notification(종류)"로 붙인다 */
+export function eventCounts(h: HookStatsView): Array<[string, number]> {
+  const kinds = Object.entries(h.byNotification ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  return Object.entries(h.byEvent)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([name, n]): Array<[string, number]> => [[name, n], ...(name === "Notification" ? kinds.map(([k, c]): [string, number] => [`Notification(${k})`, c]) : [])]);
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 export const hhmm = (ms: number) => `${pad(new Date(ms).getHours())}:${pad(new Date(ms).getMinutes())}`;

@@ -204,7 +204,7 @@ export function createApp(
     // 맨 앞 한 곳에서 session_id를 대화 키로 바꾼 복사본을 모든 관문(일시정지·정책·예산·큐·이벤트·서브에이전트)에 넘긴다(B194)
     const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
     const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
-    opts.stats?.accept(input.hook_event_name as string);
+    opts.stats?.accept(input.hook_event_name as string, input.notification_type);
     try {
       // 버전 문자열은 부르는 쪽이 40자로 자른다(스냅샷이 커지지 않게)
       opts.onPluginVersion?.(pluginVersion, legacy, input.session_id as string);

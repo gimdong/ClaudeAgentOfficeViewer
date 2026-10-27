@@ -68,6 +68,12 @@ describe("POST /hooks/event", () => {
     });
   });
 
+  it("수신 통계: Notification은 notification_type별로도 센다", async () => {
+    await post(JSON.stringify({ hook_event_name: "Notification", session_id: "s-fake", notification_type: "worker_permission_prompt", message: "fake secret body" }));
+    expect(stats.view().byNotification).toEqual({ worker_permission_prompt: 1 });
+    expect(JSON.stringify(stats.view())).not.toContain("fake secret body");
+  });
+
   it("정상 요청은 200과 빈 본문, 입력을 넘긴다", async () => {
     const r = await post(ok);
     expect(r).toEqual({ status: 200, body: "" });
