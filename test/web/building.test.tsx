@@ -12,11 +12,11 @@ afterEach(() => {
 });
 
 describe("Building", () => {
-  it("맨 위는 빈 층, 그 아래로 층 번호가 큰 층부터", () => {
+  it("옥상 아래 빈 층, 그 아래로 층 번호가 큰 층부터, 맨 아래 카페·로비(Task 7)", () => {
     render(<Building sessions={[makeSession({ id: "a", name: "first", floor: 1 }), makeSession({ id: "c", name: "third", floor: 3 }), makeSession({ id: "b", name: "second", floor: 2 })]} />);
     const tower = screen.getByTestId("vacant-floor").parentElement!;
-    const order = [...tower.querySelectorAll("section")].map((s) => s.getAttribute("data-testid") === "vacant-floor" ? "빈" : s.querySelector(".fl-no")!.textContent);
-    expect(order).toEqual(["빈", "3F", "2F", "1F"]);
+    const order = [...tower.querySelectorAll(":scope > section")].map((s) => (s.getAttribute("data-testid") === "vacant-floor" ? "빈" : s.getAttribute("aria-label") === "옥상" ? "옥상" : s.querySelector(".fl-no")!.textContent));
+    expect(order).toEqual(["옥상", "빈", "3F", "2F", "1F", "카페", "로비"]);
     // 간판 처음 값(디자인 phase6b §11.1, W28). snapshot이 없으면 버튼이 아니다
     expect(screen.getByText("User의 회사")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /빌딩 정보 열기/ })).toBeNull();

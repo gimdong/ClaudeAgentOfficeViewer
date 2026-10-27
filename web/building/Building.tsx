@@ -6,6 +6,7 @@ import { ReopenHost } from "../floors/ReopenDialog";
 import { FLOOR_TEXT, useHiddenFloors } from "../floors/useFloors";
 import { remainingOf } from "../hud/remaining";
 import { BuildingInfo, BUILDING_TEXT } from "./BuildingInfo";
+import { CafeFloor, LobbyFloor, RoofRow, Sky, Street } from "./Exterior";
 import { Floor } from "./Floor";
 import { VacantFloor } from "./VacantFloor";
 
@@ -76,24 +77,19 @@ export function Building({
     focusNext.current = "bar";
   };
 
+  const sign = snapshot ? (
+    <button ref={signRef} type="button" className="roof-sign" aria-haspopup="dialog" aria-label={BUILDING_TEXT.signAria(userName)} title={BUILDING_TEXT.sign(userName)} onClick={() => setInfoOpen(true)}>
+      {BUILDING_TEXT.sign(userName)}
+    </button>
+  ) : (
+    <div className="roof-sign" aria-hidden="true">
+      {BUILDING_TEXT.sign(userName)}
+    </div>
+  );
+
   return (
     <main className="building" aria-label="야근 빌딩">
-      <div className="roof">
-        <svg className="px" viewBox="0 0 280 18" preserveAspectRatio="none" aria-hidden="true">
-          <rect x={0} y={16} width={280} height={2} fill="#2e2852" />
-          <rect x={20} y={4} width={2} height={12} fill="#3b3460" />
-          <rect x={258} y={6} width={2} height={10} fill="#3b3460" />
-        </svg>
-        {snapshot ? (
-          <button ref={signRef} type="button" className="roof-sign" aria-haspopup="dialog" aria-label={BUILDING_TEXT.signAria(userName)} title={BUILDING_TEXT.sign(userName)} onClick={() => setInfoOpen(true)}>
-            {BUILDING_TEXT.sign(userName)}
-          </button>
-        ) : (
-          <div className="roof-sign" aria-hidden="true">
-            {BUILDING_TEXT.sign(userName)}
-          </div>
-        )}
-      </div>
+      <Sky />
       {infoOpen && snapshot && (
         <BuildingInfo
           userName={userName}
@@ -116,11 +112,16 @@ export function Building({
         />
       )}
       <div className="tower" ref={towerRef}>
+        <RoofRow sign={sign} />
         <VacantFloor experimental={experimental} />
         {floors.length === 0 && h.count === 0 && !h.reloading && <p className="empty">빌딩이 비어 있습니다. 빈 층에서 새 세션을 시작하세요</p>}
         {floors.map((s) => (
           <Floor key={s.id} session={s} bubble={bubble} onHidden={onHidden} />
         ))}
+        <CafeFloor />
+        <LobbyFloor />
+        {/* 엘리베이터 상자 자리(통로 위). 상자·탑승자는 Task 8이 채운다 */}
+        <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer" />
       </div>
       {(h.count > 0 || h.reloading) && (
         <div className="hidden-bar" ref={barRef} tabIndex={h.reloading ? -1 : undefined} onFocus={() => (focusInBar.current = true)} onBlur={() => (focusInBar.current = false)}>
@@ -140,7 +141,7 @@ export function Building({
           )}
         </div>
       )}
-      <div className="ground" aria-hidden="true" />
+      <Street />
       {/* 옮겨 열기 창은 층 밖에 둔다 — SIGTERM 뒤 층이 잠깐 사라져도 창과 요청이 이어진다(REOPEN §2.1, B209) */}
       <ReopenHost announce={announce} />
     </main>

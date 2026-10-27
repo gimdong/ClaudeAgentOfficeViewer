@@ -3,6 +3,7 @@ import type { Snapshot } from "../../src/shared/types";
 import { BudgetSettingsContext } from "../budget/BudgetDialog";
 import { CH_TEXT, LaunchDialog } from "../floors/ChannelDialogs";
 import { Icon } from "../pixel/Icon";
+import { Construction } from "./Exterior";
 
 /** 맨 위 빈 층(디자인 5.2). Phase 4b: 실험 기능이 켜져 있으면 새 층을 띄운다 */
 export function VacantFloor({ experimental }: { experimental?: Snapshot["experimental"] }) {
@@ -12,7 +13,7 @@ export function VacantFloor({ experimental }: { experimental?: Snapshot["experim
   const on = !!experimental?.channels;
   return (
     <section className="floor floor--empty" aria-label="빈 층" data-testid="vacant-floor">
-      <div className="shaft">
+      <div className="shaft" data-lift="vacant">
         <span className="fl-no" aria-hidden="true">
           +
         </span>
@@ -20,6 +21,7 @@ export function VacantFloor({ experimental }: { experimental?: Snapshot["experim
       </div>
       <div className="floor-body">
         <div className="room">
+          <Construction />
           <div className="vacant">
             <span className="sign">빈 층</span>
             <p>폴더와 첫 지시를 정하면 이 층에서 새 세션을 엽니다</p>

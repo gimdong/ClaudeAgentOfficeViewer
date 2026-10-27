@@ -59,7 +59,9 @@ describe("loadTheme·resolveTheme", () => {
 
   it("T5: 캐릭터 층 시트는 테마 것, 빠진 장은 오피스 것(장면 시트·다른 파일은 섞지 않음)", () => {
     expect(Object.keys(office.sheets).sort()).toEqual(expect.arrayContaining(["aura.png", "cap.png", "layers/body.png", "layers/hair-short-gold.png", "layers/outfit.png"]));
-    expect(Object.keys(office.sheets).some((f) => f.startsWith("scene-") || f.startsWith("extra-"))).toBe(false);
+    expect(Object.keys(office.sheets).some((f) => f.startsWith("scene-"))).toBe(false);
+    // T7: 엑스트라 팔레트 판·거리 소품도 같은 대체 규칙
+    expect(office.sheets["extra-guard.png"] && office.sheets["street-props.png"]).toBeTruthy();
     // 벽지 타일(designer-office (b)): 변형 0–3 × 낮·밤 낱장
     for (const n of [0, 1, 2, 3]) for (const v of ["day", "night"]) expect(office.sheets[`room-wall-${n}-${v}.png`], `${n}/${v}`).toBeTruthy();
     const t = resolveTheme("neon", bundles(fake({}, { "layers/outfit.png": "/neon/outfit.png" })));

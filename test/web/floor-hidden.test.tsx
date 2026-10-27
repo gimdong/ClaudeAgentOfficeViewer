@@ -112,9 +112,9 @@ describe("숨긴 층 줄(§4.3·§4.4)", () => {
     show(snap([live("a", "alpha", 1)], 3));
     rerender(<App />);
     expect(within(bar() as HTMLElement).getByRole("button").textContent).toBe("숨긴 층 3개 · 모두 보이기");
-    // 탑 아래, 땅 위
+    // 탑 아래, 거리 위(Task 7: 땅 → 거리)
     expect(bar()!.previousElementSibling?.className).toBe("tower");
-    expect(bar()!.nextElementSibling?.className).toBe("ground");
+    expect(bar()!.nextElementSibling?.classList.contains("street")).toBe(true);
   });
 
   it("누르면 DELETE /api/floors/hidden, '다시 불러오는 중' 줄에 포커스, 층이 돌아오면 1F 접기 버튼으로", async () => {

@@ -3,6 +3,7 @@ import type { FloorStatus, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { Desk, SceneCell } from "../office/Desk";
 import { memberVariant } from "../office/Character";
+import { useOffscreen } from "./Exterior";
 import { ThemeContext } from "../themes/ThemeContext";
 import { CMD_TEXT } from "../office/leadCmdText";
 import { LEAD_TEXT, shortTime } from "../office/leadText";
@@ -118,7 +119,9 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   // 스냅샷마다 새 배열이면 계획 타이머를 다시 맞추므로, 내용이 같으면 같은 배열(reviewer m2)
   const planKey = JSON.stringify(plan);
   const planMembers = useMemo(() => plan, [planKey]);
-  const pantry = usePantry(planMembers, useReducedMotion());
+  // 화면 밖 층은 걷지 않고 바로 목적지(7a에서 넘어옴, Task 7)
+  const offscreen = useOffscreen(sectionRef);
+  const pantry = usePantry(planMembers, useReducedMotion() || offscreen);
   const spotOf = (name: string) => pantry[name]?.spot ?? "desk";
   // 걷는 사람의 탕비실 쪽 끝 = 계획기가 출발 때 정한 자리(I1). 걷는 시간도 그 자리까지 거리(속도 3칸/120ms 고정)
   const seatX = (name: string) => (pantry[name]?.seat === "sofa" ? SOFA_DX : 0);
@@ -149,12 +152,12 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   return (
     <section
       ref={sectionRef}
-      className={`floor floor--${floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}`}
+      className={`floor floor--${floorStatus}${alarm ? " floor--alarm" : ""}${collapsed ? " collapsed" : ""}${offscreen ? " floor--offscreen" : ""}`}
       id={id}
       aria-labelledby={`${id}-name`}
       data-testid="floor"
     >
-      <div className="shaft">
+      <div className="shaft" data-lift={session.floor}>
         <span className="fl-no">{session.floor}F</span>
         <span className={`led led--${led}`} title={decisions ? "결정 대기" : alarm ? "예산 도달" : statusText} />
         {alarm && <Siren />}
