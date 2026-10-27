@@ -43,8 +43,8 @@ describe("건물 바깥(Task 7)", () => {
   it("세로 순서: 옥상 → 빈 층 → 세션 층(위가 최신) → 카페 → 로비, 그 아래 거리. 하늘·스카이라인은 탑 뒤", () => {
     render(<Building sessions={sessions} />);
     expect(rows().map((r) => r.getAttribute("data-row") ?? r.getAttribute("aria-label") ?? r.getAttribute("data-testid"))).toEqual(["roof", "빈 층", "floor", "floor", "cafe", "lobby"]);
-    // 옥상·카페·로비는 영역(landmark)이 아니다 — 접근 이름 없음(reviewer m1)
-    for (const r of rows().filter((r) => r.hasAttribute("data-row"))) expect(r.getAttribute("aria-label")).toBeNull();
+    // 카페·로비는 영역(landmark)이 아니다 — 접근 이름 없음(reviewer m1). 옥상은 간판 버튼이 있어 "옥상" 영역(P7b-3)
+    expect(rows().map((r) => r.getAttribute("aria-label"))).toEqual(["옥상", "빈 층", null, null, null, null]);
     expect(rows().map((r) => r.querySelector(".shaft")?.getAttribute("data-lift"))).toEqual(["roof", "vacant", "2", "1", "cafe", "lobby"]);
     const main = screen.getByRole("main");
     const kids = [...main.children].map((c) => c.className.split(" ")[0]);

@@ -5,7 +5,7 @@ import { ThemeContext } from "../themes/ThemeContext";
 
 /**
  * 건물 바깥(Phase 7 Task 7, 계약 SPEC §2·§7): 하늘·스카이라인, 옥상, 카페, 로비, 거리. 모두 장식(aria-hidden, 누를 수 없음)이고
- * 글자(통로 낱말·관리실·간판)만 DOM 판 위. 옥상·카페·로비 section에는 접근 이름을 주지 않는다(영역 목록을 늘리지 않게, reviewer m1). 화면 밖 줄은 useOffscreen이 .floor--offscreen을 붙여 애니메이션을 멈춘다
+ * 글자(통로 낱말·관리실·간판)만 DOM 판 위. 카페·로비 section에는 접근 이름을 주지 않는다(영역 목록을 늘리지 않게, reviewer m1). 옥상은 간판 버튼이 있어 "옥상" 영역으로 둔다(P7b-3). 화면 밖 줄은 useOffscreen이 .floor--offscreen을 붙여 애니메이션을 멈춘다
  */
 
 /** 화면 밖이면 true(IntersectionObserver). 없는 환경(옛 브라우저·테스트)은 늘 보임 */
@@ -62,7 +62,7 @@ export function RoofRow({ sign }: { sign: ReactNode }) {
   const ref = useRef<HTMLElement>(null);
   const off = useOffscreen(ref);
   return (
-    <section ref={ref} className={`floor floor--roof${off ? " floor--offscreen" : ""}`} data-row="roof">
+    <section ref={ref} className={`floor floor--roof${off ? " floor--offscreen" : ""}`} data-row="roof" aria-label="옥상">
       <div className="shaft" data-lift="roof" aria-hidden="true">
         <Cell name="elevator-motor" />
       </div>
