@@ -183,6 +183,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .sign-plaque { left: 30px; top: -28px; }
 .booth-label { position: absolute; right: 16px; top: 8px; z-index: 2; padding: 0 6px; font-size: 11px; line-height: 16px; background: var(--th-label-bg); color: var(--th-label-ink); border: 2px solid var(--th-label-border); }
 .shaft .lift-door { margin-top: auto; }
+.lift-indicator { padding: 0 2px; font-size: 10px; line-height: 14px; white-space: nowrap; background: var(--th-label-bg); color: var(--th-label-ink); border: 2px solid var(--th-label-border); } /* 로비 상자 위치 "2F ▲"(§2b): 판 위 글 */
 .floor--cafe .fl-no, .floor--lobby .fl-no { font-size: 12px; padding: 0 2px; white-space: nowrap; } /* 낱말이 통로 폭(360은 34px)에 한 줄로 */
 .floor--cafe .shaft, .floor--lobby .shaft { padding-bottom: 0; }
 /* 화면 밖 줄·길은 애니메이션을 멈춤(§7, 30층 성능) */

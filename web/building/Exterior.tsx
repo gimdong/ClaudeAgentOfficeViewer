@@ -143,8 +143,8 @@ export function CafeFloor({ seats, children }: { seats?: [ReactNode?, ReactNode?
   );
 }
 
-/** 로비(층 번호 없음): 엘리베이터 문, 화분·출입문·표지, 관리실 데스크와 경비 */
-export function LobbyFloor() {
+/** 로비(층 번호 없음): 엘리베이터 문, 화분·출입문·표지, 관리실 데스크와 경비. indicator = 상자 위치 표시("2F ▲", T8이 채움, §2b) */
+export function LobbyFloor({ indicator }: { indicator?: ReactNode }) {
   const { theme } = useContext(ThemeContext);
   const ref = useRef<HTMLElement>(null);
   const off = useOffscreen(ref);
@@ -152,6 +152,11 @@ export function LobbyFloor() {
     <section ref={ref} className={`floor floor--lobby${off ? " floor--offscreen" : ""}`} data-row="lobby" data-testid="lobby-floor">
       <div className="shaft" data-lift="lobby">
         <span className="fl-no">{theme.words.lobby.ko}</span>
+        {indicator != null && (
+          <span className="lift-indicator" aria-hidden="true">
+            {indicator}
+          </span>
+        )}
         <span aria-hidden="true">
           <Cell name="elevator-lobby-door" className="lift-door" />
         </span>

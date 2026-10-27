@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Building } from "../../web/building/Building";
+import { LobbyFloor } from "../../web/building/Exterior";
 import { Floor } from "../../web/building/Floor";
 import { Elevator } from "../../web/hud/Elevator";
 import { IDLE_WALK_MS } from "../../web/office/pantryPlan";
@@ -123,5 +124,14 @@ describe("건물 바깥(Task 7)", () => {
     expect(document.querySelectorAll(".walk-layer .character")).toHaveLength(0);
     expect([...document.querySelectorAll(".pantry-scene .character")].map((c) => c.getAttribute("data-action"))).toEqual(["coffee"]);
     vi.useRealTimers();
+  });
+
+  it("로비 통로의 상자 위치 표시 자리(SPEC §2b \"2F ▲\"): indicator가 있으면 판 하나, 없으면 없음(T8이 채움)", () => {
+    const { rerender } = render(<LobbyFloor />);
+    expect(document.querySelector(".lift-indicator")).toBeNull();
+    rerender(<LobbyFloor indicator="2F ▲" />);
+    const el = document.querySelector(".floor--lobby .shaft .lift-indicator")!;
+    expect(el.textContent).toBe("2F ▲");
+    expect(el.getAttribute("aria-hidden")).toBe("true");
   });
 });
