@@ -69,6 +69,8 @@ export function Building({
     return () => removeEventListener("resize", measure);
   }, []);
   const cafe = useCafe(floors, true, reduced, cafeGeo.map(([x]) => walkMsOf(x) ?? WALK_MS));
+  // 로비 통로의 상자 위치 표시(§2b). 로비에 서 있으면 null(P7b-10)
+  const lift = liftText(cafe.elevator, reduced ? null : cafe.hud, { rest: theme.words.rest.ko, lobby: theme.words.lobby.ko });
   const people = floors.flatMap((f) => f.members.map((m) => [cafeKey(f.id, m.name), m] as const));
   const memberOf = (k?: string) => (k ? people.find(([x]) => x === k)?.[1] : undefined);
   // 카페 자리(SPEC §2b·MOTION §3.3): 내리면 문에서 자리까지 걸어 앉고(앉은 그림은 도착 때 보임), 돌아갈 때는 자리에서 문까지 걸어 상자에 탄다.
@@ -189,7 +191,7 @@ export function Building({
             {cafeWalkers}
           </div>
         </CafeFloor>
-        <LobbyFloor indicator={<span data-testid="lift-no">{liftText(cafe.elevator, reduced ? null : cafe.hud, { rest: theme.words.rest.ko, lobby: theme.words.lobby.ko })}</span>} />
+        <LobbyFloor indicator={lift === null ? null : <span data-testid="lift-no">{lift}</span>} />
         {/* 엘리베이터 상자(통로 위, Task 8). 위치의 원본은 계획 상태 */}
         <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer">
           <ElevatorCar state={cafe.elevator} hud={reduced ? null : cafe.hud} riderName={memberOf(cafe.elevator.active?.name)?.name} />

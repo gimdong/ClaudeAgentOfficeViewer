@@ -30,11 +30,13 @@ describe("HUD 층 바로가기와 장면 엘리베이터", () => {
         <Building sessions={s} />
       </>,
     );
-    expect(liftNo()).toBe("로비"); // 처음 상자는 로비
-    expect(document.querySelector('[data-testid="lift-no"]')!.closest('[aria-hidden="true"]')).not.toBeNull();
+    // 처음 상자는 로비: 로비 통로에 "로비" 판이 둘 생기지 않게 표시를 그리지 않음(P7b-10)
+    expect(liftNo()).toBeUndefined();
+    expect(document.querySelector(".floor--lobby .lift-indicator")).toBeNull();
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     fireEvent.click(screen.getByRole("button", { name: "2층 beta" }));
+    expect(document.querySelector('[data-testid="lift-no"]')!.closest('[aria-hidden="true"]')).not.toBeNull();
     expect(document.activeElement).toBe(document.getElementById("floor-b")!.querySelector(".fold"));
     expect(car().getAttribute("data-hud-to")).toBe("2");
     expect(liftNo()).toBe("2F ▲"); // 로비 표시는 상자를 따라감(SPEC §2 lobby, 원본은 계획 상태)
