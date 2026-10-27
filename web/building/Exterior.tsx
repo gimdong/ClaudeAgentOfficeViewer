@@ -5,7 +5,7 @@ import { ThemeContext } from "../themes/ThemeContext";
 
 /**
  * 건물 바깥(Phase 7 Task 7, 계약 SPEC §2·§7): 하늘·스카이라인, 옥상, 카페, 로비, 거리. 모두 장식(aria-hidden, 누를 수 없음)이고
- * 글자(통로 낱말·관리실·간판)만 DOM 판 위. 화면 밖 줄은 useOffscreen이 .floor--offscreen을 붙여 애니메이션을 멈춘다
+ * 글자(통로 낱말·관리실·간판)만 DOM 판 위. 옥상·카페·로비 section에는 접근 이름을 주지 않는다(영역 목록을 늘리지 않게, reviewer m1). 화면 밖 줄은 useOffscreen이 .floor--offscreen을 붙여 애니메이션을 멈춘다
  */
 
 /** 화면 밖이면 true(IntersectionObserver). 없는 환경(옛 브라우저·테스트)은 늘 보임 */
@@ -48,7 +48,9 @@ export function Sky() {
     <div className="sky" aria-hidden="true" style={style}>
       <i className="sky-sun" />
       <i className="sky-cloud" style={{ left: "12%", top: 40 }} />
-      <i className="sky-cloud small" style={{ left: "62%", top: 88 }} />
+      <i className="sky-cloud small" style={{ left: "62%", top: 24 }} />
+      {/* 옥상 너머로 높은 건물(위)과 탑 옆 여백(아래) 두 겹(designer-themes I2) */}
+      <div className="skyline top" />
       <div className="skyline" />
     </div>
   );
@@ -56,10 +58,11 @@ export function Sky() {
 
 /** 옥상: 기계실(통로 칸)·물탱크·실외기·나무·벤치·안테나, 난간 위 간판(sign = 지금 간판 버튼) */
 export function RoofRow({ sign }: { sign: ReactNode }) {
+  const { theme, variant } = useContext(ThemeContext);
   const ref = useRef<HTMLElement>(null);
   const off = useOffscreen(ref);
   return (
-    <section ref={ref} className={`floor floor--roof${off ? " floor--offscreen" : ""}`} aria-label="옥상">
+    <section ref={ref} className={`floor floor--roof${off ? " floor--offscreen" : ""}`} data-row="roof">
       <div className="shaft" data-lift="roof" aria-hidden="true">
         <Cell name="elevator-motor" />
       </div>
@@ -72,7 +75,9 @@ export function RoofRow({ sign }: { sign: ReactNode }) {
           <Cell name="roof-tree" className="opt" />
           <Cell name="roof-antenna" />
         </div>
-        <div className="parapet">{sign}</div>
+        <div className="parapet" style={{ "--rail": `url(${theme.sheets[`roof-railing-${variant}.png`]})` } as CSSProperties}>
+          {sign}
+        </div>
       </div>
     </section>
   );
@@ -83,10 +88,10 @@ export function Construction() {
   return (
     <div className="construction" aria-hidden="true">
       <Cell name="vacant-bulb" className="bulb" />
-      <Cell name="vacant-scaffold" />
+      <Cell name="vacant-scaffold" className="opt" />
       <Cell name="vacant-ladder" />
       {/* 가운데(안내 글·버튼 자리)는 비우고 나머지는 오른쪽으로 */}
-      <Cell name="vacant-barrier" className="push" />
+      <Cell name="vacant-barrier" className="push opt" />
       <Cell name="vacant-cone" />
       <Cell name="vacant-bucket" className="opt" />
       <Cell name="vacant-cone" className="opt" />
@@ -100,7 +105,7 @@ export function CafeFloor({ seats, children }: { seats?: [ReactNode?, ReactNode?
   const ref = useRef<HTMLElement>(null);
   const off = useOffscreen(ref);
   return (
-    <section ref={ref} className={`floor floor--cafe${off ? " floor--offscreen" : ""}`} aria-label={theme.words.rest.ko} data-testid="cafe-floor">
+    <section ref={ref} className={`floor floor--cafe${off ? " floor--offscreen" : ""}`} data-row="cafe" data-testid="cafe-floor">
       <div className="shaft" data-lift="cafe">
         <span className="fl-no">{theme.words.rest.ko}</span>
       </div>
@@ -108,6 +113,7 @@ export function CafeFloor({ seats, children }: { seats?: [ReactNode?, ReactNode?
         <div className="room">
           <div className="cafe-scene" aria-hidden="true">
             <i className="awning" />
+            <span className="cafe-tag">{theme.words.rest.ko}</span>
             <span className="sc-box counter">
               <SceneCell slot="rest" name="rest-counter-back" className="sc flow" />
               <Extra id="barista" action="sit_down" still style={{ left: 80, top: 8 }} />
@@ -124,7 +130,7 @@ export function CafeFloor({ seats, children }: { seats?: [ReactNode?, ReactNode?
                 </span>
               ))}
             </span>
-            <span className="sc-box table guest">
+            <span className="sc-box table guest opt">
               <Extra id="customer-2" action="idle" style={{ left: 18, top: 10 }} />
               <SceneCell slot="rest" name="rest-table" className="sc flow over" />
             </span>
@@ -143,7 +149,7 @@ export function LobbyFloor() {
   const ref = useRef<HTMLElement>(null);
   const off = useOffscreen(ref);
   return (
-    <section ref={ref} className={`floor floor--lobby${off ? " floor--offscreen" : ""}`} aria-label={theme.words.lobby.ko} data-testid="lobby-floor">
+    <section ref={ref} className={`floor floor--lobby${off ? " floor--offscreen" : ""}`} data-row="lobby" data-testid="lobby-floor">
       <div className="shaft" data-lift="lobby">
         <span className="fl-no">{theme.words.lobby.ko}</span>
         <span aria-hidden="true">
@@ -191,7 +197,7 @@ export function Street() {
       <span className="walker" style={{ "--t": "30s", animationDelay: "-8s", "--x0": "15vw" } as CSSProperties}>
         <Extra id="passerby-1" action="walk_right" />
       </span>
-      <span className="walker to-left" style={{ "--t": "40s", animationDelay: "-25s", "--x0": "62vw" } as CSSProperties}>
+      <span className="walker to-left" style={{ "--t": "40s", animationDelay: "-25s", "--x0": "62vw", top: -22 } as CSSProperties}>
         <Extra id="passerby-2" action="walk_left" />
       </span>
       {cars && (

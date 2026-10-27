@@ -138,6 +138,7 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .sky-cloud { width: 80px; height: 48px; background-position: calc(-96px - var(--night) * 80px) 0 !important; } /* 구름은 움직이지 않음(§2) */
 .sky-cloud.small { width: 48px; background-position: calc(-256px - var(--night) * 48px) 0 !important; }
 .skyline { position: absolute; left: 0; right: 0; bottom: 0; height: 256px; image-rendering: pixelated; background: var(--skyline-img) repeat-x left bottom / 384px 256px; }
+.skyline.top { top: 14px; bottom: auto; }
 /* 장면 칸을 흐름 안에(.sc.flow) 또는 그 위에 겹쳐(.sc.over) 둔다 */
 .sc-box { position: relative; display: inline-block; flex: none; line-height: 0; }
 .sc.flow { position: relative; }
@@ -146,9 +147,9 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .floor--roof .shaft { background: none; border-right: 0; justify-content: flex-end; padding-top: 0; }
 .roof-body { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
 .roof-props { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 0 12px; overflow: hidden; }
-.parapet { display: flex; align-items: center; justify-content: center; height: 36px; background: var(--th-sc-parapet); border-top: 6px solid var(--th-facade-shade); }
-.roof-sign { font-family: "Galmuri14", var(--font-pixel); font-size: 18px; line-height: 24px; color: var(--pink); background: var(--th-label-bg); border: 2px solid var(--th-label-border); padding: 0 8px; letter-spacing: 2px; white-space: nowrap; }
-:root[data-ui="dark"] .roof-sign, :root:not([data-ui]) .roof-sign { text-shadow: 0 0 6px var(--pink); } /* 번짐은 밤에만(낮에는 흐려 보임, designer-office M4) */
+.parapet { position: relative; display: flex; align-items: center; justify-content: center; height: 36px; background: var(--th-sc-parapet); border-top: 6px solid var(--th-facade-shade); }
+.parapet::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 24px; image-rendering: pixelated; background: var(--rail) repeat-x 0 0 / 32px 24px; pointer-events: none; } /* 난간 roof-railing 16×12 ×2 반복(M5) */
+.roof-sign { font-family: "Galmuri14", var(--font-pixel); font-size: 18px; font-weight: 700; line-height: 24px; color: var(--th-label-ink); background: var(--th-label-bg); border: 2px solid var(--th-label-border); padding: 0 8px; letter-spacing: 2px; white-space: nowrap; } /* 난간 위 판 글(§4.1a), 번짐 없음(designer-office M4) */
 .tower { border: 8px solid var(--th-facade-shade); border-top: 0; border-bottom: 0; }
 /* 거리: 인도·차도 타일 32×60 ×2 가로 반복, 가로등·가로수 24×48(발 = 인도), 행인 2·차 2는 translateX만 */
 .street { height: 120px; image-rendering: pixelated; background-repeat: repeat-x; background-size: 64px 120px; overflow-x: clip; pointer-events: none; }
@@ -165,9 +166,10 @@ svg.px { shape-rendering: crispEdges; image-rendering: pixelated; display: block
 .construction { position: absolute; inset: auto 0 0 0; display: flex; align-items: flex-end; gap: 8px; padding: 0 12px 4px; pointer-events: none; }
 .construction .push { margin-left: auto; }
 .construction .bulb { position: absolute; top: -12px; left: 30%; }
-.floor--empty .vacant { position: relative; z-index: 1; }
+.floor--empty .vacant { position: relative; z-index: 2; } /* 글 판·버튼이 공사 소품 위(I1) */
 /* 카페(층 번호 없음): 줄무늬 벽, 차양, 카운터(바리스타), 러그 위 팀원 테이블 둘, 손님 테이블 */
 .floor--cafe .room { padding-top: 40px; background: repeating-linear-gradient(90deg, var(--th-sc-cafeWall) 0 10px, var(--th-sc-cafeStripe) 10px 12px); }
+.cafe-tag { position: absolute; z-index: 2; left: 10px; top: 24px; padding: 0 6px; font-size: 11px; line-height: 16px; background: var(--th-label-bg); color: var(--th-label-ink); border: 2px solid var(--th-label-border); } /* 방 안 "카페" 판(M6) */
 .awning { position: absolute; left: 0; right: 0; top: 0; height: 18px; background: repeating-linear-gradient(90deg, var(--th-accent-1) 0 16px, var(--th-sc-awningAlt) 16px 32px); }
 .cafe-scene { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 8px; width: 100%; padding-bottom: 8px; background: linear-gradient(transparent calc(100% - 40px), var(--th-sc-counter) calc(100% - 40px) calc(100% - 36px), var(--th-sc-cafeTile) calc(100% - 36px)); }
 .cafe-scene .rug { display: flex; gap: 24px; padding: 0 16px; background: linear-gradient(transparent calc(100% - 20px), var(--th-team-zone) calc(100% - 20px)); }
@@ -648,7 +650,7 @@ button.desk:hover .open-hint, button.desk:focus-visible .open-hint { display: in
   .room { padding: 8px 4px 0; }
   .desks { gap: 8px 4px; padding-left: 0; }
   .room > .room-deco { display: none; }
-  .roof-props .opt, .construction .opt, .lobby-scene .opt, .street-prop.opt { display: none; }
+  .roof-props .opt, .construction .opt, .lobby-scene .opt, .cafe-scene .opt, .street-prop.opt { display: none; } /* 360: 바리케이드·둘째 고깔(I1)·카페 손님(M7) 숨김 */
   .pl-row { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
   .pl-name { grid-column: 1; grid-row: 1; }
   .pl-sum { grid-column: 1; grid-row: 2; }
@@ -781,7 +783,7 @@ fieldset.ch-mode { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 4p
 /* 간판은 버튼(빌딩 정보 창을 엶). 40자 이름은 말줄임 */
 button.roof-sign { cursor: pointer; } /* 판(--th-label-bg)은 .roof-sign 그대로(Task 7) */
 .roof-sign { max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
-button.roof-sign:hover, button.roof-sign:focus-visible { text-shadow: 0 0 6px var(--pink), 0 0 12px var(--pink); text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+button.roof-sign:hover, button.roof-sign:focus-visible { text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 /* TODAY·5H·WEEK: 행 높이를 고정해 보조 줄이 없는 칸도 값이 같은 기준선, 숫자는 오른쪽 정렬·같은 폭 */
 .counter { display: grid; grid-template-columns: minmax(84px, max-content); grid-template-rows: 14px 24px 14px; justify-items: end; text-align: right; }
 .counter .label { grid-row: 1; line-height: 14px; white-space: nowrap; }

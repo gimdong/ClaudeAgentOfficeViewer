@@ -42,7 +42,9 @@ const rows = () => [...document.querySelectorAll(".tower > section")];
 describe("건물 바깥(Task 7)", () => {
   it("세로 순서: 옥상 → 빈 층 → 세션 층(위가 최신) → 카페 → 로비, 그 아래 거리. 하늘·스카이라인은 탑 뒤", () => {
     render(<Building sessions={sessions} />);
-    expect(rows().map((r) => r.getAttribute("aria-label") ?? r.getAttribute("data-testid"))).toEqual(["옥상", "빈 층", "floor", "floor", "카페", "로비"]);
+    expect(rows().map((r) => r.getAttribute("data-row") ?? r.getAttribute("aria-label") ?? r.getAttribute("data-testid"))).toEqual(["roof", "빈 층", "floor", "floor", "cafe", "lobby"]);
+    // 옥상·카페·로비는 영역(landmark)이 아니다 — 접근 이름 없음(reviewer m1)
+    for (const r of rows().filter((r) => r.hasAttribute("data-row"))) expect(r.getAttribute("aria-label")).toBeNull();
     expect(rows().map((r) => r.querySelector(".shaft")?.getAttribute("data-lift"))).toEqual(["roof", "vacant", "2", "1", "cafe", "lobby"]);
     const main = screen.getByRole("main");
     const kids = [...main.children].map((c) => c.className.split(" ")[0]);
@@ -58,6 +60,11 @@ describe("건물 바깥(Task 7)", () => {
     expect(lobby.querySelector(".fl-no")?.textContent).toBe("로비");
     expect(lobby.querySelector(".booth-label")?.textContent).toBe("관리실");
     expect(cafe.querySelectorAll(".cafe-seat")).toHaveLength(2);
+    // designer-office 판정(06b8b2d): 방 안 "카페" 판(M6), 360에서 숨는 칸(opt) = 손님 테이블(M7)·바리케이드(I1), 난간 반복 타일(M5)
+    expect(cafe.querySelector(".cafe-tag")?.textContent).toBe("카페");
+    expect(cafe.querySelector(".table.guest")!.classList.contains("opt")).toBe(true);
+    expect(document.querySelector(".construction .push")!.classList.contains("opt")).toBe(true);
+    expect((document.querySelector(".parapet") as HTMLElement).style.getPropertyValue("--rail")).toContain("roof-railing-");
   });
 
   it("HUD 엘리베이터 버튼은 세션 층뿐(카페·로비·옥상 없음)", () => {

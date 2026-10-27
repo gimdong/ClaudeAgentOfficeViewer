@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Phase 7 office 장면 생성기 — Node 표준(zlib·fs·path·crypto)만 씀.
 // 사용: node make-scene.mjs <출력 폴더>
-// 출력: scene-day.png · scene-night.png(같은 배치의 장면 칸 시트), room-wall-N-<day|night>.png(벽지 타일 낱장), scene.json(칸 이름 → x,y,w,h, 기준점, wallVariants), tokens.css(--th-*·--th-sc-* 낮·밤)
+// 출력: scene-day.png · scene-night.png(같은 배치의 장면 칸 시트), room-wall-N-<day|night>.png(벽지 타일 낱장)·roof-railing-<v>.png(난간 반복), scene.json(칸 이름 → x,y,w,h, 기준점, wallVariants), tokens.css(--th-*·--th-sc-* 낮·밤)
 // 같은 입력이면 같은 바이트(재현성). 실행할 때마다 두 번 그려 바이트를 비교하고, 변형당 PNG 64KB를 넘거나 다르면 exit 1.
 // 그림 함수는 docs/design/phase7/office/mock/scene.js(승인된 목업)와 같은 코드다. 바깥(하늘·거리·차)은 themes 생성기 몫이라 없다.
 import { deflateSync } from "node:zlib";
@@ -249,7 +249,7 @@ for (const v of ["day", "night"]) {
   if (pa.length > BUDGET) { console.error(`예산 초과: scene-${v}.png ${pa.length}B > ${BUDGET}B`); process.exit(1); }
   files[`scene-${v}.png`] = pa; layouts[v] = JSON.stringify(a.layout.at);
   // 벽지 타일 낱장(designer-office (b)): 시트 칸은 CSS로 반복할 수 없어서 room-wall-N을 따로 낸다(.room 바탕 24칸 반복)
-  for (const [name, t] of a.items) if (name.startsWith("room-wall-")) files[`${name}-${v}.png`] = png(t.w, t.h, t.d);
+  for (const [name, t] of a.items) if (name.startsWith("room-wall-") || name === "roof-railing") files[`${name}-${v}.png`] = png(t.w, t.h, t.d); // 옥상 난간도 가로 반복 낱장(T7 M5)
 }
 if (layouts.day !== layouts.night) { console.error("낮·밤 배치가 다름"); process.exit(1); }
 const meta = {

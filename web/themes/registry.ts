@@ -43,7 +43,7 @@ export const REQUIRED_SLOTS = (Object.keys(SLOT_FILES) as SlotName[]).filter((s)
 const WORD_KEYS: readonly WordKey[] = ["floor", "lobby", "rest", "pantry", "elevator", "guard", "team", "report"];
 
 const SCENE = "scene-{v}.png";
-const SHEET = /^(layers\/[\w-]+|aura|cap|room-wall-\d+-\w+|extra-[\w-]+|street-props)\.png$/;
+const SHEET = /^(layers\/[\w-]+|aura|cap|room-wall-\d+-\w+|roof-railing-\w+|extra-[\w-]+|street-props)\.png$/;
 const layoutOf = (b: ThemeBundle): SceneLayout | undefined => {
   const l = b.data?.["scene.json"] as SceneLayout | undefined;
   return l && typeof l.slots === "object" && l.slots ? l : undefined;
