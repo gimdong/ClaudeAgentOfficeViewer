@@ -1,6 +1,6 @@
 {
   "name": "claude-office",
-  "version": "2.0.0-beta.18",
+  "version": "2.0.0-beta.19",
   "description": "Claude Code의 hook 이벤트를 로컬 Claude Agent Office Viewer(127.0.0.1:4317)로 보냅니다. 대시보드에서 답한 결정을 돌려줍니다.",
   "author": { "name": "gimdong" },
   "license": "MIT"
