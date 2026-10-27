@@ -33,23 +33,24 @@ export class HookStats {
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  accept(eventName: string, notificationType?: unknown): void {
+  accept(eventName: string): void {
     const t = this.now();
     const key = KNOWN_EVENTS.has(eventName) ? eventName : "other";
     this.byEvent[key] = (this.byEvent[key] ?? 0) + 1;
-    if (key === "Notification") {
-      const n = notificationType;
-      // 화면·번들에서 객체 키가 되므로 __proto__·constructor 같은 이름은 받지 않는다
-      const named =
-        typeof n === "string" && NOTIFICATION_NAME.test(n) && !(n in {}) &&
-        (KNOWN_NOTIFICATIONS.has(n) || this.byNotification.has(n) || this.byNotification.size < MAX_NOTIFICATION_KEYS);
-      const kind = named ? n : "other";
-      this.byNotification.set(kind, (this.byNotification.get(kind) ?? 0) + 1);
-    }
     this.total++;
     this.lastAt = t;
     this.times.push(t);
     while (this.times.length && this.times[0] < t - TEN_MIN) this.times.shift();
+  }
+
+  /** Notification의 notification_type 수. /hooks/v2로 온 것만 부른다(B344와 같은 원칙, Ruling D-3) — 옛 입구 위조로 "받은 적 있음"이 보이지 않게 */
+  acceptNotification(n: unknown): void {
+    // 화면·번들에서 객체 키가 되므로 __proto__·constructor 같은 이름은 받지 않는다
+    const named =
+      typeof n === "string" && NOTIFICATION_NAME.test(n) && !(n in {}) &&
+      (KNOWN_NOTIFICATIONS.has(n) || this.byNotification.has(n) || this.byNotification.size < MAX_NOTIFICATION_KEYS);
+    const kind = named ? n : "other";
+    this.byNotification.set(kind, (this.byNotification.get(kind) ?? 0) + 1);
   }
 
   acceptV2(): void {

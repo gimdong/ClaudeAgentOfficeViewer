@@ -45,26 +45,17 @@ describe("HookStats", () => {
     expect(s.view().total).toBe(103);
   });
 
-  it("Notification은 notification_type별로 더 센다. 짧은 [a-z_]만 이름으로, 나머지·Notification 밖은 세지 않거나 other", () => {
+  it("Notification 종류는 짧은 [a-z_]만 이름으로, 나머지는 other", () => {
     const s = new HookStats(() => T0);
-    s.accept("Notification", "worker_permission_prompt");
-    s.accept("Notification", "worker_permission_prompt");
-    s.accept("Notification", "idle_prompt");
-    s.accept("Notification", undefined);
-    s.accept("Notification", 42);
-    s.accept("Notification", "/Users/fakeuser/secret");
-    s.accept("Notification", "Permission Prompt");
-    s.accept("Notification", "__proto__");
-    s.accept("Notification", "a".repeat(41));
-    s.accept("PreToolUse", "worker_permission_prompt"); // Notification이 아니면 종류를 보지 않는다
-    expect(s.view().byNotification).toEqual({ worker_permission_prompt: 2, idle_prompt: 1, other: 6 });
-    expect(s.view().byEvent).toEqual({ Notification: 9, PreToolUse: 1 });
+    for (const n of ["worker_permission_prompt", "worker_permission_prompt", "idle_prompt", undefined, 42, "/Users/fakeuser/secret", "Permission Prompt", "__proto__", "constructor", "a".repeat(41)]) s.acceptNotification(n);
+    expect(s.view().byNotification).toEqual({ worker_permission_prompt: 2, idle_prompt: 1, other: 7 });
+    expect(s.view().byEvent).toEqual({}); // 이벤트 수는 accept()만 센다
   });
 
   it("notification_type 이름 칸은 상한이 있고 넘으면 other", () => {
     const s = new HookStats(() => T0);
-    for (let i = 0; i < 100; i++) s.accept("Notification", `fake_kind_${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}`);
-    s.accept("Notification", "worker_permission_prompt"); // 알려진 종류는 상한과 관계없이 제 칸
+    for (let i = 0; i < 100; i++) s.acceptNotification(`fake_kind_${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}`);
+    s.acceptNotification("worker_permission_prompt"); // 알려진 종류는 상한과 관계없이 제 칸
     const v = s.view().byNotification!;
     expect(Object.keys(v).length).toBeLessThanOrEqual(21 + 1);
     expect(v.worker_permission_prompt).toBe(1);

@@ -115,6 +115,15 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(froms).toEqual([{ v2: true }, { v2: false }]);
   });
 
+  it("Notification 종류 수는 /hooks/v2로 온 것만 센다(Ruling D-3), 본문은 남기지 않는다", async () => {
+    const note = { session_id: "s1", hook_event_name: "Notification", notification_type: "worker_permission_prompt", message: "fake secret body" };
+    expect((await send(plain(note))).status).toBe(200);
+    expect((await post(JSON.stringify(note), {}, "/hooks/event")).status).toBe(200);
+    expect(stats.view().byEvent.Notification).toBe(2);
+    expect(stats.view().byNotification).toEqual({ worker_permission_prompt: 1 });
+    expect(JSON.stringify(stats.view())).not.toContain("fake secret body");
+  });
+
   it("응답은 요청 키로는 풀리지 않는다(키 방향 분리), 평문 표지가 응답 본문에 없다", async () => {
     const p = plain(pre);
     const r = await send(p);

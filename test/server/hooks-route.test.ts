@@ -68,9 +68,10 @@ describe("POST /hooks/event", () => {
     });
   });
 
-  it("수신 통계: Notification은 notification_type별로도 센다", async () => {
+  it("수신 통계: 옛 입구의 Notification은 이벤트 수에만 들고 종류 수(byNotification)에는 들지 않는다(Ruling D-3)", async () => {
     await post(JSON.stringify({ hook_event_name: "Notification", session_id: "s-fake", notification_type: "worker_permission_prompt", message: "fake secret body" }));
-    expect(stats.view().byNotification).toEqual({ worker_permission_prompt: 1 });
+    expect(stats.view().byEvent).toEqual({ Notification: 1 });
+    expect(stats.view().byNotification).toEqual({});
     expect(JSON.stringify(stats.view())).not.toContain("fake secret body");
   });
 
