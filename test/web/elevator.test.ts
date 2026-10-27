@@ -137,7 +137,8 @@ describe("planPantry 카페 단계", () => {
     expect(planPantry(prev, [{ name: "a", state: "working" }], T, false).a).toEqual({ spot: "walking-back", since: T });
     const riding = { name: "a", state: "working" as const, boarded: T0 + 5 };
     expect(planPantry(prev, [riding], T, false)).toBe(prev);
-    expect(planPantry(prev, [{ ...riding, rideDone: T0 + 8_000 }], T0 + 8_004, false).a).toEqual({ spot: "from-cafe", since: T0 + 8_004 });
+    // 상자 안에서 일이 생겼으니 카페에 앉지 않고 내린 그 시각부터 돌아갈 차례(P7b-7: 문 앞에 있으니 바로 back)
+    expect(planPantry(prev, [{ ...riding, rideDone: T0 + 8_000 }], T0 + 8_004, false).a).toEqual({ spot: "from-cafe", since: T0 + 8_000 });
   });
 
   it("카페에 간 사람은 탕비실 정원(2)에 세지 않는다", () => {

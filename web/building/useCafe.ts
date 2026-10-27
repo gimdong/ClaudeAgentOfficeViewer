@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import type { SessionView } from "../../src/shared/types";
 import { cafeGuests, nextGuestChange, type PantryState } from "../office/pantryPlan";
-import { DOOR_FRAME_MS, hudMoveMs, nextElevatorChange, planElevator, type ElevatorState, type HudMove, type Ride } from "./elevatorPlan";
+import { DOOR_FRAME_MS, hudMoveMs, nextElevatorChange, planElevator, rideMs, type ElevatorState, type HudMove, type Ride } from "./elevatorPlan";
 import { listenHudMove } from "./hudMove";
 
 /** 엘리베이터가 쓰는 층 번호: 세션 층은 그 번호(1부터), 카페 0, 로비 -1(상자가 처음 서 있는 곳) */
@@ -41,13 +41,19 @@ export function useCafe(sessions: SessionView[], canRide: boolean, reduced: bool
       return { name: cafeKey(s.id, m.name), state: m.state, duty: m.duty, idleSince: Number.isFinite(idle) ? idle : undefined, spot: v?.spot ?? ("desk" as const), since: v?.since ?? 0, floor: s.floor, atDoor: spots[s.id]?.atDoor[m.name] };
     }),
   );
-  // 엘리베이터는 문 앞에 닿은 사람만 태운다(enq = 문 앞 도착, MOTION §3.2): 층에서 걸어오는 사람은 층이 알린 시각, 카페에서 돌아갈 사람은 자리 → 문 걷기 뒤
+  // 엘리베이터는 문 앞에 닿은 사람만 태운다(enq = 문 앞 도착, MOTION §3.2): 층에서 걸어오는 사람은 층이 알린 시각, 카페에서 돌아갈 사람은 자리 → 문 걷기 뒤.
+  // 카페에 앉지 않고 내린 그 시각에 돌아가는 사람(상자 안에서 일이 생김)은 문 앞이라 내린 시각(P7b-7)
   const [plan, setPlan] = useState(() => ({ guests: cafeGuests({}, people, Date.now(), canRide), elevator: { car: LOBBY_FLOOR, settled: 0, done: {} } as ElevatorState }));
+  const riding = plan.elevator.active;
   const wants: Ride[] = people.flatMap((p): Ride[] =>
     p.spot === "to-cafe"
-      ? [{ name: p.name, from: p.floor, to: CAFE_FLOOR, dir: "out", enq: p.atDoor ?? p.since }]
+      ? [
+          { name: p.name, from: p.floor, to: CAFE_FLOOR, dir: "out", enq: p.atDoor ?? p.since },
+          // 상자 안에서 일·손들기가 생겼으면 내리는 그 순간 이어서 back(층이 계획을 다시 알리기 전에 다른 사람을 태우지 않게, P7b-7)
+          ...(riding?.name === p.name && p.state !== "idle" && p.state !== "offline" && p.duty !== "off" ? [{ name: p.name, from: CAFE_FLOOR, to: p.floor, dir: "back" as const, enq: riding.start + rideMs(riding.pick, riding) }] : []),
+        ]
       : p.spot === "from-cafe"
-        ? [{ name: p.name, from: CAFE_FLOOR, to: p.floor, dir: "back", enq: p.since + (cafeWalkMs[plan.guests[p.name] ?? 0] ?? 0) }]
+        ? [{ name: p.name, from: CAFE_FLOOR, to: p.floor, dir: "back", enq: p.since === plan.elevator.done[p.name] ? p.since : p.since + (cafeWalkMs[plan.guests[p.name] ?? 0] ?? 0) }]
         : [],
   );
   const key = JSON.stringify([people, wants, canRide]);

@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Member } from "../../src/shared/types";
 import { Building } from "../../web/building/Building";
-import { rideMs } from "../../web/building/elevatorPlan";
+import { RIDE_FLOOR_MS, rideMs } from "../../web/building/elevatorPlan";
 import { CAFE_FLOOR, LOBBY_FLOOR } from "../../web/building/useCafe";
 import { LONG_IDLE_MS, WALK_MS } from "../../web/office/pantryPlan";
 import { makeMember, makeSession } from "./fixtures";
@@ -71,6 +71,26 @@ describe("카페 오래 쉬기(엘리베이터)", () => {
     for (let t = 0; t < UP + 50; t += 250) step(250);
     expect(seated()[0]).toBe("a");
     expect(rider()).toBe("s1\nb");
+  });
+
+  it("카페로 타고 가는 중에 일이 생기면 카페에 앉지 않고, 기다리던 out보다 먼저 back으로 바로 돌아온다(P7b-7)", () => {
+    const { rerender } = render(<Building sessions={[floor1([rest("a", LONG_IDLE_MS + 900), rest("b", LONG_IDLE_MS + 400)])]} />);
+    step(TO_DOOR);
+    expect(rider()).toBe("s1\na"); // b는 문 앞에서 기다림
+    step(4_000);
+    rerender(<Building sessions={[floor1([makeMember({ name: "a", state: "working", lastActivityAt: ago(0) }), rest("b", LONG_IDLE_MS + 400)])]} />);
+    for (let t = 0; t < UP; t += 250) step(250);
+    expect(rider()).toBe("s1\na");
+    expect(seated()).toEqual([null, null]);
+  });
+
+  it("로비 「2F ▲」 화살표는 지금 구간 방향: 태우러 올라가는 동안 ▲, 태우고 카페로 내려가는 동안 ▼(reviewer m1)", () => {
+    render(<Building sessions={[floor1([rest("dev", LONG_IDLE_MS + 700)])]} />);
+    const lift = () => document.querySelector('[data-testid="lift-no"]')!.textContent;
+    step(TO_DOOR);
+    expect(lift()).toBe("1F ▲"); // 로비 → 1층으로 태우러
+    step(RIDE_FLOOR_MS * 2 + 50); // 로비 → 카페 → 1층(2층) 지남
+    expect(lift()).toBe("카페 ▼");
   });
 
   it("움직임 줄이기: 타지 않고 바로 카페 자리", () => {

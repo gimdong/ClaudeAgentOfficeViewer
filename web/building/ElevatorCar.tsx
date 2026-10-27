@@ -170,12 +170,13 @@ export function ElevatorCar({ state, hud, riderName }: { state: ElevatorState; h
 
 /**
  * 로비 층수 표시 「2F ▲」 글(SPEC §2 lobby — 칸 위치를 따라가는 DOM, 자리는 T7 LobbyFloor indicator). 원본은 계획 상태:
- * 서 있으면 상자가 있는 층, 움직이는 중(탑승·HUD)이면 갈 층과 방향
+ * 서 있으면 상자가 있는 층, 움직이는 중(탑승·HUD)이면 지금 구간이 갈 층과 방향. 구간이 바뀌는 때 다시 그리는 것은 Building
  */
 export function liftText(state: ElevatorState, hud: HudMove | null | undefined, words: { rest: string; lobby: string }): string {
   const name = (n: number) => (n === CAFE_FLOOR ? words.rest : n === LOBBY_FLOOR ? words.lobby : `${n}F`);
   const a = state.active;
   const moving = !a && hud && hud.from !== hud.to && Date.now() < hud.start + hudMoveMs(hud) ? hud : null;
-  const [from, to] = a ? [a.pick, a.to] : moving ? [moving.from, moving.to] : [state.car, state.car];
+  // 탑승 중이면 지금 구간: 태우러 가는 동안 pick → from, 태운 뒤 from → to(reviewer m1)
+  const [from, to] = a ? (Date.now() - a.start < ridePhases(a.pick, a).pick ? [a.pick, a.from] : [a.from, a.to]) : moving ? [moving.from, moving.to] : [state.car, state.car];
   return from === to ? name(to) : `${name(to)} ${to > from ? "▲" : "▼"}`;
 }

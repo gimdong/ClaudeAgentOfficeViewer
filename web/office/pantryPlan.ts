@@ -48,7 +48,8 @@ export function planPantry(prev: PantryState, members: PantryMember[], now: numb
     if (CAFE_SPOTS.includes(spot)) {
       const leave = m.state !== "idle" || off || !m.cafe;
       if (spot === "to-cafe" && reduced) [spot, since] = leave ? ["desk", now] : ["cafe", now];
-      else if (spot === "to-cafe" && after(m.rideDone, since)) [spot, since] = ["cafe", m.rideDone!];
+      // 상자 안에서 일·손들기가 생겼으면 카페에 앉지 않고 내린 그 시각부터 돌아갈 차례(문 앞이라 바로 back, P7b-7)
+      else if (spot === "to-cafe" && after(m.rideDone, since)) [spot, since] = [leave && !off ? "from-cafe" : "cafe", m.rideDone!];
       else if (spot === "to-cafe" && leave && !(m.boarded !== undefined && m.boarded >= since)) [spot, since] = off ? ["desk", now] : ["walking-back", now];
       if (spot === "cafe" && leave) [spot, since] = off || reduced ? ["desk", now] : ["from-cafe", now];
       else if (spot === "from-cafe" && (off || reduced)) [spot, since] = ["desk", now];

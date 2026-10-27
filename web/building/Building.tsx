@@ -74,6 +74,15 @@ export function Building({
   // 카페 자리(SPEC §2b·MOTION §3.3): 내리면 문에서 자리까지 걸어 앉고(앉은 그림은 도착 때 보임), 돌아갈 때는 자리에서 문까지 걸어 상자에 탄다.
   // 카페 장면은 aria-hidden이라 이름표도 장식 복제다. 책상 버튼·이름표·포커스는 자기 층에 그대로
   const active = cafe.elevator.active;
+  // 로비 「2F ▲」는 태우러 가는 구간이 끝나면 방향이 바뀌므로 그때 한 번 다시 그린다
+  const [, setLegTick] = useState(0);
+  const legEnd = active ? active.start + ridePhases(active.pick, active).pick : undefined;
+  useEffect(() => {
+    const d = (legEnd ?? 0) - Date.now();
+    if (legEnd === undefined || d <= 0) return;
+    const t = setTimeout(() => setLegTick((n) => n + 1), d);
+    return () => clearTimeout(t);
+  }, [legEnd]);
   const now = Date.now();
   const seatNodes: [ReactNode?, ReactNode?] = [undefined, undefined];
   const cafeWalkers: ReactNode[] = [];
@@ -95,7 +104,8 @@ export function Building({
       if (left > 0) cafeWalkers.push(<Walker key={p.key} member={m} from={0} to={x} y={y} since={p.since} ms={ms} out={false} hideAt={p.since + ms} />);
     } else {
       const boardAt = active?.name === p.key ? active.start + ridePhases(active.pick, active).pick + 3 * DOOR_FRAME_MS : undefined;
-      if ((boardAt ?? Infinity) > now) cafeWalkers.push(<Walker key={p.key} member={m} from={x} to={0} y={y} since={p.since} ms={ms} out hideAt={boardAt} />);
+      // 앉지 않고 내린 그대로 돌아가는 사람은 문 앞에 있어 걷지 않는다(P7b-7)
+      if ((boardAt ?? Infinity) > now && p.since !== cafe.elevator.done[p.key]) cafeWalkers.push(<Walker key={p.key} member={m} from={x} to={0} y={y} since={p.since} ms={ms} out hideAt={boardAt} />);
     }
   });
   const barRef = useRef<HTMLDivElement>(null);
