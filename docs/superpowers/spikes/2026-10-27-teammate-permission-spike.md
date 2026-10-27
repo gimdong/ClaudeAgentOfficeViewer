@@ -11,7 +11,7 @@
 
 ## 결론 (정적 분석 근거)
 1. **[확인] 별도 프로세스 팀원(tmux·창)의 권한 질문은 팀 메일함으로 리더에게 넘어간다.** 팀원 쪽 `[PermissionSync]` 코드가 `{type:"permission_request", request_id, agent_id:<팀원 이름>, tool_name, tool_use_id, description, input, permission_suggestions}` 메시지를 만들어 리더 메일함에 쓴다(팀원 판별: 팀 이름이 있고 자기 id가 `team-lead`가 아님).
-2. **[확인] 리더는 그 요청을 PermissionRequest hook 없이 자기 터미널 대화상자로 바로 띄운다.** 리더의 `[InboxPoller]`가 요청을 읽으면 다음을 한다.
+2. **[확인 — 직접 호출 없음, 간접 호출은 실측 항목 3] 리더는 그 요청을 PermissionRequest hook 없이 자기 터미널 대화상자로 바로 띄운다.** 리더의 `[InboxPoller]`가 요청을 읽으면 다음을 한다.
    - agent_id와 보낸 쪽이 다르면 버린다.
    - 권한 대화상자를 만들어(`requestSource: {type:"subagent", agentName}`) 리더 화면에 띄운다.
    - 사용자 답(allow·deny)을 `permission_response`로 팀원 메일함에 돌려준다.
