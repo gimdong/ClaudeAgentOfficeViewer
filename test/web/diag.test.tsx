@@ -122,7 +122,7 @@ describe("Hud의 진단 칩과 패널", () => {
     });
     expect(counts.map((x) => x.textContent)).toEqual(["Notification2건", "Notification(worker_permission_prompt)2건"]);
     expect(panel.textContent).toContain("Notification(worker_permission_prompt)");
-    expect(panel.querySelector(".dp-hook-note")?.textContent).toContain("worker_permission_prompt");
+    expect(panel.querySelector(".dp-hook-note")?.textContent).toBe("Notification(worker_permission_prompt) 수가 늘었다면 팀원이 권한을 물은 것입니다. 이 질문은 대시보드에서 답할 수 없고, 리드의 터미널에서 답합니다.");
   });
 
   it("오류가 있으면 칩에 빨간 점(요약을 가져온 뒤)", async () => {

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DiagnosticsSummary } from "../../src/shared/types";
 import { Icon } from "../pixel/Icon";
 import { DiagIcon } from "./DiagIcon";
-import { eventCounts, hhmm, hookLine, sortItems, verdict } from "./format";
+import { eventCounts, HOOK_NOTE, hhmm, hookLine, sortItems, verdict } from "./format";
 
 const LABEL = { fail: "문제", warn: "확인 필요", ok: "정상" } as const;
 
@@ -96,7 +96,7 @@ function Body({ data, announce }: { data: DiagnosticsSummary; announce(text: str
       <section className="dp-sec" aria-labelledby="dp-hook-h">
         <h3 id="dp-hook-h">hook 수신</h3>
         <p className="dp-line">{hookLine(data.hooks)}</p>
-        {/* 이벤트 종류별 수만 보인다(본문·경로 없음). 글자는 qa가 다듬는다 */}
+        {/* 이벤트 종류별 수만 보인다(본문·경로 없음) */}
         <ul className="dp-rows">
           {eventCounts(data.hooks).map(([name, n]) => (
             <li key={name} className="dp-count">
@@ -105,7 +105,7 @@ function Body({ data, announce }: { data: DiagnosticsSummary; announce(text: str
             </li>
           ))}
         </ul>
-        <p className="dp-sub dp-hook-note">팀원 권한 질문은 Notification(worker_permission_prompt)으로만 옵니다.</p>
+        <p className="dp-sub dp-hook-note">{HOOK_NOTE}</p>
       </section>
       <section className="dp-sec" aria-labelledby="dp-doc-h">
         <h3 id="dp-doc-h">점검 결과</h3>
