@@ -1057,6 +1057,7 @@ import { LEAD_MAX, LEAD_TEXT } from "../../web/office/leadText";
 import { BUILDING_TEXT } from "../../web/building/BuildingInfo";
 import { BAR_EMPTY } from "../../web/hud/remaining";
 import { CMD_TEXT } from "../../web/office/leadCmdText";
+import { HOOK_NOTE } from "../../web/diag/format";
 describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
   const html = readFileSync(join(__dirname, "../../docs/manual/index.html"), "utf8");
   const prose = html.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<!--[\s\S]*?-->/g, "");
@@ -1127,6 +1128,13 @@ describe("Phase 6b 설명서(리드와 일하기·빌딩 정보)", () => {
     expect(rd("web/building/Desk.tsx".replace("building", "office"))).toContain("`${theme.words.rest.ko} ↑`");
     expect(rd("web/building/ElevatorCar.tsx")).toContain('"▲"');
     for (const w of ["다음 버전", "곧 고칠", "예정"]) expect(x, w).not.toContain(w);
+  });
+  it("beta.20 진단 패널 hook 수신 종류별 수와 안내가 HOOK_NOTE와 같다", () => {
+    const d = prose.slice(prose.indexOf("<h3>진단 패널</h3>"), prose.indexOf('<h3 id="report">'));
+    expect(d).toContain(`<code>${HOOK_NOTE}</code>`);
+    expect(d).toContain("<code>Notification(worker_permission_prompt)</code>");
+    const fmt = readFileSync(join(__dirname, "../../web/diag/format.ts"), "utf8");
+    expect(fmt).toContain('`Notification(${k})`');
   });
   it("빌딩 정보 절이 BUILDING_TEXT와 같다", () => {
     const b = sec('<h3 id="building-info">', "<h3>위쪽 막대의 숫자</h3>");
