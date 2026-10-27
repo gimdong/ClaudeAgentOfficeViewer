@@ -13,6 +13,7 @@ import { CafeContext, cafeKey, useCafe } from "./useCafe";
 import { Character, LOOKS, memberVariant } from "../office/Character";
 import { Walker, walkMsOf } from "../office/Pantry";
 import { WALK_MS } from "../office/pantryPlan";
+import { useReducedMotion } from "../office/usePantry";
 import { DOOR_FRAME_MS, RIDE_FLOOR_MS } from "./elevatorPlan";
 import { VacantFloor } from "./VacantFloor";
 
@@ -51,7 +52,8 @@ export function Building({
   const h = useHiddenFloors(sessions, hiddenFloors, announce);
   const floors = [...h.visible].sort((a, b) => b.floor - a.floor);
   // 카페 오래 쉬기와 엘리베이터(Phase 7b Task 8). ponytail: 탑승 행(11·12)은 오피스 시트에 늘 있다(없는 장은 오피스 것) — 행을 빼는 테마가 생기면 매니페스트 표시로
-  const cafe = useCafe(floors, true);
+  const reduced = useReducedMotion();
+  const cafe = useCafe(floors, true, reduced);
   const people = floors.flatMap((f) => f.members.map((m) => [cafeKey(f.id, m.name), m] as const));
   const memberOf = (k?: string) => (k ? people.find(([x]) => x === k)?.[1] : undefined);
   // 카페 방 안 자리 위치(걷는 층 x·y). 문 = 방 왼쪽 끝
@@ -178,7 +180,7 @@ export function Building({
         <LobbyFloor />
         {/* 엘리베이터 상자(통로 위, Task 8). 위치의 원본은 계획 상태 */}
         <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer">
-          <ElevatorCar state={cafe.elevator} riderName={memberOf(cafe.elevator.active?.name)?.name} />
+          <ElevatorCar state={cafe.elevator} hud={reduced ? null : cafe.hud} riderName={memberOf(cafe.elevator.active?.name)?.name} />
         </div>
       </div>
       {(h.count > 0 || h.reloading) && (

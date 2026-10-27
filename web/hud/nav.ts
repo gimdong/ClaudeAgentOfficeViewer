@@ -9,10 +9,15 @@ export function decisionQueue(sessions: SessionView[]): Array<{ session: Session
 
 const reduceMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** 층으로 스크롤한다(디자인 5.5). "fold"면 그 층의 접기 버튼에 포커스를 준다 */
-export function goToFloor(sessionId: string, focus: "fold" | "none" = "fold"): void {
+/**
+ * 층으로 스크롤한다(디자인 5.5). "fold"면 그 층의 접기 버튼에 포커스를 준다(바로 — 키보드 사용자가 기다리지 않게).
+ * delayMs: 장면 엘리베이터가 그 층에 닿아 문이 열린 뒤 스크롤(Phase 7b, SPEC §2b)
+ */
+export function goToFloor(sessionId: string, focus: "fold" | "none" = "fold", delayMs = 0): void {
   const floor = document.getElementById(floorDomId(sessionId));
   if (!floor) return;
-  floor.scrollIntoView?.({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+  const scroll = () => floor.scrollIntoView?.({ block: "start", behavior: reduceMotion() ? "auto" : "smooth" });
+  if (delayMs > 0) setTimeout(scroll, delayMs);
+  else scroll();
   if (focus === "fold") floor.querySelector<HTMLElement>(".fold")?.focus({ preventScroll: true });
 }

@@ -1,5 +1,6 @@
 import type { SessionView } from "../../src/shared/types";
 import { goToFloor } from "./nav";
+import { requestHudMove } from "../building/hudMove";
 
 /** 층 바로가기(디자인 5.5). 위층부터 */
 export function Elevator({ sessions }: { sessions: SessionView[] }) {
@@ -16,7 +17,7 @@ export function Elevator({ sessions }: { sessions: SessionView[] }) {
             key={s.id}
             type="button"
             className="el-btn"
-            onClick={() => goToFloor(s.id)}
+            onClick={() => goToFloor(s.id, "fold", requestHudMove(s.floor))}
             aria-label={`${s.floor}층 ${s.name}${d ? ", 결정 대기" : ""}${alarm ? ", 예산 도달" : ""}`}
           >
             {/* 예산 도달(phase2 §7)은 분홍. 결정 대기가 함께 있으면 Phase 1처럼 결정(노랑)이 먼저 */}
