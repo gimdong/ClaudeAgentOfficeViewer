@@ -30,7 +30,7 @@ interface DeskProps {
   /** 퇴사 중이면 channel 연결이 없음을 알린다(스펙 12장 m) */
   retireWait?: boolean;
   /** 탕비실에 갔거나 걷는 중(Phase 7 T6b): 캐릭터만 빈 의자로. 버튼·이름표·결정 표시는 그대로 */
-  away?: boolean;
+  away?: boolean | "cafe";
 }
 
 type Screen = "work" | "ask" | "think" | "rest";
@@ -112,7 +112,7 @@ function useUrgent(deadline: string | undefined): boolean {
   return !!deadline && remainingSeconds(deadline, Date.now()) <= 60;
 }
 
-function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, away = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
+function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, retireWait = false, away: awayTo = false, folderOutside = false }: DeskProps & { folderOutside?: boolean }) {
   const openDecision = useContext(OpenDecisionContext);
   const openPolicy = useContext(OpenPolicyContext);
   const lead = useContext(OpenLeadContext);
@@ -130,11 +130,13 @@ function DeskBody({ member, paused = false, bubbleKey, bubble, floorId, folder, 
   // 퇴근함(§2.4): 사용자가 퇴근시킨 자리만 팻말 빈 의자
   const offDuty = member.duty === "off";
   const shown: MemberState = paused && !decision ? "idle" : offDuty && !decision ? "offline" : member.state;
+  const away = !!awayTo;
   const shift = useShift(away);
   const vacant = member.state === "offline" || paused || (offDuty && !decision) || (away && shift !== "stand");
   // 탕비실에 간 팀원의 빈 책상: 점선 이름표 "탕비실 →"(테마 낱말, P7a-14 ①). 접근 이름은 그대로 이름
   const { theme } = useContext(ThemeContext);
-  const tagText = away ? `${theme.words.pantry.ko} →` : member.name;
+  // 카페(Phase 7b): "카페 ↑"(SPEC §2b, 테마 낱말 rest)
+  const tagText = awayTo === "cafe" ? `${theme.words.rest.ko} ↑` : away ? `${theme.words.pantry.ko} →` : member.name;
   const tagCls = away ? "nametag nametag--away" : "nametag";
   const denied = !!member.policyDenied;
   const locked = !!member.policy || denied;

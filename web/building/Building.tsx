@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Snapshot, SessionView } from "../../src/shared/types";
 import type { BubbleHandlers } from "../bubble/types";
 import { BudgetSettingsContext } from "../budget/BudgetDialog";
@@ -8,6 +8,14 @@ import { remainingOf } from "../hud/remaining";
 import { BuildingInfo, BUILDING_TEXT } from "./BuildingInfo";
 import { CafeFloor, LobbyFloor, RoofRow, Sky, Street } from "./Exterior";
 import { Floor } from "./Floor";
+import { ElevatorCar, liftText } from "./ElevatorCar";
+import { CafeContext, cafeKey, useCafe } from "./useCafe";
+import { Character, LOOKS, memberVariant } from "../office/Character";
+import { Walker, walkMsOf } from "../office/Pantry";
+import { WALK_MS } from "../office/pantryPlan";
+import { useReducedMotion } from "../office/usePantry";
+import { ThemeContext } from "../themes/ThemeContext";
+import { DOOR_FRAME_MS, ridePhases } from "./elevatorPlan";
 import { VacantFloor } from "./VacantFloor";
 
 /** 야근 빌딩(디자인 5.1). 위가 최신 층, 맨 위는 빈 층, 1F가 가장 오래된 세션. 숨긴 층 줄은 탑 아래·땅 위(phase4a §4.3) */
@@ -44,6 +52,62 @@ export function Building({
   const { announce } = useContext(BudgetSettingsContext);
   const h = useHiddenFloors(sessions, hiddenFloors, announce);
   const floors = [...h.visible].sort((a, b) => b.floor - a.floor);
+  // 카페 오래 쉬기와 엘리베이터(Phase 7b Task 8). ponytail: 탑승 행(11·12)은 오피스 시트에 늘 있다(없는 장은 오피스 것) — 행을 빼는 테마가 생기면 매니페스트 표시로
+  const reduced = useReducedMotion();
+  const { theme } = useContext(ThemeContext);
+  // 카페 방 안 자리 위치(걷는 층 x·y). 문 = 방 왼쪽 끝
+  const [cafeGeo, setCafeGeo] = useState<Array<[number, number]>>([]);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const room = towerRef.current?.querySelector(".floor--cafe .room")?.getBoundingClientRect();
+      if (!room) return;
+      const next = [...towerRef.current!.querySelectorAll(".cafe-seat")].map((e): [number, number] => [Math.round(e.getBoundingClientRect().left - room.left), Math.round(e.getBoundingClientRect().top - room.top)]);
+      setCafeGeo((g) => (JSON.stringify(g) === JSON.stringify(next) ? g : next));
+    };
+    measure();
+    addEventListener("resize", measure);
+    return () => removeEventListener("resize", measure);
+  }, []);
+  const cafe = useCafe(floors, true, reduced, cafeGeo.map(([x]) => walkMsOf(x) ?? WALK_MS));
+  const people = floors.flatMap((f) => f.members.map((m) => [cafeKey(f.id, m.name), m] as const));
+  const memberOf = (k?: string) => (k ? people.find(([x]) => x === k)?.[1] : undefined);
+  // 카페 자리(SPEC §2b·MOTION §3.3): 내리면 문에서 자리까지 걸어 앉고(앉은 그림은 도착 때 보임), 돌아갈 때는 자리에서 문까지 걸어 상자에 탄다.
+  // 카페 장면은 aria-hidden이라 이름표도 장식 복제다. 책상 버튼·이름표·포커스는 자기 층에 그대로
+  const active = cafe.elevator.active;
+  // 로비 「2F ▲」는 태우러 가는 구간이 끝나면 방향이 바뀌므로 그때 한 번 다시 그린다
+  const [, setLegTick] = useState(0);
+  const legEnd = active ? active.start + ridePhases(active.pick, active).pick : undefined;
+  useEffect(() => {
+    const d = (legEnd ?? 0) - Date.now();
+    if (legEnd === undefined || d <= 0) return;
+    const t = setTimeout(() => setLegTick((n) => n + 1), d);
+    return () => clearTimeout(t);
+  }, [legEnd]);
+  const now = Date.now();
+  const seatNodes: [ReactNode?, ReactNode?] = [undefined, undefined];
+  const cafeWalkers: ReactNode[] = [];
+  cafe.seats.forEach((p, i) => {
+    const m = memberOf(p?.key);
+    if (!p || !m) return;
+    // 걷는 사람은 바닥선 위에: 테이블 칸(44×46 ×2) 바닥 = 앉은 칸 top − 10 + 92, 서 있는 발 = 칸 y + 56 → 앉은 칸보다 26px 아래
+    const [x, seatY] = cafeGeo[i] ?? [0, 0];
+    const y = seatY + 26;
+    const ms = walkMsOf(x) ?? WALK_MS;
+    if (p.spot === "cafe") {
+      const left = p.since + ms - now;
+      seatNodes[i] = (
+        <span className="cafe-sitter" style={left > 0 ? { animation: `walker-wait ${left}ms step-end` } : undefined}>
+          <Character name={m.name} action="idle" variantIndex={memberVariant(m.name, LOOKS.length)} />
+          <span className="cafe-name">{m.name}</span>
+        </span>
+      );
+      if (left > 0) cafeWalkers.push(<Walker key={p.key} member={m} from={0} to={x} y={y} since={p.since} ms={ms} out={false} hideAt={p.since + ms} />);
+    } else {
+      const boardAt = active?.name === p.key ? active.start + ridePhases(active.pick, active).pick + 3 * DOOR_FRAME_MS : undefined;
+      // 앉지 않고 내린 그대로 돌아가는 사람은 문 앞에 있어 걷지 않는다(P7b-7)
+      if ((boardAt ?? Infinity) > now && p.since !== cafe.elevator.done[p.key]) cafeWalkers.push(<Walker key={p.key} member={m} from={x} to={0} y={y} since={p.since} ms={ms} out hideAt={boardAt} />);
+    }
+  });
   const barRef = useRef<HTMLDivElement>(null);
   const towerRef = useRef<HTMLDivElement>(null);
   /** 다음 렌더 뒤 포커스: 숨긴 뒤 "모두 보이기" 버튼, 모두 보이기 뒤 줄, 층이 돌아오면 1F 접기 버튼(§4.4) */
@@ -115,13 +179,21 @@ export function Building({
         <RoofRow sign={sign} />
         <VacantFloor experimental={experimental} />
         {floors.length === 0 && h.count === 0 && !h.reloading && <p className="empty">빌딩이 비어 있습니다. 빈 층에서 새 세션을 시작하세요</p>}
-        {floors.map((s) => (
-          <Floor key={s.id} session={s} bubble={bubble} onHidden={onHidden} />
-        ))}
-        <CafeFloor />
-        <LobbyFloor />
-        {/* 엘리베이터 상자 자리(통로 위). 상자·탑승자는 Task 8이 채운다 */}
-        <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer" />
+        <CafeContext.Provider value={cafe}>
+          {floors.map((s) => (
+            <Floor key={s.id} session={s} bubble={bubble} onHidden={onHidden} />
+          ))}
+        </CafeContext.Provider>
+        <CafeFloor seats={seatNodes}>
+          <div className="walk-layer" aria-hidden="true">
+            {cafeWalkers}
+          </div>
+        </CafeFloor>
+        <LobbyFloor indicator={<span data-testid="lift-no">{liftText(cafe.elevator, reduced ? null : cafe.hud, { rest: theme.words.rest.ko, lobby: theme.words.lobby.ko })}</span>} />
+        {/* 엘리베이터 상자(통로 위, Task 8). 위치의 원본은 계획 상태 */}
+        <div className="elevator-layer" aria-hidden="true" data-testid="elevator-layer">
+          <ElevatorCar state={cafe.elevator} hud={reduced ? null : cafe.hud} riderName={memberOf(cafe.elevator.active?.name)?.name} />
+        </div>
       </div>
       {(h.count > 0 || h.reloading) && (
         <div className="hidden-bar" ref={barRef} tabIndex={h.reloading ? -1 : undefined} onFocus={() => (focusInBar.current = true)} onBlur={() => (focusInBar.current = false)}>

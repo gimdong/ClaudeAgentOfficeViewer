@@ -842,7 +842,22 @@ button.roof-sign:hover, button.roof-sign:focus-visible { text-decoration: underl
 .walker { position: absolute; left: 0; top: 0; width: 52px; height: 60px; }
 .walker > .character { left: 0; top: 0; }
 @keyframes walker-wait { from { visibility: hidden; } } /* 책상에서 일어서는 동안 숨음(I2) */
+@keyframes walker-gone { from, to { visibility: hidden; } } /* 엘리베이터 상자에 타면 층에서 사라짐(Phase 7b) */
 .desk-scene[data-shift="stand"] > .character { animation-direction: reverse; } /* sit_down 거꾸로 = 일어서기 */
 .walk-tag { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 장면 위 글은 판 위(§4.1a) */
 .nametag--away { color: var(--th-label-ink); border-style: dashed; border-color: var(--th-label-muted); } /* 탕비실에 간 빈 책상: 글은 진하게, 비었다는 뜻은 점선(P7a-14 ①) */
 @media (prefers-reduced-motion: reduce) { .walk-layer { display: none; } }
+
+/* 엘리베이터 상자와 카페 자리(Phase 7b Task 8, MOTION §3.2·§3.3). 상자 30×34 ×2, 캐릭터 칸은 상자 (2,4). 이동은 transform만 */
+.elevator-car { position: absolute; left: calc((var(--shaft-w) - 60px) / 2); top: 0; width: 60px; height: 68px; }
+.elevator-car > .sc { left: 0; top: 0; }
+.elevator-car .car-door { visibility: hidden; }
+.car-rider { position: absolute; left: 0; top: 0; width: 60px; height: 68px; }
+.car-pose { position: absolute; inset: 0; visibility: hidden; } /* 타고 내리는 걸음·ride·ride_lurch 중 하나만 보임(ElevatorCar가 시각을 정함) */
+.car-pose > .character { left: 4px; top: 8px; }
+.car-pose.pose-lurch-1 > .character, .car-pose.pose-lurch-2 > .character { animation-delay: var(--lurch-delay, 0ms); } /* 한 번 도는 행: 보일 때 처음부터 */
+.cafe-sitter > .character { left: 0; top: 0; }
+.cafe-name { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; line-height: 14px; padding: 0 3px; background: var(--th-label-bg); color: var(--th-label-ink); border: 1px solid var(--th-label-border); } /* 앉은 팀원 이름표 복제. 장면 위 글은 판 위(§4.1a). 방 안 "카페" 판(.cafe-tag)과 다른 이름 */
+/* 화면 밖 카페는 걷지 않고 바로 자리(탕비실과 같은 규칙, reviewer T7) */
+.floor--offscreen .cafe-sitter { animation: none !important; }
+.floor--offscreen .walk-layer { display: none; }
