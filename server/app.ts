@@ -609,8 +609,8 @@ export function createApp(
       // 연결 전이면 보낼 수 없으니 재개하지 않는다 — 재개만 되고 보관 지시가 남는 어긋남을 막는다(리뷰 #410 M2)
       // 옮겨진 층(parked)은 연결돼 있어도 보내지 않는다 — 같은 이유로 재개하지 않는다
       const held = opts.channels?.hub.view(id);
-      if (sendHeld && opts.channels && (held?.held ?? 0) > 0 && held?.parked) return void res.status(409).json({ error: "parked" });
-      if (sendHeld && opts.channels && (held?.held ?? 0) > 0 && !opts.channels.hub.connected(id)) return void res.status(409).json({ error: "not-connected" });
+      // connected()는 '지금 보낼 연결'(옮겨진 층은 bg 연결) — bg에 이었으면 보관 지시를 그쪽으로 보낸다(리뷰 #3-2)
+      if (sendHeld && opts.channels && (held?.held ?? 0) > 0 && !opts.channels.hub.connected(id)) return void res.status(409).json({ error: held?.parked ? "parked" : "not-connected" });
       const before = floors.isPaused(id);
       floors.resume(id);
       if (floors.isPaused(id) !== before) poke();

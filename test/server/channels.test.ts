@@ -238,7 +238,8 @@ describe("옮겨진 층(대화가 bg job으로 옮겨 감, parkedJobId) — 지�
     expect(r.status).toBe(409);
     expect(JSON.parse(r.body)).toEqual({ error: "parked" });
     expect(hub.instruct("s1", "휴업 중", true)).toEqual({ ok: false, error: "parked" });
-    expect(hub.view("s1")).toMatchObject({ connected: true, held: 0, parked: true });
+    // connected는 "지금 지시를 보낼 연결이 있는가"(리뷰 #3-3) — 옮겨졌고 bg 연결이 없으면 앞면이 붙어 있어도 false
+    expect(hub.view("s1")).toMatchObject({ connected: false, held: 0, parked: true });
     expect(s.got.join("")).not.toContain("instruction");
   });
 
@@ -301,7 +302,8 @@ describe("위험 ①(beta.23 설계 7.1·7.2): 연결은 대화 id를 밝히고,
     const r = await hello({ kid: kidOf(key), nonce });
     expect(r.status).toBe(403);
     expect(JSON.parse(r.body)).toEqual({ reason: "no-conv" });
-    expect(hub.view("s1")?.refused).toBe("no-conv");
+    // 한 번도 붙지 않은 새 층에는 표시하지 않는다(확인 창 대기 — 리뷰 #3-9). 표시 규칙은 아래 대안 A 묶음의 테스트
+    expect(hub.view("s1")?.refused).toBeUndefined();
   });
 
   it("H1: 층 열쇠로 다른 대화 id(물려받은 bg 대화)를 주장하면 403 conv-mismatch — 지금 대화 id(bg)여도 층 열쇠로는 받지 않는다", async () => {
@@ -309,7 +311,6 @@ describe("위험 ①(beta.23 설계 7.1·7.2): 연결은 대화 id를 밝히고,
     const r = await hello({ kid: kidOf(key), nonce, conv: "bg-conv" });
     expect(r.status).toBe(403);
     expect(JSON.parse(r.body)).toEqual({ reason: "conv-mismatch" });
-    expect(hub.view("s1")?.refused).toBe("conv-mismatch");
     // 맞는 대화 id로 붙으면 거절 표시는 사라진다
     const s = openStream(key, {}, "s1");
     await s.ready;
@@ -442,10 +443,57 @@ describe("대안 A(beta.23 설계 3.1·7): 옮겨진 층을 버튼으로 bg 대�
 
   it("M4: 대시보드를 다시 켜면 남은 대화 열쇠를 되살리지 않고 모두 지운다(등록 파일을 믿지 못해도)", () => {
     h.link("s1", BG);
+    writeFileSync(join(keyDir, `conv-${BG}.key.tmp-999`), "a".repeat(64), { mode: 0o600 }); // 쓰다 죽은 tmp(security #3-8)
     writeFileSync(join(keyDir, "registry.json"), "{broken", { mode: 0o600 });
     const again = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, parked: () => true, linkable: () => BG });
     again.load();
     expect(existsSync(join(keyDir, `conv-${BG}.key`))).toBe(false);
+    expect(existsSync(join(keyDir, `conv-${BG}.key.tmp-999`))).toBe(false);
+  });
+
+  it("리뷰 #3-3: 옮겨진 층은 bg 연결이 '보낼 연결'이다 — 앞면이 없어도 connected, 보관 지시도 그쪽으로(재개 [보내고 재개])", () => {
+    h.link("s1", BG);
+    const key = readFileSync(join(keyDir, `conv-${BG}.key`), "utf8");
+    const up = linkUp(h, key);
+    expect(h.instruct("s1", "보관", true)).toMatchObject({ ok: true, state: "held" });
+    expect(h.connected("s1")).toBe(true);
+    expect(h.view("s1")).toMatchObject({ connected: true, linked: true, parked: true });
+    expect(h.flushHeld("s1")).toBe(1);
+    expect(up.written.join("")).toContain("보관");
+  });
+
+  it("리뷰 #3-7·security #3-9: 제출·ack는 지금 '보낼 연결'에서 온 것만 — 옮겨진 층의 앞면, 짝이 바뀐 뒤의 옛 bg 연결은 거절", () => {
+    // 앞면 연결(옮겨지기 전에 붙음)
+    const fk = h.register("s2", "co-22223333")!;
+    const hi = h.hello(mac(fk, "kid"), nonce, "s2") as { snonce: string };
+    const front = h.attach({ kid: mac(fk, "kid"), snonce: hi.snonce, proof: mac(fk, `client|${nonce}|${hi.snonce}|s2`) }, res().r) as { ack: string };
+    const fsk = mac(fk, `session|${nonce}|${hi.snonce}|s2`);
+    expect(h.verifySubmit(front.ack, "m", mac(fsk, "m"), "a".repeat(32))).toBe("s2");
+    parkedIds.add("s2");
+    expect(h.verifySubmit(front.ack, "m", mac(fsk, "m"), "b".repeat(32))).toBeNull();
+    // bg 연결: 짝이 바뀐 순간부터(sweep 전에도) 거절
+    h.link("s1", BG);
+    const up = linkUp(h, readFileSync(join(keyDir, `conv-${BG}.key`), "utf8"));
+    const ack = (up.a as { ack: string }).ack;
+    expect(h.verifySubmit(ack, "m", mac(up.sk, "m"), "c".repeat(32))).toBe("s1");
+    linkables.set("s1", "c0ffee00-0000-4000-8000-000000000009");
+    expect(h.verifySubmit(ack, "m", mac(up.sk, "m"), "d".repeat(32))).toBeNull();
+    expect(h.ack(ack, "x")).toBe(false);
+  });
+
+  it("리뷰 #3-4·9: 옮겨진 층에는 거절 표시(다시 연결 필요)를 내지 않고, 한 번도 붙지 않은 새 층(확인 창 대기)에도 내지 않는다", () => {
+    const fk = h.register("s3", "co-33334444")!;
+    h.hello(mac(fk, "kid"), nonce, "bg-other");
+    expect(h.view("s3")?.refused).toBeUndefined();
+    const key = h.register("s4", "co-44445555")!;
+    const hi = h.hello(mac(key, "kid"), nonce, "s4") as { snonce: string };
+    const c = res();
+    h.attach({ kid: mac(key, "kid"), snonce: hi.snonce, proof: mac(key, `client|${nonce}|${hi.snonce}|s4`) }, c.r);
+    c.close();
+    h.hello(mac(key, "kid"), nonce, "bg-other");
+    expect(h.view("s4")?.refused).toBe("conv-mismatch");
+    parkedIds.add("s4");
+    expect(h.view("s4")?.refused).toBeUndefined();
   });
 
   it("층이 끝나면(unregister) 대화 열쇠도 지운다", () => {
@@ -765,6 +813,22 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect(again.view("s2")?.reconnecting).toBe(true);
     t = t0 + UNSEEN_MS + 1;
     expect(again.view("s2")?.reconnecting).toBeUndefined();
+  });
+
+  it("리뷰 #3-5: 되살린 층이 옛 channel로 거절되는 중(다시 연결 필요)이면 10분 정리를 미룬다 — 안내를 따라 /mcp로 다시 붙을 수 있게", () => {
+    const keyDir = join(tmp, "floors");
+    let t = 1_800_000_000_000;
+    const mk = () => new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, now: () => t });
+    const h1 = mk();
+    h1.load();
+    const key = h1.register("s1", "co-0a1b2c3d")!;
+    const again = mk();
+    again.load();
+    again.hello(createHmac("sha256", key).update("kid").digest("hex"), "ab".repeat(32));
+    expect(again.view("s1")?.refused).toBe("no-conv");
+    t += UNSEEN_MS + 1;
+    again.sweep(new Set(["s1"]));
+    expect(again.has("s1")).toBe(true);
   });
 
   it(`#658 ③(reviewer #657): 되살린 층이 ${UNSEEN_MS / 60_000}분 안에 한 번도 연결하지 않으면 살아 있어도 정리(옮겨 열기 409 "launched"가 풀림). 연결한 뒤에는 지금 규칙`, () => {

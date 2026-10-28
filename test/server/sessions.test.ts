@@ -109,6 +109,9 @@ describe("readSessions", () => {
       await h.write("sessions/23.json", { pid: 23, sessionId: "bg-dup", name: "x", cwd: "/w", status: "idle", kind: "bg", jobId: "80673844", updatedAt: NOW - 1_000 });
       list = await seed();
       expect(list.find((x) => x.convId)?.bg?.ambiguous).toBe(true);
+      // 죽은 bg 기록은 세지 않는다(리뷰 #3-10)
+      list = await readSessions(h.home, NOW, (pid) => pid !== 23);
+      expect(list.find((x) => x.convId)?.bg?.ambiguous).toBeUndefined();
     });
 
     it.skipIf(process.platform === "win32")("남이 쓸 수 있는 기록 파일이면 trusted가 아니다(S2 — 버튼 판단에 쓰는 기록)", async () => {

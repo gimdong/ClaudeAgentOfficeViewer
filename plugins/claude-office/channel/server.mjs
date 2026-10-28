@@ -87,7 +87,9 @@ const own = (st) => typeof process.getuid !== "function" || st.uid === process.g
 function parentIsClaude() {
   if (process.argv.includes("--allow-any-parent")) return true;
   const p = procOf(process.ppid);
-  return !!p && /(^|\/)claude(\/|$)/.test(p.argv[0] ?? "");
+  // 설치된 claude 실행 파일(…/claude/versions/<버전>) 또는 이름이 claude인 프로세스(bg-spare)만 — 경로 중간의 claude 폴더는 받지 않는다(security #3-6)
+  const a0 = p?.argv[0] ?? "";
+  return /(^|\/)claude$/.test(a0) || /\/claude\/versions\/[^/]+$/.test(a0);
 }
 function readConvKey(conv) {
   const dir = argAfter("--floors-dir") ?? join(homedir(), ".claude-office", "floors");
@@ -112,7 +114,9 @@ function readConvKey(conv) {
     closeSync(fd);
   }
 }
-const LINK_KEY = !FLOOR_KEY && CONV && CONV_UUID.test(CONV) && parentIsClaude() ? readConvKey(CONV) : undefined;
+// 대화 열쇠를 먼저 본다(리뷰 #3): bg 대화는 데몬이 물려준 층 열쇠 경로를 가질 수 있다 — 그 층 열쇠로는 대시보드가 거절한다(7.1).
+// 대화 열쇠는 사람 확인 뒤에만 생기고 그 대화 하나만 받으므로 앞세워도 허용 범위가 넓어지지 않는다
+const LINK_KEY = CONV && CONV_UUID.test(CONV) && parentIsClaude() ? readConvKey(CONV) : undefined;
 /** 열쇠와 MAC 용도 접두사: 층 열쇠는 "", 대화 열쇠는 "conv-"(M5 — 층 자리로 붙지 못하게) */
 const KEY = LINK_KEY ?? FLOOR_KEY;
 const PRE = LINK_KEY ? "conv-" : "";
@@ -187,6 +191,8 @@ async function callTool(name, a) {
 }
 
 const send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
+// stdout이 닫히면(EPIPE — /mcp 재연결 뒤 옛 서버) 끝낸다. 연결을 쥐고 남아 새 서버가 409를 받지 않게(설계 7.4)
+process.stdout.on("error", () => process.exit(0));
 let started = false;
 
 createInterface({ input: process.stdin }).on("line", (line) => {
@@ -244,8 +250,9 @@ async function connect(attempt) {
       // 시도마다 새 nonce. 서버 proof가 없거나 틀리면(열쇠를 모르는 가짜 서버) 스트림을 열지 않고 다시 시도한다
       const nonce = randomBytes(32).toString("hex");
       const h = await fetch(`${BASE}/channel/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kid: KID, nonce, ...(CONV ? { conv: CONV } : {}) }) });
-      // 403 + reason(beta.23 설계 7.2): 이 열쇠는 이 대화의 것이 아니다(또는 대화 id가 없다) — 다시 시도하지 않는다
-      if (h.status === 403) return;
+      // 403 + reason(beta.23 설계 7.2): 이 열쇠는 이 대화의 것이 아니다(또는 대화 id가 없다) — 다시 시도하지 않는다.
+      // reason이 없는 403(Host 검사·같은 계정 검사 등)은 지금처럼 아래에서 다시 시도한다(리뷰 #3-6)
+      if (h.status === 403 && (await h.json().catch(() => null))?.reason) return;
       // 모르는 열쇠: 대시보드가 층을 정리했으면 열쇠 파일도 지웠다 — 그때만 조용히 멈춘다. 파일이 있으면(재시작 직후 등록 누락 등)
       // 아래 백오프(최대 30초)로 다시 시도한다(스펙 12장 n)
       if (h.status === 401 && !(KEY_FILE && existsSync(KEY_FILE))) return;

@@ -53,7 +53,8 @@ interface Wire { key: string; kid: string; conn?: ServerResponse; sk?: string; a
  */
 interface Link extends Wire { convId: string; file?: string }
 /** expectConv: 띄울 때 정한 대화 id(--session-id 또는 --resume 값). 층 열쇠 연결은 이 대화만 받는다(beta.23 설계 7.1 — H1·M1). refused·refusedLogged: 연결 전 거절 표시·로그 한 번 */
-interface Floor { expectConv: string; refused?: Refused; refusedLogged?: Set<Refused>; link?: Link; key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** everConn: 앞면이 한 번이라도 붙었음 — 확인 창을 기다리는 새 층에는 거절 표시를 내지 않는다(리뷰 #3-9) */
+interface Floor { expectConv: string; refused?: Refused; refusedLogged?: Set<Refused>; everConn?: true; link?: Link; key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -76,7 +77,8 @@ const TMUX = /^co-[0-9a-f]{8}$/;
 /** 대화 열쇠 파일 이름에 들어가는 bg 대화 id — UUID만(M3: 세션 id 정규식은 ".."을 허용) */
 const CONV_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const convKeyFile = (dir: string, convId: string) => join(dir, `conv-${convId}.key`);
-const CONV_FILE = /^conv-.+\.key$/;
+/** 쓰다 죽어 남은 tmp(열쇠 원문)도 지운다(security #3-8) */
+const CONV_FILE = /^conv-.+\.key(\.tmp-\d+)?$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 /** 자기 계정 소유의 일반 파일(또는 폴더)이고 그룹·다른 사용자가 쓸 수 없는가(다른 계정이 심은 가짜 층 막기) */
 /**
@@ -277,7 +279,8 @@ export class ChannelHub {
     const now = (this.o.now ?? Date.now)();
     for (const [id, f] of [...this.floors]) {
       // 되살렸는데 UNSEEN_MS 동안 한 번도 붙지 않은 층은 살아 있어도 정리한다 — 등록이 남으면 옮겨 열기가 409 "launched"로 막힌다(#658, reviewer #657)
-      if (f.restored !== undefined && !f.conn && now - f.restored > UNSEEN_MS) {
+      // 옛 channel로 거절되는 중(다시 연결 필요)이면 미룬다 — 안내대로 /mcp로 다시 붙을 수 있게(리뷰 #3-5). 세션이 끝나면 아래 alive 규칙이 정리
+      if (f.restored !== undefined && !f.conn && !f.refused && now - f.restored > UNSEEN_MS) {
         this.unregister(id);
         continue;
       }
@@ -310,8 +313,10 @@ export class ChannelHub {
     return this.floors.has(sessionId);
   }
   /** 연결이 있는지(재개하며 보낼 수 있는지) */
+  /** 지금 지시를 보낼 연결이 있는가 — 옮겨진 층은 bg 연결, 아니면 앞면(리뷰 #3-3: 재개·퇴사 재촉·화면이 같은 기준) */
   connected(sessionId: string): boolean {
-    return !!this.floors.get(sessionId)?.conn;
+    const f = this.floors.get(sessionId);
+    return !!(f && this.wireOf(sessionId, f)?.conn);
   }
   launchedCount(): number {
     return this.floors.size;
@@ -384,6 +389,8 @@ export class ChannelHub {
     delete f.restoredAt;
     f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}|${p.conv}`);
     delete f.refused;
+    f.everConn = true;
+    f.refusedLogged = undefined; // 거절 로그는 연결마다 한 번(설계 7.2, 리뷰 #3-8)
     f.ackToken = randomBytes(32).toString("hex");
     f.nonces = new Set();
     res.on("close", () => {
@@ -399,8 +406,10 @@ export class ChannelHub {
   }
   /** 연결의 ack 토큰으로만 받는다(끊긴 연결의 토큰은 무효) */
   ack(token: string, iid: unknown): boolean {
-    const f = this.byAck(token)?.[1];
-    if (!f || typeof iid !== "string") return false;
+    const hit = this.byAck(token);
+    // 지금 '보낼 연결'에서 온 것만(옮겨진 층의 앞면, 짝이 바뀐 옛 bg 연결은 아님 — 리뷰 #3-7, security #3-9)
+    if (!hit || hit[2] !== this.wireOf(hit[0], hit[1]) || typeof iid !== "string") return false;
+    const f = hit[1];
     if (f.last?.id === iid) {
       f.last = { id: iid, state: "delivered" };
       this.changed();
@@ -416,7 +425,8 @@ export class ChannelHub {
     const hit = this.byAck(token);
     if (!hit) return null;
     // 대화 연결의 제출도 그 층의 것(M5 ③)
-    const [id, , w] = hit;
+    const [id, f, w] = hit;
+    if (w !== this.wireOf(id, f)) return null;
     if (!w.sk || !w.nonces || !same(mac(w.sk, input), givenMac) || w.nonces.has(nonce)) return null;
     w.nonces.add(nonce);
     if (w.nonces.size > 1000) w.nonces.delete(w.nonces.values().next().value!);
@@ -482,7 +492,10 @@ export class ChannelHub {
     if (!f) return undefined;
     // 복원 뒤 UNSEEN_MS 안: "다시 연결하는 중". 그 뒤엔 sweep이 정리해 등록에 없는 층(W3·옮겨 열기)이 된다(B341 — 사이에 "확인 창" 글이 보이지 않게)
     const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt <= UNSEEN_MS;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}), ...(!f.conn && f.refused ? { refused: f.refused } : {}), ...(f.link ? (f.link.conn ? { linked: true as const } : { linking: true as const }) : {}) };
+    const parked = this.isParked(sessionId);
+    // 거절 표시는 옮겨지지 않았고, 한 번 붙었거나 되살린 층에만(옮겨진 층·확인 창 대기 중인 새 층에는 맞지 않는 안내 — 리뷰 #3-4·9)
+    const refused = !f.conn && !parked && (f.everConn || f.restoredAt !== undefined) ? f.refused : undefined;
+    return { connected: this.connected(sessionId), tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(parked ? { parked: true as const } : {}), ...(refused ? { refused } : {}), ...(f.link ? (f.link.conn ? { linked: true as const } : { linking: true as const }) : {}) };
   }
 
   /**

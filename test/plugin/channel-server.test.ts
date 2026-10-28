@@ -111,6 +111,18 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     expect(out).toHaveLength(1);
   });
 
+  it("리뷰 #3-6: reason 없는 403(Host·같은 계정 검사 등)은 멈추지 않고 다시 시도한다", async () => {
+    let hellos = 0;
+    server = createServer((req, res) => {
+      if (req.url === "/channel/hello") hellos++;
+      res.writeHead(403).end();
+    });
+    await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
+    start({ CLAUDE_OFFICE_PORT: String((server.address() as AddressInfo).port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
+    await new Promise((r) => setTimeout(r, 3_500));
+    expect(hellos).toBeGreaterThanOrEqual(2);
+  }, 10_000);
+
   it("beta.23 설계 7.2: hello가 403(이 열쇠는 이 대화의 것이 아님)이면 다시 시도하지 않는다. hello에 자기 대화 id를 밝힌다", async () => {
     const d = await fakeDashboard({ mode: "refuse" });
     start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
@@ -147,6 +159,15 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
       await until(() => d.seen.some((x) => x.url === "/channel/ack"), 5000);
       expect(JSON.parse(d.seen[0].body)).toMatchObject({ kid: mac(LINK, "conv-kid"), conv: UUID });
       expect(out.map((l) => JSON.parse(l)).find((m) => m.method === "notifications/claude/channel")?.params.content).toBe(TEXT);
+    });
+
+    it.skipIf(process.platform === "win32")("층 열쇠 파일(데몬이 물려준 경로)과 대화 열쇠가 함께 있으면 대화 열쇠로 붙는다(리뷰 #3 — 가장 흔한 경우)", async () => {
+      const d = await fakeDashboard({ key: LINK, pre: "conv-" });
+      const dir = floorsDir();
+      putKey(dir);
+      start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: UUID, CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() }, ["--floors-dir", dir, "--allow-any-parent"]);
+      await until(() => d.seen.some((x) => x.url === "/channel/ack"), 5000);
+      expect(JSON.parse(d.seen[0].body).kid).toBe(mac(LINK, "conv-kid"));
     });
 
     it.skipIf(process.platform === "win32")("M2: 부모가 claude가 아니면(Bash 자식·테스트) 찾지 않는다 — 연결도 능력도 없음", async () => {

@@ -79,8 +79,8 @@ export const CH_TEXT = {
   chipLinking: "백그라운드 연결 기다리는 중",
   linkingHint: "그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결하면 붙습니다.",
   chipLinked: "백그라운드 작업에 연결됨",
-  refusedNoConv: "이 층 열쇠로 옛 버전 channel이 붙으려 해서 받지 않았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결하거나, 층을 다시 띄워 주세요.",
-  refusedMismatch: "이 층 열쇠로 이 층을 띄운 대화가 아닌 channel이 붙으려 해서 막았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결해 주세요.",
+  refusedNoConv: "이 층의 열쇠로 옛 버전 channel이 연결을 시도해 받지 않았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결하거나 층을 다시 띄워 주세요.",
+  refusedMismatch: "이 층을 띄운 대화가 아닌 다른 대화의 channel이 이 층의 열쇠로 연결을 시도해 막았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결해 주세요.",
   parked: PARKED,
   briefTitle: (name: string) => `${name} 층 재개 전 확인`,
   briefHeld: "휴업 중 보관한 지시",
@@ -329,6 +329,8 @@ export function InstructDialog({ id, name, paused, working, onClose, announce }:
 }
 
 /** 대안 A 확인 창(beta.23 설계 7.5): 층과 잇게 될 bg 쪽을 나란히 보이고, 확인하면 화면이 본 대화 id로 요청한다(그 사이 짝이 바뀌면 서버가 409) */
+/** 화면에 그대로 보일 원문에서 제어·서식(방향 제어 포함) 문자를 지운다 — 층 쪽 이름·폴더도(security #3-7) */
+const plain = (t: string) => t.replace(/[\p{Cc}\p{Cf}]/gu, "");
 export function LinkDialog(p: { id: string; name: string; cwd: string; bg: { convId: string; name: string; cwd: string; pid: number; startedAt: string }; onClose(): void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -346,11 +348,11 @@ export function LinkDialog(p: { id: string; name: string; cwd: string; bg: { con
       <dl className="ch-link">
         <dt>{CH_TEXT.linkFloor}</dt>
         <dd>
-          {p.name} · {p.cwd}
+          {plain(p.name)} · {plain(p.cwd)}
         </dd>
         <dt>{CH_TEXT.linkBg}</dt>
         <dd>
-          {p.bg.name} · {p.bg.cwd} · pid {p.bg.pid} · {new Date(p.bg.startedAt).toLocaleString()}
+          {plain(p.bg.name)} · {plain(p.bg.cwd)} · pid {p.bg.pid} · {new Date(p.bg.startedAt).toLocaleString()}
         </dd>
       </dl>
       <p className="ch-note">{CH_TEXT.linkNote}</p>

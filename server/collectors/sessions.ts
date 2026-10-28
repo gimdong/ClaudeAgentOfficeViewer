@@ -110,7 +110,8 @@ function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, Side>): Se
     const s = side.get(r);
     if (s?.kind === "bg" && s.jobId) {
       bgByJob.set(s.jobId, r);
-      bgCount.set(s.jobId, (bgCount.get(s.jobId) ?? 0) + 1);
+      // 죽은 bg 기록은 세지 않는다(리뷰 #3-10 — 끝난 옛 job 기록이 남아 버튼이 꺼지지 않게)
+      if (r.alive) bgCount.set(s.jobId, (bgCount.get(s.jobId) ?? 0) + 1);
     }
     if (r.alive && s?.parkedJobId) frontCount.set(s.parkedJobId, (frontCount.get(s.parkedJobId) ?? 0) + 1);
   }
