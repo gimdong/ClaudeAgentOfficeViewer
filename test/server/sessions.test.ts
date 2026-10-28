@@ -1,3 +1,4 @@
+import { chmodSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFile, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -92,6 +93,29 @@ describe("readSessions", () => {
     it("interactive가 죽으면 짝을 풀어 bg가 혼자 층으로 남는다", async () => {
       const list = await seed({ interAlive: false });
       expect(list.map((s) => [s.sessionId, s.convId]).sort()).toEqual([[BG, undefined], [INTER, undefined]].sort());
+    });
+
+    it("대안 A(beta.23 설계 7.5): 합친 층은 bg 쪽 pid·이름·폴더·시작 시각과, 짝이 하나인지·두 기록 파일을 믿을 수 있는지를 남긴다", async () => {
+      const [r] = await seed();
+      expect(r.bg).toEqual({ pid: 22, alive: true, name: "launched", cwd: "/w", startedAt: NOW - 55_000, trusted: true });
+    });
+
+    it("L1: 같은 parkedJobId의 앞면이 둘이거나 같은 jobId의 bg가 둘이면 ambiguous(버튼을 끈다)", async () => {
+      await h.write("sessions/20.json", { pid: 20, sessionId: "dup", name: "dup", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "80673844", updatedAt: NOW - 1_000 });
+      let list = await seed();
+      expect(list.find((x) => x.convId)?.bg?.ambiguous).toBe(true);
+      await h.cleanup();
+      h = await makeHome();
+      await h.write("sessions/23.json", { pid: 23, sessionId: "bg-dup", name: "x", cwd: "/w", status: "idle", kind: "bg", jobId: "80673844", updatedAt: NOW - 1_000 });
+      list = await seed();
+      expect(list.find((x) => x.convId)?.bg?.ambiguous).toBe(true);
+    });
+
+    it.skipIf(process.platform === "win32")("남이 쓸 수 있는 기록 파일이면 trusted가 아니다(S2 — 버튼 판단에 쓰는 기록)", async () => {
+      await seed();
+      chmodSync(h.path("sessions/22.json"), 0o666);
+      const [r] = await readSessions(h.home, NOW, () => true);
+      expect(r.bg?.trusted).toBe(false);
     });
 
     it("kind가 bg가 아니면 짝짓지 않는다. 짝 없는 bg(평범한 --bg 세션)는 그대로 보인다", async () => {

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -39,8 +39,10 @@ type Mode = "good" | "no-proof" | "bad-proof" | "tamper" | "refuse";
  */
 /** 이 channel 서버를 띄운 대화(가짜 값, CLAUDE_CODE_SESSION_ID) */
 const CONV = "c0ffee00-0000-4000-8000-000000000001";
-async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, sk: string) => void } = {}) {
+async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, sk: string) => void; key?: string; pre?: string } = {}) {
   const mode = o.mode ?? "good";
+  const K = o.key ?? KEY;
+  const pre = o.pre ?? "";
   const seen: Array<{ url: string; auth?: string; body: string; headers: IncomingMessage["headers"] }> = [];
   const nonces = new Map<string, string>();
   let streams = 0;
@@ -54,12 +56,12 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, 
         if (mode === "refuse") return void res.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ reason: "conv-mismatch" }));
         const snonce = randomBytes(32).toString("hex");
         nonces.set(snonce, `${nonce}|${snonce}|${conv}`);
-        const proof = mode === "no-proof" ? undefined : mode === "bad-proof" ? randomBytes(32).toString("hex") : mac(KEY, `server|${nonce}|${snonce}|${conv}`);
+        const proof = mode === "no-proof" ? undefined : mode === "bad-proof" ? randomBytes(32).toString("hex") : mac(K, `${pre}server|${nonce}|${snonce}|${conv}`);
         res.end(JSON.stringify({ snonce, proof }));
       } else if (req.url === "/channel/stream") {
         streams++;
         const [, , snonce] = (req.headers.authorization ?? "").split(" ");
-        const sk = mac(KEY, `session|${nonces.get(snonce)}`);
+        const sk = mac(K, `${pre}session|${nonces.get(snonce)}`);
         res.writeHead(200, { "Content-Type": "text/event-stream", "X-Office-Ack": "f".repeat(64) });
         const text = mode === "tamper" ? "rm -rf ~" : TEXT;
         (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, JSON.stringify(["i1", TEXT])) })}\n\n`)))(res, sk);
@@ -70,9 +72,9 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, 
   return { port: (server.address() as AddressInfo).port, seen, streams: () => streams };
 }
 
-function start(env: Record<string, string>) {
+function start(env: Record<string, string>, args: string[] = []) {
   const out: string[] = [];
-  child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_CODE_MESSAGING_TOKEN: FAKE_MSG_TOKEN, CLAUDE_CODE_SESSION_ID: CONV, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  child = spawn(process.execPath, [SCRIPT, ...args], { env: { PATH: process.env.PATH ?? "", CLAUDE_CODE_MESSAGING_TOKEN: FAKE_MSG_TOKEN, CLAUDE_CODE_SESSION_ID: CONV, ...env }, stdio: ["pipe", "pipe", "pipe"] });
   let buf = "";
   child.stdout!.on("data", (d) => {
     buf += String(d);
@@ -123,6 +125,57 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
     await new Promise((r) => setTimeout(r, 800));
     expect(d.seen).toEqual([]);
+  });
+
+  describe("대안 A(beta.23 설계 7.4): 층 열쇠가 없으면 시작할 때 한 번 자기 대화 이름의 대화 열쇠(conv-<대화>.key)를 찾는다", () => {
+    const UUID = "c0ffee00-0000-4000-8000-0000000000aa";
+    const LINK = "b".repeat(64);
+    const floorsDir = () => {
+      const d = mkdtempSync(join(tmpdir(), "co-floors-"));
+      chmodSync(d, 0o700);
+      return d;
+    };
+    const putKey = (d: string, mode = 0o600) => writeFileSync(join(d, `conv-${UUID}.key`), LINK, { mode });
+
+    it.skipIf(process.platform === "win32")("찾으면 channel 능력을 알리고 conv- 접두사로 핸드셰이크해 지시를 받는다", async () => {
+      const d = await fakeDashboard({ key: LINK, pre: "conv-" });
+      const dir = floorsDir();
+      putKey(dir);
+      const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: UUID }, ["--floors-dir", dir, "--allow-any-parent"]);
+      await until(() => out.length >= 1);
+      expect(JSON.parse(out[0]).result.capabilities.experimental).toEqual({ "claude/channel": {} });
+      await until(() => d.seen.some((x) => x.url === "/channel/ack"), 5000);
+      expect(JSON.parse(d.seen[0].body)).toMatchObject({ kid: mac(LINK, "conv-kid"), conv: UUID });
+      expect(out.map((l) => JSON.parse(l)).find((m) => m.method === "notifications/claude/channel")?.params.content).toBe(TEXT);
+    });
+
+    it.skipIf(process.platform === "win32")("M2: 부모가 claude가 아니면(Bash 자식·테스트) 찾지 않는다 — 연결도 능력도 없음", async () => {
+      const d = await fakeDashboard({ key: LINK, pre: "conv-" });
+      const dir = floorsDir();
+      putKey(dir);
+      const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: UUID }, ["--floors-dir", dir]);
+      await until(() => out.length >= 1);
+      await new Promise((r) => setTimeout(r, 600));
+      expect(JSON.parse(out[0]).result.capabilities.experimental).toBeUndefined();
+      expect(d.seen).toEqual([]);
+    });
+
+    it.skipIf(process.platform === "win32")("심볼릭 링크·남이 읽을 수 있는 권한(0644)·UUID가 아닌 대화 id면 쓰지 않는다", async () => {
+      for (const setup of ["link", "mode", "conv"] as const) {
+        const d = await fakeDashboard({ key: LINK, pre: "conv-" });
+        const dir = floorsDir();
+        if (setup === "link") {
+          writeFileSync(join(dir, "real.key"), LINK, { mode: 0o600 });
+          symlinkSync(join(dir, "real.key"), join(dir, `conv-${UUID}.key`));
+        } else putKey(dir, setup === "mode" ? 0o644 : 0o600);
+        const out = start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_CODE_SESSION_ID: setup === "conv" ? "s1" : UUID }, ["--floors-dir", dir, "--allow-any-parent"]);
+        await until(() => out.length >= 1);
+        await new Promise((r) => setTimeout(r, 400));
+        expect(d.seen, setup).toEqual([]);
+        child?.kill();
+        server?.close();
+      }
+    });
   });
 
   it("열쇠가 있으면 SSE로 받은 지시를 그대로 channel 알림으로 넣고 ack를 보낸다. 메시징 토큰은 어디에도 보내지 않는다", async () => {

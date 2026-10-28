@@ -24,7 +24,7 @@ import { MiniBar } from "./MiniBar";
 import { OpenDecisionContext } from "../report/useDecisions";
 import { FLOOR_TEXT, useFloorHide, useFloorSwitch, useFloorTerminate, useShownPaused } from "../floors/useFloors";
 import { TerminateDialog } from "../floors/TerminateDialog";
-import { BriefingDialog, CH_TEXT, InstructDialog } from "../floors/ChannelDialogs";
+import { BriefingDialog, CH_TEXT, chApi, InstructDialog, LinkDialog } from "../floors/ChannelDialogs";
 
 /** 엘리베이터 문 = 방 왼쪽 끝(통로 옆). 걷는 층 x */
 const DOOR_X = 0;
@@ -72,6 +72,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const sw = useFloorSwitch(session, budgetCtx.announce, openOldestDecision);
   // Phase 4b: 작업 지시 창과 재개 브리핑 창
   const [instructOpen, setInstructOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const ch = session.channel;
   // 연결 전 거절 이유(beta.23 설계 7.2). 붙어 있으면 서버가 보내지 않는다
@@ -227,10 +228,21 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
           {alarm && <span className="chip chip--budget">예산 도달</span>}
           {ch && (
-            <span className="chip chip--channel" data-testid="channel-chip" title={ch.parked ? CH_TEXT.parked : refusedWhy ?? (ch.unreceived ? CH_TEXT.unreceived : undefined)}>
+            <span className="chip chip--channel" data-testid="channel-chip" title={ch.parked && ch.linking ? CH_TEXT.linkingHint : ch.parked && !ch.linked ? CH_TEXT.parked : refusedWhy ?? (ch.unreceived ? CH_TEXT.unreceived : undefined)}>
               {CH_TEXT.chipLaunched} · {ch.connected ? CH_TEXT.chipConnected : CH_TEXT.chipWaiting}
-              {refusedWhy ? ` · ${CH_TEXT.chipRefused}` : ch.parked ? ` · ${CH_TEXT.chipParked}${ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ""}` : ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.unreceived ? ` · ${CH_TEXT.chipUnreceived}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
+              {refusedWhy ? ` · ${CH_TEXT.chipRefused}` : ch.parked ? ` · ${ch.linked ? CH_TEXT.chipLinked : ch.linking ? CH_TEXT.chipLinking : CH_TEXT.chipParked}${ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ""}` : ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.unreceived ? ` · ${CH_TEXT.chipUnreceived}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
             </span>
+          )}
+          {/* 대안 A(beta.23): 옮겨진 층을 bg 대화에 잇기 / 끊기 */}
+          {ch?.parked && !ch.linked && !ch.linking && ch.bgLink && (
+            <button type="button" className="pbtn" onClick={() => setLinkOpen(true)}>
+              {CH_TEXT.linkOpen}
+            </button>
+          )}
+          {ch?.parked && (ch.linked || ch.linking) && (
+            <button type="button" className="pbtn" onClick={() => void chApi.unlink(session.id)}>
+              {CH_TEXT.linkCancel}
+            </button>
           )}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}
           <span className="summary">
@@ -255,7 +267,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             noteId={noteId}
             reopening={reopening}
             onReopen={() => openReopen(session)}
-            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.parked ? { enabled: false, title: CH_TEXT.parked, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: refusedWhy ?? (ch.reconnecting ? LEAD_TEXT.reconnecting : CH_TEXT.notConnected), onClick: () => {} }}
+            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.parked && !ch.linked ? { enabled: false, title: CH_TEXT.parked, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: refusedWhy ?? (ch.reconnecting ? LEAD_TEXT.reconnecting : CH_TEXT.notConnected), onClick: () => {} }}
           />
           {(sw.error ?? hider.error) && (
             <span className="fc-err" role="alert">
@@ -325,6 +337,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
       {term.stage !== 0 && (
         <TerminateDialog session={session} stage={term.stage} sending={term.sending} error={term.error} forceDisabled={term.forceDisabled} onConfirm={() => void term.confirm()} onClose={term.close} />
       )}
+      {linkOpen && ch?.bgLink && <LinkDialog id={session.id} name={session.name} cwd={session.cwd} bg={ch.bgLink} onClose={() => setLinkOpen(false)} />}
       {instructOpen && (
         <InstructDialog
           id={session.id}

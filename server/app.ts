@@ -684,6 +684,24 @@ export function createApp(
           res.status(200).json({ tmux: out.tmux });
         });
       }
+      // 대안 A(beta.23 설계 7.5): [백그라운드로 연결 옮기기]. 사람 확인을 건너뛰지 않게 화면(쿠키+같은 출처 — 미들웨어가 Origin을 확인)만 받는다.
+      // CLI 토큰(bearer, Origin 없음)은 거절(M3). 본문의 convId는 화면이 보여 준 대화 — 그 사이 짝이 바뀌었으면 409
+      const linkCodes = { "not-launched": 404, "bad-conv": 400, "not-linkable": 409, "conv-changed": 409, write: 500 } as const;
+      app.post("/api/floors/:id/link", guard, on, express.json({ limit: "1kb", type: () => true }), (req, res) => {
+        if (req.headers.origin === undefined) return void res.status(403).json({ error: "page-only" });
+        const id = idOf(req);
+        const convId = (req.body as { convId?: unknown } | undefined)?.convId;
+        if (!id || typeof convId !== "string") return void res.status(400).json({});
+        const r = hub.link(id, convId);
+        if (!r.ok) return void res.status(linkCodes[r.error]).json({ error: r.error });
+        res.status(200).json({});
+      });
+      app.delete("/api/floors/:id/link", guard, on, (req, res) => {
+        if (req.headers.origin === undefined) return void res.status(403).json({ error: "page-only" });
+        const id = idOf(req);
+        if (!id) return void res.status(400).json({});
+        res.status(hub.unlink(id) ? 200 : 404).json({});
+      });
       app.post("/api/floors/:id/instruct", guard, on, express.json({ limit: "16kb", type: () => true }), (req, res) => {
         const id = idOf(req);
         const text = textOf(req.body);

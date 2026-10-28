@@ -396,6 +396,22 @@ describe("SnapshotBuilder + 팀원 권한 질문 알림(안 A)", () => {
   });
 });
 
+describe("SnapshotBuilder + 대안 A 확인 창 정보(beta.23 설계 7.5)", () => {
+  it("옮겨진 층을 이을 수 있으면 channel.bgLink에 bg 쪽 이름·폴더·pid·시작 시각 — 제어·방향 문자는 지운다. 이을 수 없으면 없다", async () => {
+    const BG = "80673844-48d8-4000-8000-000000000002";
+    await h.write("sessions/21.json", { pid: 21, sessionId: "front", name: "층", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "j1", startedAt: NOW - 60_000, updatedAt: NOW - 50_000 });
+    await h.write("sessions/22.json", { pid: 22, sessionId: BG, name: "bg\u202Eevil\u0007", cwd: "/w\u200F", status: "busy", kind: "bg", jobId: "j1", startedAt: NOW - 55_000, updatedAt: NOW - 1_000 });
+    let canLink = true;
+    const channels = { view: () => ({ connected: true, tmux: "co-1", held: 0, parked: true as const }), enabled: () => true, available: () => ({ ok: true }), sweep: () => {}, linkable: () => (canLink ? BG : undefined) };
+    const build = () => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, channels }).build(NOW);
+    let v = (await build()).sessions.find((x) => x.id === "front")!;
+    expect(v.channel?.bgLink).toEqual({ convId: BG, name: "bgevil", cwd: "/w", pid: 22, startedAt: new Date(NOW - 55_000).toISOString() });
+    canLink = false;
+    v = (await build()).sessions.find((x) => x.id === "front")!;
+    expect(v.channel?.bgLink).toBeUndefined();
+  });
+});
+
 describe("SnapshotBuilder + 권한 정책(Phase 3 스펙 7.4)", () => {
   const T = NOW;
   let dir: string;

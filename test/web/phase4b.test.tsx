@@ -122,6 +122,31 @@ describe("작업 지시(스펙 6장)", () => {
     expect(CH_TEXT.refusedNoConv).toContain("/mcp");
   });
 
+  it("대안 A(beta.23): 옮겨진 층을 이을 수 있으면 [백그라운드로 연결 옮기기] → 확인 창에 층과 bg 쪽을 나란히 → 확인하면 POST link(그 대화 id)", async () => {
+    const BG = "c0ffee00-0000-4000-8000-000000000001";
+    show([floorOf({ cwd: "/work/a", channel: { connected: true, tmux: "co-1", held: 0, parked: true, bgLink: { convId: BG, name: "bg-이름", cwd: "/work/a", pid: 4321, startedAt: "2026-10-28T12:00:00.000Z" } } })]);
+    render(<App />);
+    fireEvent.click(within(screen.getByTestId("floor")).getByRole("button", { name: CH_TEXT.linkOpen }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading").textContent).toBe(CH_TEXT.linkTitle("alpha"));
+    for (const t of ["alpha", "bg-이름", "/work/a", "4321", CH_TEXT.linkNote]) expect(dialog.textContent).toContain(t);
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: CH_TEXT.linkConfirm })));
+    expect(calls()).toContainEqual(["/api/floors/s1/link", "POST", JSON.stringify({ convId: BG })]);
+  });
+
+  it("대안 A: 열쇠를 냈고 아직 안 붙었으면 '백그라운드 연결 기다리는 중'과 [연결 끊기](DELETE), 붙었으면 '백그라운드 작업에 연결됨'이고 작업 지시가 켜진다", async () => {
+    show([floorOf({ channel: { connected: true, tmux: "co-1", held: 0, parked: true, linking: true } })]);
+    const { rerender } = render(<App />);
+    expect(screen.getByTestId("channel-chip").textContent).toBe(`대시보드가 띄움 · 연결됨 · ${CH_TEXT.chipLinking}`);
+    expect(instructBtn().getAttribute("aria-disabled")).toBe("true");
+    await act(async () => fireEvent.click(within(screen.getByTestId("floor")).getByRole("button", { name: CH_TEXT.linkCancel })));
+    expect(calls()).toContainEqual(["/api/floors/s1/link", "DELETE", "{}"]);
+    show([floorOf({ channel: { connected: true, tmux: "co-1", held: 0, parked: true, linked: true } })]);
+    rerender(<App />);
+    expect(screen.getByTestId("channel-chip").textContent).toBe(`대시보드가 띄움 · 연결됨 · ${CH_TEXT.chipLinked}`);
+    expect(instructBtn().getAttribute("aria-disabled")).not.toBe("true");
+  });
+
   it("연결된 층: 창에서 보내면 POST instruct, 작업 중이면 안내 한 줄, 칩은 전달됨", async () => {
     show([floorOf({ floorStatus: "working", members: [lead({ state: "working" })], channel: { connected: true, tmux: "co-1", held: 0, last: "delivered" } })]);
     render(<App />);

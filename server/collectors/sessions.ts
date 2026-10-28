@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { getLogger, warnCaught } from "../log";
@@ -22,9 +22,19 @@ export interface SessionRecord {
    * 백그라운드 job 기록(대화 기록 쪽)이 따로 있다. 짝을 지으면 대화 기록·hook 상태는 이 id로 찾는다. 없으면 sessionId와 같다
    */
   convId?: string;
+  /**
+   * 합친 층의 bg 쪽(대안 A, beta.23 설계 7.5): 확인 창에 보이고 연결 옮기기를 켤지 정하는 데 쓴다.
+   * trusted: 두 기록 파일 모두 자기 소유 일반 파일이고 그룹·남이 쓸 수 없음(S2). ambiguous: 같은 jobId의 bg나 같은 parkedJobId의 앞면이 둘 이상(L1)
+   */
+  bg?: { pid: number; alive: boolean; name: string; cwd: string; startedAt: number; trusted: boolean; ambiguous?: true };
 }
 
 const DAY = 86_400_000;
+/** 짝짓기용 관찰 필드 + 파일을 믿을 수 있는지(대안 A — 버튼 판단에만 쓴다) */
+interface Side { kind?: string; jobId?: string; parkedJobId?: string; trusted?: boolean }
+/** 자기 소유 일반 파일이고 그룹·남이 쓸 수 없는가(S2). uid가 없는 플랫폼(Windows)은 믿지 않는다 — 대안 A는 tmux 층(macOS·Linux)만 */
+const ownFile = (st: { isFile(): boolean; uid: number; mode: number }) =>
+  st.isFile() && typeof process.getuid === "function" && st.uid === process.getuid() && (st.mode & 0o022) === 0;
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
@@ -91,11 +101,18 @@ export const defaultProcStartMatcher: ProcStartMatcher = async (pid, procStart) 
  * 대시보드로 띄운 층에서 봤지만 그 층에만 생긴다는 근거는 없다). 신원(층 id·pid·종료 대상)은 그 기록, 대화(convId·갱신 시각,
  * bg가 살아 있으면 상태도)는 bg 기록. bg 기록은 목록에서 뺀다. 짝이 죽었거나 없으면 그대로 둔다. 같은 jobId에 짝이 둘이면 첫 짝만
  */
-function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, { kind?: string; jobId?: string; parkedJobId?: string }>): SessionRecord[] {
+function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, Side>): SessionRecord[] {
   const bgByJob = new Map<string, SessionRecord>();
+  // 짝이 모호한지(L1): 같은 jobId의 bg 수, 같은 parkedJobId의 살아 있는 앞면 수. Map은 마지막 bg가 이긴다 — 둘 이상이면 ambiguous로 표시만
+  const bgCount = new Map<string, number>();
+  const frontCount = new Map<string, number>();
   for (const r of list) {
     const s = side.get(r);
-    if (s?.kind === "bg" && s.jobId) bgByJob.set(s.jobId, r);
+    if (s?.kind === "bg" && s.jobId) {
+      bgByJob.set(s.jobId, r);
+      bgCount.set(s.jobId, (bgCount.get(s.jobId) ?? 0) + 1);
+    }
+    if (r.alive && s?.parkedJobId) frontCount.set(s.parkedJobId, (frontCount.get(s.parkedJobId) ?? 0) + 1);
   }
   const merged = new Set<SessionRecord>();
   const out: SessionRecord[] = [];
@@ -107,7 +124,15 @@ function pairLaunched(list: SessionRecord[], side: Map<SessionRecord, { kind?: s
       continue;
     }
     merged.add(bg);
-    out.push({ ...r, convId: bg.sessionId, status: bg.alive ? bg.status : r.status, updatedAt: Math.max(r.updatedAt, bg.updatedAt) });
+    const ambiguous = (bgCount.get(park!) ?? 0) > 1 || (frontCount.get(park!) ?? 0) > 1;
+    const trusted = !!side.get(r)?.trusted && !!side.get(bg)?.trusted;
+    out.push({
+      ...r,
+      convId: bg.sessionId,
+      status: bg.alive ? bg.status : r.status,
+      updatedAt: Math.max(r.updatedAt, bg.updatedAt),
+      bg: { pid: bg.pid, alive: bg.alive, name: bg.name, cwd: bg.cwd, startedAt: bg.startedAt, trusted, ...(ambiguous ? { ambiguous: true as const } : {}) },
+    });
   }
   return out.filter((r) => !merged.has(r));
 }
@@ -130,11 +155,13 @@ export async function readSessions(
 
   const out: SessionRecord[] = [];
   // 짝짓기용(관찰 필드, 문서에 없음): interactive 기록의 parkedJobId ↔ kind:"bg" 기록의 jobId
-  const side = new Map<SessionRecord, { kind?: string; jobId?: string; parkedJobId?: string }>();
+  const side = new Map<SessionRecord, Side>();
   for (const n of names) {
     if (!/^\d+\.json$/.test(n)) continue;
     let raw: Record<string, unknown>;
+    let trusted = false;
     try {
+      trusted = ownFile(await lstat(join(dir, n)));
       raw = JSON.parse(await readFile(join(dir, n), "utf8"));
     } catch (e) {
       warnCaught("sessions", "cannot read session file", e, n); // n은 파일 이름뿐(폴더 경로 없음)
@@ -178,7 +205,7 @@ export async function readSessions(
       ...(procStart ? { procStart } : {}),
     };
     out.push(rec);
-    side.set(rec, { kind: str(raw.kind), jobId: str(raw.jobId), parkedJobId: str(raw.parkedJobId) });
+    side.set(rec, { kind: str(raw.kind), jobId: str(raw.jobId), parkedJobId: str(raw.parkedJobId), trusted });
   }
   return pairLaunched(out, side);
 }

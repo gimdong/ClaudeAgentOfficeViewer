@@ -118,7 +118,9 @@ bg 쪽 channel 서버는 **자기 대화 id와 이름이 같은 열쇠 파일**�
 - 대화 연결은 층마다 하나, 첫 연결이 이긴다.
 
 ### 7.4 channel 서버 (M2·L2)
-- 대화 열쇠 폴링은 **부모 프로세스가 claude일 때만**(이미 있는 `procOf` 재사용 — Bash 자식이 대화 id를 물려받아 붙는 것을 막음). 간격 2초, 버튼을 누르지 않으면 10분 뒤 멈추고 MCP 재연결 때 다시.
+- **구현 중 바꿈(폴링 없음):** channel 능력(`claude/channel`)은 MCP initialize 때만 알릴 수 있어(server.mjs), 열쇠 없이 떠 있던 서버가 나중에 열쇠를 찾아도 Claude Code가 지시를 channel로 받지 않는다. 그래서 **시작할 때 한 번만** 찾고, 사용자는 버튼을 확인한 뒤 그 bg 터미널에서 `/mcp`로 다시 연결한다(확인 창·칩 안내). 폴링이 없어 공격면도 줄었다.
+- 찾기는 **부모 프로세스가 claude일 때만**(이미 있는 `procOf` 재사용 — Bash 자식이 대화 id를 물려받아 붙는 것을 막음).
+- **남은 실측:** bg job으로 옮겨진 세션이 channel 알림을 받는지(`--dangerously-load-development-channels`가 bg 쪽에도 이어지는지) — 이 Mac의 이 세션으로 확인.
 - 열쇠 읽기: `O_NOFOLLOW` + `fstat`(소유자·0600/0400) + 64자 hex, 폴더 소유자·쓰기 권한 검사. convId는 **UUID 정규식**을 통과한 뒤에만 경로에 쓴다(지금 SESSION_ID 정규식은 `..`을 허용 — M3).
 - `<floors>`는 고정 기본값(`~/.claude-office/floors`). 대시보드 위치가 이와 다르면 버튼을 끈다. 테스트는 환경으로 물려받지 않는 진입점으로 폴더·포트를 주입.
 - stdout 오류(EPIPE)면 종료(재연결 뒤 옛 서버가 연결을 쥐고 있지 않게).

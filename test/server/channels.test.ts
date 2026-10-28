@@ -455,6 +455,35 @@ describe("대안 A(beta.23 설계 3.1·7): 옮겨진 층을 버튼으로 bg 대�
   });
 });
 
+describe("대안 A 버튼 API(beta.23 설계 7.5): 쿠키·같은 출처만, 화면이 본 대화와 지금 짝이 같을 때만", () => {
+  const BG = "c0ffee00-0000-4000-8000-000000000001";
+  beforeEach(() => {
+    hub.setEnabled(true);
+    hub.register("s1", "co-1");
+    parkedIds.add("s1");
+    linkables.set("s1", BG);
+  });
+
+  it("화면(쿠키+Origin)에서 누르면 200, 다시 끊기(DELETE)도 된다", async () => {
+    expect((await post("/api/floors/s1/link", { convId: BG })).status).toBe(200);
+    expect(hub.view("s1")?.linking).toBe(true);
+    expect((await post("/api/floors/s1/link", {}, "DELETE")).status).toBe(200);
+    expect(hub.view("s1")?.linking).toBeUndefined();
+  });
+
+  it("M3: CLI 토큰(bearer)으로는 누를 수 없다 — 사람 확인을 건너뛰지 않게", async () => {
+    const r = await send("/api/floors/s1/link", { headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ convId: BG }) });
+    expect(r.status).toBe(403);
+    expect(hub.view("s1")?.linking).toBeUndefined();
+  });
+
+  it("창을 연 뒤 짝이 바뀌었으면 409, 형식이 틀린 대화 id는 400, 띄우지 않은 층은 404", async () => {
+    expect((await post("/api/floors/s1/link", { convId: "c0ffee00-0000-4000-8000-000000000002" })).status).toBe(409);
+    expect((await post("/api/floors/s1/link", { convId: "../x" })).status).toBe(400);
+    expect((await post("/api/floors/s9/link", { convId: BG })).status).toBe(404);
+  });
+});
+
 describe("리뷰 #410 수정", () => {
   it("I1: 첫 지시·이름이 -로 시작하면 claude 옵션으로 읽히므로 거부(앞 공백도)", () => {
     const dir = join(tmp, "w");

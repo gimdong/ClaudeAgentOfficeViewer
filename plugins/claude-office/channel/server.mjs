@@ -10,11 +10,13 @@
 // - 도구 세 개(submit_report·submit_handover·ask_user, 스펙 3장)는 지금 연결의 세션 키로 MAC을 붙여 /channel/submit으로 낸다
 import { execFileSync } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, constants as fsc, existsSync, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 const KEY_FILE = process.env.CLAUDE_OFFICE_FLOOR_KEY_FILE;
-const KEY = (() => {
+const FLOOR_KEY = (() => {
   try {
     return KEY_FILE ? readFileSync(KEY_FILE, "utf8").trim() : undefined;
   } catch {
@@ -68,6 +70,52 @@ function teammateProcess() {
   }
   return false;
 }
+/**
+ * 대안 A(beta.23 설계 7.4): 층 열쇠가 없으면 시작할 때 한 번 자기 대화 이름의 대화 열쇠를 찾는다. 사용자가 대시보드에서
+ * [백그라운드로 연결 옮기기]를 확인한 뒤 이 세션에서 /mcp로 다시 연결하면 붙는다. 시작 뒤에 찾지 않는 이유: channel 능력은
+ * initialize 때만 알릴 수 있다. 위치는 환경이 아닌 고정 기본값(~/.claude-office/floors — 데몬이 물려준 환경을 믿지 않는다, security 4·L2).
+ * 부모가 claude 프로세스일 때만(대화 id를 물려받은 Bash 자식·테스트가 붙지 않게, M2). 열쇠 파일은 링크를 따라가지 않고
+ * 자기 소유 일반 파일·0600/0400·64자 hex, 폴더는 자기 소유·그룹/남 쓰기 불가일 때만(대시보드 readKeyFile과 같은 수준)
+ * 테스트 전용 인자(--floors-dir, --allow-any-parent)는 환경이 아니라 명령줄이라 자식에게 물려지지 않는다
+ */
+const CONV_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const argAfter = (flag) => {
+  const i = process.argv.indexOf(flag);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+const own = (st) => typeof process.getuid !== "function" || st.uid === process.getuid();
+function parentIsClaude() {
+  if (process.argv.includes("--allow-any-parent")) return true;
+  const p = procOf(process.ppid);
+  return !!p && /(^|\/)claude(\/|$)/.test(p.argv[0] ?? "");
+}
+function readConvKey(conv) {
+  const dir = argAfter("--floors-dir") ?? join(homedir(), ".claude-office", "floors");
+  try {
+    const d = lstatSync(dir);
+    if (!d.isDirectory() || !own(d) || (d.mode & 0o022) !== 0) return undefined;
+  } catch {
+    return undefined;
+  }
+  let fd;
+  try {
+    fd = openSync(join(dir, `conv-${conv}.key`), fsc.O_RDONLY | (fsc.O_NOFOLLOW ?? 0));
+  } catch {
+    return undefined;
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile() || !own(st) || ![0o600, 0o400].includes(st.mode & 0o777)) return undefined;
+    const k = readFileSync(fd, "utf8").trim();
+    return /^[0-9a-f]{64}$/.test(k) ? k : undefined;
+  } finally {
+    closeSync(fd);
+  }
+}
+const LINK_KEY = !FLOOR_KEY && CONV && CONV_UUID.test(CONV) && parentIsClaude() ? readConvKey(CONV) : undefined;
+/** 열쇠와 MAC 용도 접두사: 층 열쇠는 "", 대화 열쇠는 "conv-"(M5 — 층 자리로 붙지 못하게) */
+const KEY = LINK_KEY ?? FLOOR_KEY;
+const PRE = LINK_KEY ? "conv-" : "";
 const live = !!KEY && /^[0-9a-f]{64}$/.test(KEY) && !teammateProcess();
 
 /** 도구(스펙 3장). 크기는 대시보드(server/floors/submit.ts SUBMIT_LIMITS)와 같다 */
@@ -187,7 +235,7 @@ const HEX = /^[0-9a-f]{64}$/;
 const mac = (k, m) => createHmac("sha256", k).update(m).digest("hex");
 // 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다)
 const same = (a, b) => typeof a === "string" && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const KID = live ? mac(KEY, "kid") : "";
+const KID = live ? mac(KEY, `${PRE}kid`) : "";
 
 async function connect(attempt) {
   let busy = 0; // 409(같은 층에 리드 연결이 있음) 다시 시도 횟수 — 2초에서 두 배씩, 최대 60초(B321 M4)
@@ -202,13 +250,13 @@ async function connect(attempt) {
       // 아래 백오프(최대 30초)로 다시 시도한다(스펙 12장 n)
       if (h.status === 401 && !(KEY_FILE && existsSync(KEY_FILE))) return;
       const { snonce, proof } = h.ok ? await h.json() : {};
-      if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `server|${nonce}|${snonce}|${CONV}`))) {
-        const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `client|${nonce}|${snonce}|${CONV}`)}`, Accept: "text/event-stream" } });
+      if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `${PRE}server|${nonce}|${snonce}|${CONV}`))) {
+        const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `${PRE}client|${nonce}|${snonce}|${CONV}`)}`, Accept: "text/event-stream" } });
         const ack = res.headers.get("x-office-ack") ?? "";
         if (res.ok && res.body && HEX.test(ack)) {
           attempt = 0;
           busy = 0;
-          const sk = mac(KEY, `session|${nonce}|${snonce}|${CONV}`);
+          const sk = mac(KEY, `${PRE}session|${nonce}|${snonce}|${CONV}`);
           session = { sk, ack };
           try {
             await read(res.body, sk, ack);

@@ -68,6 +68,17 @@ export const CH_TEXT = {
   chipParked: "백그라운드로 옮겨짐",
   // beta.23 설계 7.2: 연결 전 거절(대화 id 확인) — bg 대화가 물려받은 열쇠로 시도해도 이 층에 뜨므로 중립적으로
   chipRefused: "다시 연결 필요",
+  // 대안 A(beta.23 설계 3.1·7.5): 옮겨진 층을 bg 대화에 잇기. 사람 확인은 잘못된 짝을 막는 장치 — 창에 층과 bg 쪽을 나란히
+  linkOpen: "백그라운드로 연결 옮기기",
+  linkTitle: (name: string) => `${name} 층을 백그라운드 작업에 잇기`,
+  linkFloor: "이 층",
+  linkBg: "잇게 될 백그라운드 작업",
+  linkNote: "잇기를 누른 뒤, 그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결해 주세요. 같은 대화가 여러 곳에 열려 있으면 먼저 붙는 쪽이 지시를 받습니다. 한 번 붙은 뒤 끊기면 다시 눌러야 합니다.",
+  linkConfirm: "잇기",
+  linkCancel: "연결 끊기",
+  chipLinking: "백그라운드 연결 기다리는 중",
+  linkingHint: "그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결하면 붙습니다.",
+  chipLinked: "백그라운드 작업에 연결됨",
   refusedNoConv: "이 층 열쇠로 옛 버전 channel이 붙으려 해서 받지 않았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결하거나, 층을 다시 띄워 주세요.",
   refusedMismatch: "이 층 열쇠로 이 층을 띄운 대화가 아닌 channel이 붙으려 해서 막았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결해 주세요.",
   parked: PARKED,
@@ -92,6 +103,8 @@ export const CH_TEXT = {
     "held-full": "보관함이 가득 찼습니다(20개). 재개해서 보낸 뒤 다시 해 주세요.",
     "not-connected": "channel이 아직 연결되지 않았습니다. 터미널에서 확인 창을 확인했는지 봐 주세요.",
     parked: PARKED,
+    "conv-changed": "창을 연 뒤 이을 대화가 바뀌었습니다. 창을 다시 열어 확인해 주세요.",
+    "not-linkable": "지금은 이을 수 없습니다(백그라운드 작업이 끝났거나 짝이 여럿입니다).",
   } as Record<string, string>,
 } as const;
 
@@ -116,6 +129,9 @@ export const chApi = {
   held: (id: string) => req<{ held: Held[] }>("GET", at(id, "held")),
   editHeld: (id: string, hid: string, text: string) => req<object>("PUT", at(id, `held/${encodeURIComponent(hid)}`), { text }),
   dropHeld: (id: string, hid: string) => req<object>("DELETE", at(id, `held/${encodeURIComponent(hid)}`)),
+  // 대안 A(beta.23)
+  link: (id: string, convId: string) => req<object>("POST", at(id, "link"), { convId }),
+  unlink: (id: string) => req<object>("DELETE", at(id, "link")),
   // Phase 6b 팀리더 지시·서류철
   lead: (id: string, body: object) => req<{ requestId: string; id: string; state: "sent" | "held" }>("POST", at(id, "lead"), body),
   reports: (id: string) => req<FolderView>("GET", at(id, "reports")),
@@ -306,6 +322,45 @@ export function InstructDialog({ id, name, paused, working, onClose, announce }:
         </button>
         <button type="button" className="pbtn pbtn--primary" aria-busy={busy || undefined} onClick={() => void go()}>
           {busy ? CH_TEXT.sending : CH_TEXT.send}
+        </button>
+      </div>
+    </Dlg>
+  );
+}
+
+/** 대안 A 확인 창(beta.23 설계 7.5): 층과 잇게 될 bg 쪽을 나란히 보이고, 확인하면 화면이 본 대화 id로 요청한다(그 사이 짝이 바뀌면 서버가 409) */
+export function LinkDialog(p: { id: string; name: string; cwd: string; bg: { convId: string; name: string; cwd: string; pid: number; startedAt: string }; onClose(): void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const r = await chApi.link(p.id, p.bg.convId);
+    setBusy(false);
+    if (!r.ok) return setErr(errText(r.error));
+    p.onClose();
+  };
+  return (
+    <Dlg title={CH_TEXT.linkTitle(p.name)} onClose={p.onClose}>
+      <dl className="ch-link">
+        <dt>{CH_TEXT.linkFloor}</dt>
+        <dd>
+          {p.name} · {p.cwd}
+        </dd>
+        <dt>{CH_TEXT.linkBg}</dt>
+        <dd>
+          {p.bg.name} · {p.bg.cwd} · pid {p.bg.pid} · {new Date(p.bg.startedAt).toLocaleString()}
+        </dd>
+      </dl>
+      <p className="ch-note">{CH_TEXT.linkNote}</p>
+      <Err e={err} />
+      <div className="dlg-buttons">
+        <button type="button" className="pbtn" data-cancel onClick={p.onClose}>
+          {CH_TEXT.cancel}
+        </button>
+        <button type="button" className="pbtn pbtn--primary" aria-busy={busy || undefined} onClick={() => void go()}>
+          {CH_TEXT.linkConfirm}
         </button>
       </div>
     </Dlg>

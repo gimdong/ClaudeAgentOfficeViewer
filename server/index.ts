@@ -283,6 +283,13 @@ async function main(): Promise<void> {
   const claudeBin = platform() === "win32" ? undefined : process.env.CLAUDE_OFFICE_CLAUDE_BIN ?? findExecutable("claude", process.env.PATH, [join(homedir(), ".local/bin")]);
   // 층 열쇠 파일(B265): tmux에는 이 폴더의 파일 경로만 넘긴다
   const floorKeyDir = join(dirname(paths.stateFile), "floors");
+  // 대안 A(beta.23 설계 7.5): 옮겨졌고 bg가 살아 있고 짝이 하나이며 두 기록 파일을 믿을 수 있을 때만 그 bg 대화로 이을 수 있다.
+  // channel 서버는 고정 위치(~/.claude-office/floors)에서만 대화 열쇠를 찾으므로 대시보드 열쇠 폴더가 다르면 끈다(L2 — 개발 모드 등)
+  const linkable = (id: string): string | undefined => {
+    const r = builder.record(id);
+    if (!r?.convId || r.convId === id || !r.bg?.alive || !r.bg.trusted || r.bg.ambiguous) return undefined;
+    return floorKeyDir === join(homedir(), ".claude-office", "floors") ? r.convId : undefined;
+  };
   const channels = new ChannelHub({
     file: join(dirname(paths.stateFile), "experimental.json"),
     keyDir: floorKeyDir,
@@ -293,6 +300,9 @@ async function main(): Promise<void> {
       const r = builder.record(id);
       return !!r?.convId && r.convId !== id;
     },
+    // 대안 A(beta.23 설계 7.5): 옮겨졌고 bg가 살아 있고 짝이 하나이며 두 기록 파일을 믿을 수 있을 때만 그 bg 대화로 이을 수 있다.
+    // channel 서버는 고정 위치(~/.claude-office/floors)에서만 대화 열쇠를 찾으므로 대시보드 열쇠 폴더가 다르면 끈다(L2 — 개발 모드 등)
+    linkable: (id) => linkable(id),
   });
   channels.load();
   // 새 층과 옮겨 열기가 같은 경로를 쓴다: 층 열쇠 등록 → tmux(셸 없음) → 실패하면 등록을 되돌린다
@@ -379,6 +389,7 @@ async function main(): Promise<void> {
   const channelsView = {
     view: channels.view.bind(channels),
     receiptCheck: channels.receiptCheck.bind(channels),
+    linkable,
     enabled: channels.enabled.bind(channels),
     available: channels.available.bind(channels),
     sweep: (alive: ReadonlySet<string>) => {
