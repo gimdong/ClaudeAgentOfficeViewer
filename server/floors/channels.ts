@@ -26,12 +26,16 @@ export interface ChannelView {
   parked?: true;
   /** 연결 전, 이 층 열쇠로 온 hello를 거절한 이유(beta.23 설계 7.2): no-conv = 대화 id를 밝히지 않음(옛 channel 서버), conv-mismatch = 띄울 때 정한 대화가 아님 */
   refused?: Refused;
+  /** 대안 A(beta.23 설계 3.1): 버튼으로 bg 대화 열쇠를 냈고 아직 붙지 않음 / bg 대화가 붙어 지시가 그쪽으로 감 */
+  linking?: true;
+  linked?: true;
   /** 재시작 때 등록 파일에서 복원했고 아직 다시 붙지 않음(증명 성공 전, 복원 뒤 UNSEEN_MS 안 — 그 뒤엔 정리, #658·B341) */
   reconnecting?: true;
 }
 /** key: 같은 키로 다시 보관하면 옛것을 대체한다(팀리더 지시, Phase 6b 스펙 11장 a). 일반 작업 지시는 키 없음(쌓임) */
 /** meta: 보관한 팀리더 지시가 실제로 나갈 때 쓰는 값(퇴근 기록 등, Phase 6b 11장 a). 화면에는 쓰지 않는다 */
 export interface HeldItem { id: string; text: string; at: string; key?: string; meta?: unknown }
+export type LinkResult = { ok: true } | { ok: false; error: "not-launched" | "bad-conv" | "not-linkable" | "conv-changed" | "write" };
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "parked" | "not-connected" | "held-full" };
 
 /** 거절 이유(beta.23 설계 7.2). 라우트가 403 + reason으로 답하고 새 channel 서버는 그 열쇠로 다시 시도하지 않는다 */
@@ -41,8 +45,15 @@ interface Pending { nonce: string; snonce: string; at: number; conv: string }
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
 /** restoredAt: 복원 뒤 아직 증명 성공 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음 — 둘 다 UNSEEN_MS 뒤 정리(#658·B341) */
 /** receipt·probe: 지시 수신 판정(B343·B344, 메모리). probe는 판정 중인 지시(보낸 시각, 시계 시작 시각, 보낸 순간 유휴를 봤는지) */
+/** 연결 하나의 핸드셰이크·세션 상태. 층 열쇠 연결(앞면)과 대화 열쇠 연결(대안 A)이 같은 모양을 쓴다 */
+interface Wire { key: string; kid: string; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[] }
+/**
+ * 대안 A(beta.23 설계 3.1·7.3): 옮겨진 층을 bg 대화에 잇는 대화 열쇠. 용도 접두사 "conv-"로 층 열쇠와 섞이지 않는다(M5).
+ * 1회용 — 첫 연결이 성공하면 파일을 지우고 kid를 비운다(spent). 끊기면 버튼을 다시 눌러야 한다
+ */
+interface Link extends Wire { convId: string; file?: string }
 /** expectConv: 띄울 때 정한 대화 id(--session-id 또는 --resume 값). 층 열쇠 연결은 이 대화만 받는다(beta.23 설계 7.1 — H1·M1). refused·refusedLogged: 연결 전 거절 표시·로그 한 번 */
-interface Floor { expectConv: string; refused?: Refused; refusedLogged?: Set<Refused>; key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+interface Floor { expectConv: string; refused?: Refused; refusedLogged?: Set<Refused>; link?: Link; key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -62,6 +73,10 @@ const IDLE_AFTER_MS = 60_000;
 const REGISTRY = "registry.json";
 const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const TMUX = /^co-[0-9a-f]{8}$/;
+/** 대화 열쇠 파일 이름에 들어가는 bg 대화 id — UUID만(M3: 세션 id 정규식은 ".."을 허용) */
+const CONV_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const convKeyFile = (dir: string, convId: string) => join(dir, `conv-${convId}.key`);
+const CONV_FILE = /^conv-.+\.key$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 /** 자기 계정 소유의 일반 파일(또는 폴더)이고 그룹·다른 사용자가 쓸 수 없는가(다른 계정이 심은 가짜 층 막기) */
 /**
@@ -122,12 +137,20 @@ export class ChannelHub {
    * parked: 그 층의 대화가 bg job으로 옮겨 갔는가(B192 합친 층). 앞면 프로세스의 channel은 붙어 있어도 받은 지시를 대기열에만 쌓고 돌리지 않는다
    * (2026-10-28 관찰 — 화면은 "전달됨", 실제로는 아무 일도 없음). 그래서 보내지도 보관해 뒀다 보내지도 않고, 수신 판정도 하지 않는다(bg job의 hook이 거짓 "받음"을 만든다)
    */
-  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string; parked?: (sessionId: string) => boolean }) {}
+  constructor(private readonly o: { file: string; available: { ok: boolean; reason?: string }; onChange?: () => void; now?: () => number; keyDir?: string; parked?: (sessionId: string) => boolean; linkable?: (sessionId: string) => string | undefined }) {}
+  /**
+   * linkable: 그 층을 지금 bg 대화에 이을 수 있으면 그 대화 id(대안 A). 대시보드가 세션 기록으로 판단한다(옮겨짐·짝이 하나·bg가 살아 있음 —
+   * 설계 7.5). channel 서버는 세션 기록을 읽지 않는다 — 판단은 이 한 곳
+   */
   private isParked(sessionId: string): boolean {
     return this.o.parked?.(sessionId) ?? false;
   }
 
   load(): void {
+    // 대화 열쇠는 되살리지 않는다 — 등록 파일을 믿든 못 믿든 먼저 모두 지운다(설계 7.3, M4)
+    if (this.o.keyDir && existsSync(this.o.keyDir) && trusted(this.o.keyDir, "dir")) {
+      for (const f of readdirSync(this.o.keyDir)) if (CONV_FILE.test(f) && trusted(join(this.o.keyDir, f), "file")) rmSync(join(this.o.keyDir, f), { force: true });
+    }
     // 지난 실행의 층을 등록 파일과 열쇠 파일에서 되살린다(스펙 12장 n). 재연결은 늘 새 핸드셰이크(상태는 저장하지 않음)
     if (this.o.keyDir) this.restore(this.o.keyDir);
     try {
@@ -238,6 +261,7 @@ export class ChannelHub {
     const f = this.floors.get(sessionId);
     if (!f) return;
     f.conn?.end();
+    this.dropLink(f);
     if (this.o.keyDir) rmSync(floorKeyFile(this.o.keyDir, f.tmux), { force: true });
     this.floors.delete(sessionId);
     this.saveRegistry();
@@ -256,6 +280,11 @@ export class ChannelHub {
       if (f.restored !== undefined && !f.conn && now - f.restored > UNSEEN_MS) {
         this.unregister(id);
         continue;
+      }
+      // 옮겨진 상태가 풀렸거나 짝(대화)이 바뀌면 대화 열쇠·연결을 정리한다(설계 7.3)
+      if (f.link && (!this.isParked(id) || this.o.linkable?.(id) !== f.link.convId)) {
+        this.dropLink(f);
+        this.changed();
       }
       if (alive.has(id)) f.seen = true;
       else if (f.seen || (!f.conn && now - f.at > UNSEEN_MS)) this.unregister(id);
@@ -298,10 +327,12 @@ export class ChannelHub {
   hello(kid: string, nonce: string, conv?: string): { snonce: string; proof: string } | { refused: Refused } | null {
     const hit = this.byKid(kid);
     if (!hit) return null;
-    const [id, f] = hit;
-    const why: Refused | null = !conv ? "no-conv" : conv !== f.expectConv ? "conv-mismatch" : null;
+    const [id, f, w, pre] = hit;
+    // 층 열쇠는 띄울 때 정한 대화, 대화 열쇠는 그 bg 대화 하나만(설계 7.1)
+    const expected = w === f ? f.expectConv : (w as Link).convId;
+    const why: Refused | null = !conv ? "no-conv" : conv !== expected ? "conv-mismatch" : null;
     if (why) {
-      if (!f.conn && f.refused !== why) {
+      if (w === f && !f.conn && f.refused !== why) {
         f.refused = why;
         this.changed();
       }
@@ -314,11 +345,11 @@ export class ChannelHub {
     }
     if (!conv) return null; // why가 없으면 conv는 있다(타입 좁히기)
     const now = (this.o.now ?? Date.now)();
-    f.pending = f.pending.filter((p) => now - p.at <= PENDING_MS);
-    if (f.pending.length >= MAX_PENDING) f.pending.shift();
+    w.pending = w.pending.filter((p) => now - p.at <= PENDING_MS);
+    if (w.pending.length >= MAX_PENDING) w.pending.shift();
     const snonce = randomBytes(32).toString("hex");
-    f.pending.push({ nonce, snonce, at: now, conv });
-    return { snonce, proof: mac(f.key, `server|${nonce}|${snonce}|${conv}`) };
+    w.pending.push({ nonce, snonce, at: now, conv });
+    return { snonce, proof: mac(w.key, `${pre}server|${nonce}|${snonce}|${conv}`) };
   }
 
   /**
@@ -329,20 +360,21 @@ export class ChannelHub {
   attach(a: { kid: string; snonce: string; proof: string }, res: ServerResponse): { id: string; ack: string } | "busy" | null {
     const hit = this.byKid(a.kid);
     if (!hit) return null;
-    const [id, f] = hit;
-    const i = f.pending.findIndex((p) => same(p.snonce, a.snonce));
+    const [id, f, w, pre] = hit;
+    const i = w.pending.findIndex((p) => same(p.snonce, a.snonce));
     if (i < 0) return null;
-    const [p] = f.pending.splice(i, 1);
-    if ((this.o.now ?? Date.now)() - p.at > PENDING_MS || !same(mac(f.key, `client|${p.nonce}|${p.snonce}|${p.conv}`), a.proof)) {
+    const [p] = w.pending.splice(i, 1);
+    if ((this.o.now ?? Date.now)() - p.at > PENDING_MS || !same(mac(w.key, `${pre}client|${p.nonce}|${p.snonce}|${p.conv}`), a.proof)) {
       getLogger().warn("floors", "channel-proof-failed", { session: this.n(id) });
       return null;
     }
-    if (f.conn && !f.conn.destroyed && !f.conn.writableEnded) {
+    if (w.conn && !w.conn.destroyed && !w.conn.writableEnded) {
       // 같은 연결이 붙어 있는 동안 처음 한 번만 남긴다(B321 M4 — 다시 시도마다 로그가 늘지 않게)
-      if (!f.busyLogged) getLogger().info("floors", "channel-busy", { session: this.n(id) });
-      f.busyLogged = true;
+      if (!w.busyLogged) getLogger().info("floors", "channel-busy", { session: this.n(id) });
+      w.busyLogged = true;
       return "busy";
     }
+    if (w !== f) return this.attachLink(id, f, w as Link, p, res);
     f.busyLogged = false;
     f.conn = res;
     // 새 연결이면 수신 판정을 처음부터(로그인을 바꿔 다시 띄웠을 수 있다, B343)
@@ -367,8 +399,7 @@ export class ChannelHub {
   }
   /** 연결의 ack 토큰으로만 받는다(끊긴 연결의 토큰은 무효) */
   ack(token: string, iid: unknown): boolean {
-    let f: Floor | undefined;
-    for (const x of this.floors.values()) if (x.ackToken && same(x.ackToken, token)) f = x;
+    const f = this.byAck(token)?.[1];
     if (!f || typeof iid !== "string") return false;
     if (f.last?.id === iid) {
       f.last = { id: iid, state: "delivered" };
@@ -382,20 +413,22 @@ export class ChannelHub {
    * nonce는 연결마다 한 번만. 층은 연결로만 정한다(본문의 값으로 정하지 않는다). 맞으면 층 id, 아니면 null
    */
   verifySubmit(token: string, input: string, givenMac: string, nonce: string): string | null {
-    let hit: [string, Floor] | null = null;
-    for (const e of this.floors) if (e[1].ackToken && same(e[1].ackToken, token)) hit = e;
+    const hit = this.byAck(token);
     if (!hit) return null;
-    const [id, f] = hit;
-    if (!f.sk || !f.nonces || !same(mac(f.sk, input), givenMac) || f.nonces.has(nonce)) return null;
-    f.nonces.add(nonce);
-    if (f.nonces.size > 1000) f.nonces.delete(f.nonces.values().next().value!);
+    // 대화 연결의 제출도 그 층의 것(M5 ③)
+    const [id, , w] = hit;
+    if (!w.sk || !w.nonces || !same(mac(w.sk, input), givenMac) || w.nonces.has(nonce)) return null;
+    w.nonces.add(nonce);
+    if (w.nonces.size > 1000) w.nonces.delete(w.nonces.values().next().value!);
     return id;
   }
 
   instruct(sessionId: string, text: string, paused: boolean, holdKey?: string, meta?: unknown): InstructResult {
     const f = this.floors.get(sessionId);
     if (!f) return { ok: false, error: "not-launched" };
-    if (this.isParked(sessionId)) return { ok: false, error: "parked" };
+    // 옮겨진 층은 bg 대화가 버튼으로 붙어 있을 때만 그쪽으로 보낸다(대안 A). 아니면 beta.21처럼 막는다
+    const to = this.wireOf(sessionId, f);
+    if (!to) return { ok: false, error: "parked" };
     if (paused) {
       if (holdKey !== undefined) f.held = f.held.filter((h) => h.key !== holdKey); // 대체(같은 키 — 질문 표시는 새 보관으로 그대로 held)
       if (f.held.length >= MAX_HELD) return { ok: false, error: "held-full" };
@@ -405,9 +438,9 @@ export class ChannelHub {
       this.changed();
       return { ok: true, id: item.id, state: "held" };
     }
-    if (!f.conn) return { ok: false, error: "not-connected" };
+    if (!to.conn) return { ok: false, error: "not-connected" };
     const iid = randomUUID();
-    this.push(f, iid, text);
+    this.push(f, to, iid, text);
     getLogger().info("floors", "instruct", { session: this.n(sessionId), len: text.length });
     this.changed();
     return { ok: true, id: iid, state: "sent" };
@@ -434,9 +467,10 @@ export class ChannelHub {
   /** 재개 때 보관 지시를 순서대로 보낸다. 연결이 없으면 보관한 채로 두고 0 */
   flushHeld(sessionId: string): number {
     const f = this.floors.get(sessionId);
-    if (!f?.conn || f.held.length === 0 || this.isParked(sessionId)) return 0;
+    const to = f && this.wireOf(sessionId, f);
+    if (!f || !to?.conn || f.held.length === 0) return 0;
     const items = f.held.splice(0);
-    for (const h of items) this.push(f, h.id, h.text);
+    for (const h of items) this.push(f, to, h.id, h.text);
     this.heldGone(items, true);
     getLogger().info("floors", "resume-send", { session: this.n(sessionId), count: items.length });
     this.changed();
@@ -448,7 +482,49 @@ export class ChannelHub {
     if (!f) return undefined;
     // 복원 뒤 UNSEEN_MS 안: "다시 연결하는 중". 그 뒤엔 sweep이 정리해 등록에 없는 층(W3·옮겨 열기)이 된다(B341 — 사이에 "확인 창" 글이 보이지 않게)
     const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt <= UNSEEN_MS;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}), ...(!f.conn && f.refused ? { refused: f.refused } : {}) };
+    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}), ...(!f.conn && f.refused ? { refused: f.refused } : {}), ...(f.link ? (f.link.conn ? { linked: true as const } : { linking: true as const }) : {}) };
+  }
+
+  /**
+   * 대안 A(설계 3.1·7.3·7.5): 사용자가 [백그라운드로 연결 옮기기]를 확인하면 그 bg 대화 전용 열쇠를 낸다(0600, tmp → rename).
+   * 화면이 본 대화(convId)와 지금 짝(linkable)이 같을 때만 — 창을 연 뒤 짝이 바뀌었으면 거절. 다시 누르면 옛 열쇠·연결을 버리고 새로
+   */
+  link(sessionId: string, convId: string): LinkResult {
+    const f = this.floors.get(sessionId);
+    if (!f) return { ok: false, error: "not-launched" };
+    if (!CONV_UUID.test(convId)) return { ok: false, error: "bad-conv" };
+    const now = this.o.linkable?.(sessionId);
+    if (!now) return { ok: false, error: "not-linkable" };
+    if (now !== convId) return { ok: false, error: "conv-changed" };
+    this.dropLink(f);
+    const key = randomBytes(32).toString("hex");
+    let file: string | undefined;
+    if (this.o.keyDir) {
+      file = convKeyFile(this.o.keyDir, convId);
+      const tmp = `${file}.tmp-${process.pid}`;
+      try {
+        mkdirSync(this.o.keyDir, { recursive: true, mode: 0o700 });
+        chmodSync(this.o.keyDir, 0o700);
+        rmSync(tmp, { force: true });
+        writeFileSync(tmp, key, { mode: 0o600, flag: "wx" });
+        renameSync(tmp, file);
+      } catch (e) {
+        getLogger().warn("floors", "link key failed", { error: errInfo(e) });
+        return { ok: false, error: "write" };
+      }
+    }
+    f.link = { convId, key, kid: mac(key, "conv-kid"), pending: [], ...(file ? { file } : {}) };
+    getLogger().info("floors", "link", { session: this.n(sessionId) });
+    this.changed();
+    return { ok: true };
+  }
+  /** [연결 끊기] — 대화 열쇠와 대화 연결을 정리한다 */
+  unlink(sessionId: string): boolean {
+    const f = this.floors.get(sessionId);
+    if (!f?.link) return false;
+    this.dropLink(f);
+    this.changed();
+    return true;
   }
   /**
    * 스냅샷 빌드마다(B343): 판정 중인 지시가 있는 층만. leadEvents는 그 층 리드의 hook 이벤트(서브에이전트는 여기서 뺀다),
@@ -501,17 +577,60 @@ export class ChannelHub {
     return { launched: this.floors.size, connected, held };
   }
 
-  private push(f: Floor, iid: string, text: string): void {
+  private push(f: Floor, to: Wire, iid: string, text: string): void {
     // 수신 판정은 아직 모르는 층의 첫 지시 하나만(B343)
     if (!f.receipt && !f.probe) f.probe = { sentAt: (this.o.now ?? Date.now)() };
     // 이벤트마다 연결 키로 MAC(B264): 핸드셰이크를 중계하는 쪽이 글을 바꾸면 channel 서버가 버린다.
     // 입력은 JSON 배열(B268) — "id|text"는 구분자를 옮겨 글 앞부분을 id로 넘기는 변조를 막지 못한다
-    f.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(f.sk!, JSON.stringify([iid, text])) })}\n\n`);
+    to.conn!.write(`event: instruction\ndata: ${JSON.stringify({ id: iid, text, mac: mac(to.sk!, JSON.stringify([iid, text])) })}\n\n`);
     f.last = { id: iid, state: "sent" };
   }
-  private byKid(kid: string): [string, Floor] | null {
-    for (const e of this.floors) if (same(e[1].kid, kid)) return e;
+  /** 지시를 보낼 연결: 옮겨진 층은 지금 짝인 bg 대화의 대화 연결만(대안 A), 아니면 층 연결. 옮겨졌는데 이을 연결이 없으면 null */
+  private wireOf(id: string, f: Floor): Wire | null {
+    if (!this.isParked(id)) return f;
+    return f.link?.conn && this.o.linkable?.(id) === f.link.convId ? f.link : null;
+  }
+  /** [층 id, 층, 그 kid의 연결(층 자신 또는 대화 연결), MAC 용도 접두사]. 대화 열쇠는 "conv-"(M5) — 다 쓴(spent) 대화 열쇠의 kid는 비어 있어 맞지 않는다 */
+  private byKid(kid: string): [string, Floor, Wire, string] | null {
+    for (const [id, f] of this.floors) {
+      if (same(f.kid, kid)) return [id, f, f, ""];
+      if (f.link?.kid && same(f.link.kid, kid)) return [id, f, f.link, "conv-"];
+    }
     return null;
+  }
+  private byAck(token: string): [string, Floor, Wire] | null {
+    for (const [id, f] of this.floors) {
+      if (f.ackToken && same(f.ackToken, token)) return [id, f, f];
+      if (f.link?.ackToken && same(f.link.ackToken, token)) return [id, f, f.link];
+    }
+    return null;
+  }
+  /** 대화 연결이 처음 붙음 — 1회용: 파일을 지우고 kid를 비운다. 끊기면 대화 연결 자체를 버린다(버튼을 다시 눌러야 함, 설계 7.3) */
+  private attachLink(id: string, f: Floor, l: Link, p: Pending, res: ServerResponse): { id: string; ack: string } {
+    l.conn = res;
+    l.sk = mac(l.key, `conv-session|${p.nonce}|${p.snonce}|${p.conv}`);
+    l.ackToken = randomBytes(32).toString("hex");
+    l.nonces = new Set();
+    l.kid = "";
+    l.pending = [];
+    if (l.file) rmSync(l.file, { force: true });
+    res.on("close", () => {
+      if (f.link === l && l.conn === res) {
+        f.link = undefined;
+        getLogger().info("floors", "link-drop", { session: this.n(id) });
+        this.changed();
+      }
+    });
+    getLogger().info("floors", "link-connect", { session: this.n(id) });
+    this.changed();
+    return { id, ack: l.ackToken };
+  }
+  private dropLink(f: Floor): void {
+    const l = f.link;
+    if (!l) return;
+    f.link = undefined;
+    l.conn?.end();
+    if (l.file) rmSync(l.file, { force: true });
   }
   private n(id: string): number {
     if (!this.no.has(id)) this.no.set(id, this.no.size + 1);

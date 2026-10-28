@@ -24,6 +24,8 @@ let launchReply: { ok: true; sessionId: string; tmux: string } | { ok: false; er
 let available: { ok: boolean; reason?: string };
 let skew: number;
 let parkedIds: Set<string>;
+/** 층 id → 연결 옮기기가 가능하면 bg 대화 id(대안 A, linkable). 없으면 불가 */
+let linkables: Map<string, string>;
 const rec = (p: Partial<SessionRecord> = {}): SessionRecord => ({ pid: 2001, sessionId: "s1", name: "alpha", cwd: "/x", status: "busy", startedAt: 1, updatedAt: 2, alive: true, procStart: "x", ...p });
 
 beforeEach(async () => {
@@ -32,7 +34,8 @@ beforeEach(async () => {
   available = { ok: true };
   skew = 0;
   parkedIds = new Set();
-  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } }, now: () => Date.now() + skew, parked: (id) => parkedIds.has(id) });
+  linkables = new Map();
+  hub = new ChannelHub({ file: join(tmp, "experimental.json"), available: { get ok() { return available.ok; } }, now: () => Date.now() + skew, parked: (id) => parkedIds.has(id), linkable: (id) => linkables.get(id) });
   floors = new FloorControl({ signal: () => {}, matchProcStart: async () => true, selfPid: 4242 });
   launched = [];
   launchReply = { ok: true, sessionId: "new-1", tmux: "co-abcd1234" };
@@ -335,6 +338,120 @@ describe("위험 ①(beta.23 설계 7.1·7.2): 연결은 대화 id를 밝히고,
     expect(hub.attach({ kid: kidOf(key), snonce: hi.snonce, proof: mac(key, `client|${nonce}|${hi.snonce}`) }, res)).toBeNull();
     const hi2 = hub.hello(kidOf(key), nonce, "s1") as { snonce: string };
     expect(hub.attach({ kid: kidOf(key), snonce: hi2.snonce, proof: mac(key, `client|${nonce}|${hi2.snonce}|s1`) }, res)).toMatchObject({ id: "s1" });
+  });
+});
+
+describe("대안 A(beta.23 설계 3.1·7): 옮겨진 층을 버튼으로 bg 대화에 잇는 1회용 대화 열쇠", () => {
+  const BG = "c0ffee00-0000-4000-8000-000000000001";
+  const nonce = "ab".repeat(32);
+  const res = () => {
+    let close = () => {};
+    const written: string[] = [];
+    const r = { on: (_e: string, fn: () => void) => void (close = fn), end: () => close(), destroyed: false, writableEnded: false, write: (t: string) => (written.push(t), true) } as never;
+    return { r, close: () => close(), written };
+  };
+  /** 대화 열쇠로 붙는다(용도 접두사 conv-) */
+  const linkUp = (h: ChannelHub, key: string, conv = BG) => {
+    const kid = mac(key, "conv-kid");
+    const hi = h.hello(kid, nonce, conv) as { snonce: string; proof: string };
+    expect(hi.proof).toBe(mac(key, `conv-server|${nonce}|${hi.snonce}|${conv}`));
+    const c = res();
+    const a = h.attach({ kid, snonce: hi.snonce, proof: mac(key, `conv-client|${nonce}|${hi.snonce}|${conv}`) }, c.r);
+    return { a, sk: mac(key, `conv-session|${nonce}|${hi.snonce}|${conv}`), ...c };
+  };
+  let keyDir: string;
+  let h: ChannelHub;
+  beforeEach(() => {
+    keyDir = join(tmp, "floors");
+    h = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, parked: (id) => parkedIds.has(id), linkable: (id) => linkables.get(id) });
+    h.load();
+    h.register("s1", "co-0a1b2c3d");
+    parkedIds.add("s1");
+    linkables.set("s1", BG);
+  });
+
+  it("옮겨졌고 짝이 하나인 층만, 화면이 본 대화와 지금 짝이 같을 때만 열쇠를 낸다(0600 conv-<대화>.key). 대화 id는 UUID만", () => {
+    expect(h.link("s1", "c0ffee00-0000-4000-8000-000000000002")).toEqual({ ok: false, error: "conv-changed" });
+    expect(h.link("s1", "../x")).toEqual({ ok: false, error: "bad-conv" });
+    expect(h.link("nope", BG)).toEqual({ ok: false, error: "not-launched" });
+    linkables.delete("s1");
+    expect(h.link("s1", BG)).toEqual({ ok: false, error: "not-linkable" });
+    linkables.set("s1", BG);
+    expect(h.link("s1", BG)).toEqual({ ok: true });
+    const file = join(keyDir, `conv-${BG}.key`);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(h.view("s1")).toMatchObject({ linking: true });
+    // 두 번 눌러도 된다(새 열쇠로 바꿈, 옛 kid 무효)
+    const first = readFileSync(file, "utf8");
+    expect(h.link("s1", BG)).toEqual({ ok: true });
+    const second = readFileSync(file, "utf8");
+    expect(second).not.toBe(first);
+    expect(h.hello(mac(first, "conv-kid"), nonce, BG)).toBeNull();
+  });
+
+  it("대화 열쇠는 그 bg 대화만 받고(층 id·다른 대화는 403), 첫 연결이 성공하면 파일을 지우고 다시 쓸 수 없다(1회용)", () => {
+    h.link("s1", BG);
+    const key = readFileSync(join(keyDir, `conv-${BG}.key`), "utf8");
+    expect(h.hello(mac(key, "conv-kid"), nonce, "s1")).toEqual({ refused: "conv-mismatch" });
+    const up = linkUp(h, key);
+    expect(up.a).toMatchObject({ id: "s1" });
+    expect(existsSync(join(keyDir, `conv-${BG}.key`))).toBe(false);
+    expect(h.view("s1")).toMatchObject({ linked: true });
+    expect(h.view("s1")?.linking).toBeUndefined();
+    expect(h.hello(mac(key, "conv-kid"), nonce, BG)).toBeNull();
+    // 끊기면 다시 버튼을 눌러야 한다
+    up.close();
+    expect(h.view("s1")?.linked).toBeUndefined();
+    expect(h.hello(mac(key, "conv-kid"), nonce, BG)).toBeNull();
+  });
+
+  it("M5: 대화 열쇠로는 층 자리(층 열쇠 접두사)로 붙지 못한다", () => {
+    h.link("s1", BG);
+    const key = readFileSync(join(keyDir, `conv-${BG}.key`), "utf8");
+    expect(h.hello(mac(key, "kid"), nonce, BG)).toBeNull();
+  });
+
+  it("옮겨진 층의 지시·보관 지시는 bg 연결로 가고 ack로 delivered, 제출은 그 층의 것으로 확인된다. 앞면 연결로는 가지 않는다", () => {
+    h.link("s1", BG);
+    const key = readFileSync(join(keyDir, `conv-${BG}.key`), "utf8");
+    const up = linkUp(h, key);
+    const r = h.instruct("s1", "일해", false);
+    expect(r).toMatchObject({ ok: true, state: "sent" });
+    const data = JSON.parse(up.written.join("").match(/data: (.+)\n/)![1]) as { id: string; text: string; mac: string };
+    expect(data).toEqual({ id: (r as { id: string }).id, text: "일해", mac: mac(up.sk, JSON.stringify([data.id, "일해"])) });
+    const ack = (up.a as { ack: string }).ack;
+    expect(h.ack(ack, data.id)).toBe(true);
+    expect(h.view("s1")?.last).toBe("delivered");
+    expect(h.verifySubmit(ack, "m", mac(up.sk, "m"), "n".repeat(32))).toBe("s1");
+  });
+
+  it("옮겨진 상태가 풀리거나 짝(대화)이 바뀌면 sweep이 대화 연결·열쇠를 정리하고 다시 막는다", () => {
+    h.link("s1", BG);
+    const key = readFileSync(join(keyDir, `conv-${BG}.key`), "utf8");
+    linkUp(h, key);
+    linkables.set("s1", "c0ffee00-0000-4000-8000-000000000009");
+    h.sweep(new Set(["s1"]));
+    expect(h.view("s1")?.linked).toBeUndefined();
+    expect(h.instruct("s1", "x", false)).toEqual({ ok: false, error: "parked" });
+    h.link("s1", "c0ffee00-0000-4000-8000-000000000009");
+    parkedIds.delete("s1");
+    h.sweep(new Set(["s1"]));
+    expect(h.view("s1")?.linking).toBeUndefined();
+    expect(existsSync(join(keyDir, "conv-c0ffee00-0000-4000-8000-000000000009.key"))).toBe(false);
+  });
+
+  it("M4: 대시보드를 다시 켜면 남은 대화 열쇠를 되살리지 않고 모두 지운다(등록 파일을 믿지 못해도)", () => {
+    h.link("s1", BG);
+    writeFileSync(join(keyDir, "registry.json"), "{broken", { mode: 0o600 });
+    const again = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir, parked: () => true, linkable: () => BG });
+    again.load();
+    expect(existsSync(join(keyDir, `conv-${BG}.key`))).toBe(false);
+  });
+
+  it("층이 끝나면(unregister) 대화 열쇠도 지운다", () => {
+    h.link("s1", BG);
+    h.unregister("s1");
+    expect(existsSync(join(keyDir, `conv-${BG}.key`))).toBe(false);
   });
 });
 
