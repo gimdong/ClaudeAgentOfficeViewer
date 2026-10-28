@@ -186,7 +186,8 @@ export interface SessionView {
   /** reconnecting: 대시보드를 다시 켠 뒤 복원한 층이 아직 다시 붙지 않음(2분 안, #658) */
   /** unreceived: 보낸 지시를 세션이 받은 흔적(리드 hook)이 없음(B343, 확실하지 않음) */
   /** parked: 대화가 bg job으로 옮겨 가 이 층의 channel로는 지시가 닿지 않음(서버가 보내지 않는다) */
-  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean; parked?: boolean };
+  /** refused: 연결 전, 이 층 열쇠로 온 연결을 거절한 이유(beta.23) — 옛 channel 서버(no-conv)·다른 대화(conv-mismatch) */
+  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean; parked?: boolean; refused?: "no-conv" | "conv-mismatch" };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
   pausedDenied?: number;
   /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */

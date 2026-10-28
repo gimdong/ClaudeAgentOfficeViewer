@@ -127,7 +127,7 @@ function start(port: number, key: string) {
   writeFileSync(keyFile, key, { mode: 0o600 });
   const out: string[] = [];
   child = spawn(process.execPath, [SCRIPT], {
-    env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile, CLAUDE_OFFICE_FLOOR_KEY: key },
+    env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile, CLAUDE_CODE_SESSION_ID: "s1" },
     stdio: ["pipe", "pipe", "ignore"],
   });
   let buf = "";

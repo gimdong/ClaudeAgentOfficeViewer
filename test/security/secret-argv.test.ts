@@ -143,7 +143,7 @@ describe("channel 서버는 열쇠 파일에서 열쇠를 읽는다", () => {
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
     const port = (server.address() as AddressInfo).port;
     child = spawn(process.execPath, [join(ROOT, "plugins/claude-office/channel/server.mjs")], {
-      env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile },
+      env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile, CLAUDE_CODE_SESSION_ID: "s1" },
       stdio: ["pipe", "pipe", "ignore"],
     });
     const w = (m: object) => child!.stdin!.write(JSON.stringify(m) + "\n");

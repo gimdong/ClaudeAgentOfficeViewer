@@ -48,10 +48,10 @@ async function dashboard() {
 }
 
 /** channel 서버를 층 열쇠로 띄운다. out은 stdout 줄(JSON-RPC) */
-function channel(port: number, key: string | null) {
+function channel(port: number, key: string | null, conv = "s1") {
   const keyFile = join(dir, `k-${Math.random()}.key`);
   if (key) writeFileSync(keyFile, key, { mode: 0o600 });
-  const c = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), ...(key ? { CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile } : {}) }, stdio: ["pipe", "pipe", "ignore"] });
+  const c = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), ...(key ? { CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile } : {}), CLAUDE_CODE_SESSION_ID: conv }, stdio: ["pipe", "pipe", "ignore"] });
   children.push(c);
   const out: Record<string, any>[] = [];
   let buf = "";
@@ -86,7 +86,7 @@ async function until(f: () => boolean, ms = 4000) {
 const lead = (port: number, id: string, body: object) => fetch(`http://127.0.0.1:${port}/api/floors/${id}/lead`, { method: "POST", headers: bearer, body: JSON.stringify(body) });
 /** 층을 연결하고 지시 하나를 받아 그 글을 돌려준다 */
 async function connected(d: Awaited<ReturnType<typeof dashboard>>, id: "s1" | "s2") {
-  const ch = channel(d.port, d.keys[id]);
+  const ch = channel(d.port, d.keys[id], id);
   await until(() => d.hub.connected(id));
   expect(d.hub.connected(id)).toBe(true);
   return ch;

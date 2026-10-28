@@ -108,6 +108,20 @@ describe("작업 지시(스펙 6장)", () => {
     expect(instructBtn().getAttribute("title")).toBe(CH_TEXT.parked);
   });
 
+  it("beta.23 설계 7.2: 연결 전 거절된 층은 칩에 '다시 연결 필요'(title에 이유), 작업 지시 버튼도 같은 이유로 꺼짐 — 옛 channel·다른 대화", () => {
+    for (const [refused, why] of [["no-conv", CH_TEXT.refusedNoConv], ["conv-mismatch", CH_TEXT.refusedMismatch]] as const) {
+      cleanup();
+      show([floorOf({ channel: { connected: false, tmux: "co-1", held: 0, refused } })]);
+      render(<App />);
+      const chip = screen.getByTestId("channel-chip");
+      expect(chip.textContent).toBe(`대시보드가 띄움 · 연결 전 · ${CH_TEXT.chipRefused}`);
+      expect(chip.getAttribute("title")).toBe(why);
+      expect(instructBtn().getAttribute("aria-disabled")).toBe("true");
+      expect(instructBtn().getAttribute("title")).toBe(why);
+    }
+    expect(CH_TEXT.refusedNoConv).toContain("/mcp");
+  });
+
   it("연결된 층: 창에서 보내면 POST instruct, 작업 중이면 안내 한 줄, 칩은 전달됨", async () => {
     show([floorOf({ floorStatus: "working", members: [lead({ state: "working" })], channel: { connected: true, tmux: "co-1", held: 0, last: "delivered" } })]);
     render(<App />);

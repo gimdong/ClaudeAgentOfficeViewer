@@ -24,6 +24,8 @@ export interface ChannelView {
   unreceived?: true;
   /** 대화가 bg job으로 옮겨 가(parkedJobId) 이 층의 channel로는 지시가 닿지 않음 — 보내지 않는다 */
   parked?: true;
+  /** 연결 전, 이 층 열쇠로 온 hello를 거절한 이유(beta.23 설계 7.2): no-conv = 대화 id를 밝히지 않음(옛 channel 서버), conv-mismatch = 띄울 때 정한 대화가 아님 */
+  refused?: Refused;
   /** 재시작 때 등록 파일에서 복원했고 아직 다시 붙지 않음(증명 성공 전, 복원 뒤 UNSEEN_MS 안 — 그 뒤엔 정리, #658·B341) */
   reconnecting?: true;
 }
@@ -32,12 +34,15 @@ export interface ChannelView {
 export interface HeldItem { id: string; text: string; at: string; key?: string; meta?: unknown }
 export type InstructResult = { ok: true; id: string; state: "sent" | "held" } | { ok: false; error: "not-launched" | "parked" | "not-connected" | "held-full" };
 
-interface Pending { nonce: string; snonce: string; at: number }
+/** 거절 이유(beta.23 설계 7.2). 라우트가 403 + reason으로 답하고 새 channel 서버는 그 열쇠로 다시 시도하지 않는다 */
+export type Refused = "no-conv" | "conv-mismatch";
+interface Pending { nonce: string; snonce: string; at: number; conv: string }
 /** sk·ackToken은 연결(conn)마다 새로 만들고 끊기면 지운다 */
 /** nonces: 그 연결로 받은 제출 nonce(Phase 6b /channel/submit — 한 번만) */
 /** restoredAt: 복원 뒤 아직 증명 성공 전(다시 연결하는 중 표시), restored: 복원 뒤 한 번도 연결하지 않음 — 둘 다 UNSEEN_MS 뒤 정리(#658·B341) */
 /** receipt·probe: 지시 수신 판정(B343·B344, 메모리). probe는 판정 중인 지시(보낸 시각, 시계 시작 시각, 보낸 순간 유휴를 봤는지) */
-interface Floor { key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
+/** expectConv: 띄울 때 정한 대화 id(--session-id 또는 --resume 값). 층 열쇠 연결은 이 대화만 받는다(beta.23 설계 7.1 — H1·M1). refused·refusedLogged: 연결 전 거절 표시·로그 한 번 */
+interface Floor { expectConv: string; refused?: Refused; refusedLogged?: Set<Refused>; key: string; kid: string; tmux: string; at: number; seen: boolean; restoredAt?: number; restored?: number; receipt?: "seen" | "missing"; probe?: { sentAt: number; startAt?: number; checked?: boolean }; conn?: ServerResponse; sk?: string; ackToken?: string; nonces?: Set<string>; busyLogged?: boolean; pending: Pending[]; held: HeldItem[]; last?: { id: string; state: "sent" | "delivered" } }
 /** HMAC-SHA256 hex. 접두사("kid"·"server|"·"client|"·"session|")로 용도를 나눠 한 값이 다른 자리에 쓰이지 않게 한다 */
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 /** 길이를 먼저 보고 timingSafeEqual(길이가 다르면 timingSafeEqual이 던진다) */
@@ -176,13 +181,15 @@ export class ChannelHub {
     }
     const listed = new Set<string>();
     for (const raw of entries) {
-      const e = raw as { sessionId?: unknown; tmux?: unknown; at?: unknown } | null;
+      const e = raw as { sessionId?: unknown; tmux?: unknown; at?: unknown; conv?: unknown } | null;
       if (!e || typeof e.sessionId !== "string" || !SESSION_ID.test(e.sessionId) || typeof e.tmux !== "string" || !TMUX.test(e.tmux) || typeof e.at !== "number") continue;
       listed.add(e.tmux);
       if (this.floors.size >= MAX_LAUNCHED || this.floors.has(e.sessionId)) continue;
       const key = readKeyFile(floorKeyFile(dir, e.tmux));
       if (!key) continue;
-      this.floors.set(e.sessionId, { key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, restoredAt: now, restored: now, pending: [], held: [] });
+      // conv가 없는 옛 등록(beta.22까지)은 층 id — 그때 옮겨 열기는 합친 층을 거절해 --resume 값이 늘 층 id였다
+      const expectConv = typeof e.conv === "string" && SESSION_ID.test(e.conv) ? e.conv : e.sessionId;
+      this.floors.set(e.sessionId, { expectConv, key, kid: mac(key, "kid"), tmux: e.tmux, at: now, seen: false, restoredAt: now, restored: now, pending: [], held: [] });
     }
     for (const f of readdirSync(dir)) {
       const tmux = f.endsWith(".key") ? f.slice(0, -4) : null;
@@ -205,15 +212,15 @@ export class ChannelHub {
       }
       const tmp = `${file}.tmp-${process.pid}`;
       rmSync(tmp, { force: true });
-      writeFileSync(tmp, JSON.stringify({ floors: [...this.floors].map(([sessionId, f]) => ({ sessionId, tmux: f.tmux, at: f.at })) }) + "\n", { mode: 0o600, flag: "wx" });
+      writeFileSync(tmp, JSON.stringify({ floors: [...this.floors].map(([sessionId, f]) => ({ sessionId, tmux: f.tmux, at: f.at, conv: f.expectConv })) }) + "\n", { mode: 0o600, flag: "wx" });
       renameSync(tmp, file);
     } catch (e) {
       getLogger().warn("floors", "registry save failed", { error: errInfo(e) });
     }
   }
 
-  /** 새 층 등록. 열쇠는 64자 hex. keyDir이 있으면 열쇠 파일(0600)을 먼저 쓰고, 못 쓰면 등록하지 않고 던진다 */
-  register(sessionId: string, tmux: string): string | null {
+  /** 새 층 등록. 열쇠는 64자 hex. keyDir이 있으면 열쇠 파일(0600)을 먼저 쓰고, 못 쓰면 등록하지 않고 던진다. expectConv: 띄울 때 정한 대화 id(옮겨 열기는 --resume 값) */
+  register(sessionId: string, tmux: string, expectConv = sessionId): string | null {
     if (this.floors.size + this.reserved >= MAX_LAUNCHED) return null;
     const key = randomBytes(32).toString("hex");
     if (this.o.keyDir) {
@@ -221,7 +228,7 @@ export class ChannelHub {
       chmodSync(this.o.keyDir, 0o700);
       writeFileSync(floorKeyFile(this.o.keyDir, tmux), key, { mode: 0o600, flag: "wx" });
     }
-    this.floors.set(sessionId, { key, kid: mac(key, "kid"), tmux, at: (this.o.now ?? Date.now)(), seen: false, pending: [], held: [] });
+    this.floors.set(sessionId, { expectConv, key, kid: mac(key, "kid"), tmux, at: (this.o.now ?? Date.now)(), seen: false, pending: [], held: [] });
     this.saveRegistry();
     getLogger().info("floors", "launch", { session: this.n(sessionId) });
     this.changed();
@@ -282,18 +289,36 @@ export class ChannelHub {
   }
 
   /**
-   * 핸드셰이크 1단계(B257): channel 서버가 kid(열쇠의 HMAC)와 새 nonce를 보내면 snonce와 서버 proof를 돌려준다.
-   * 모르는 kid면 아무것도 저장하지 않고 null. 형식(64자 hex) 검사는 라우트가 한다
+   * 핸드셰이크 1단계(B257): channel 서버가 kid(열쇠의 HMAC)·새 nonce·대화 id를 보내면 snonce와 서버 proof를 돌려준다.
+   * 모르는 kid면 아무것도 저장하지 않고 null. 형식(64자 hex·세션 id) 검사는 라우트가 한다.
+   * 대화 id(beta.23 설계 7.1·7.2): 층 열쇠는 띄울 때 정한 대화(expectConv)만 받는다 — 데몬이 물려준 열쇠 경로를 가진 다른 대화(bg)가
+   * 앞면이 끊긴 틈에 그 층으로 붙지 않게(위험 ①·H1). 없거나(옛 channel 서버) 다르면 증명을 내주지 않고 거절 이유를 돌려준다.
+   * 대화 id는 세 증명(server·client·session)에 모두 묶는다
    */
-  hello(kid: string, nonce: string): { snonce: string; proof: string } | null {
-    const f = this.byKid(kid)?.[1];
-    if (!f) return null;
+  hello(kid: string, nonce: string, conv?: string): { snonce: string; proof: string } | { refused: Refused } | null {
+    const hit = this.byKid(kid);
+    if (!hit) return null;
+    const [id, f] = hit;
+    const why: Refused | null = !conv ? "no-conv" : conv !== f.expectConv ? "conv-mismatch" : null;
+    if (why) {
+      if (!f.conn && f.refused !== why) {
+        f.refused = why;
+        this.changed();
+      }
+      // 옛 channel 서버는 거절을 받아도 열쇠 파일이 있는 한 다시 시도한다 — 로그는 이유마다 한 번(설계 7.2 조건 2)
+      if (!(f.refusedLogged ??= new Set()).has(why)) {
+        f.refusedLogged.add(why);
+        getLogger().warn("floors", "channel-refused", { session: this.n(id), reason: why });
+      }
+      return { refused: why };
+    }
+    if (!conv) return null; // why가 없으면 conv는 있다(타입 좁히기)
     const now = (this.o.now ?? Date.now)();
     f.pending = f.pending.filter((p) => now - p.at <= PENDING_MS);
     if (f.pending.length >= MAX_PENDING) f.pending.shift();
     const snonce = randomBytes(32).toString("hex");
-    f.pending.push({ nonce, snonce, at: now });
-    return { snonce, proof: mac(f.key, `server|${nonce}|${snonce}`) };
+    f.pending.push({ nonce, snonce, at: now, conv });
+    return { snonce, proof: mac(f.key, `server|${nonce}|${snonce}|${conv}`) };
   }
 
   /**
@@ -308,7 +333,7 @@ export class ChannelHub {
     const i = f.pending.findIndex((p) => same(p.snonce, a.snonce));
     if (i < 0) return null;
     const [p] = f.pending.splice(i, 1);
-    if ((this.o.now ?? Date.now)() - p.at > PENDING_MS || !same(mac(f.key, `client|${p.nonce}|${p.snonce}`), a.proof)) {
+    if ((this.o.now ?? Date.now)() - p.at > PENDING_MS || !same(mac(f.key, `client|${p.nonce}|${p.snonce}|${p.conv}`), a.proof)) {
       getLogger().warn("floors", "channel-proof-failed", { session: this.n(id) });
       return null;
     }
@@ -325,7 +350,8 @@ export class ChannelHub {
     // 복원한 층이 증명에 성공해 붙었다 — "다시 연결하는 중"과 10분 정리 기준을 함께 끈다(#658, team-lead 판정: hello만으로는 끄지 않음)
     delete f.restored;
     delete f.restoredAt;
-    f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}`);
+    f.sk = mac(f.key, `session|${p.nonce}|${p.snonce}|${p.conv}`);
+    delete f.refused;
     f.ackToken = randomBytes(32).toString("hex");
     f.nonces = new Set();
     res.on("close", () => {
@@ -422,7 +448,7 @@ export class ChannelHub {
     if (!f) return undefined;
     // 복원 뒤 UNSEEN_MS 안: "다시 연결하는 중". 그 뒤엔 sweep이 정리해 등록에 없는 층(W3·옮겨 열기)이 된다(B341 — 사이에 "확인 창" 글이 보이지 않게)
     const reconnecting = !f.conn && f.restoredAt !== undefined && (this.o.now ?? Date.now)() - f.restoredAt <= UNSEEN_MS;
-    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}) };
+    return { connected: !!f.conn, tmux: f.tmux, held: f.held.length, ...(f.last ? { last: f.last.state } : {}), ...(reconnecting ? { reconnecting: true as const } : {}), ...(f.receipt === "missing" ? { unreceived: true as const } : {}), ...(this.isParked(sessionId) ? { parked: true as const } : {}), ...(!f.conn && f.refused ? { refused: f.refused } : {}) };
   }
   /**
    * 스냅샷 빌드마다(B343): 판정 중인 지시가 있는 층만. leadEvents는 그 층 리드의 hook 이벤트(서브에이전트는 여기서 뺀다),

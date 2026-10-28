@@ -74,6 +74,8 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
   const [instructOpen, setInstructOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const ch = session.channel;
+  // 연결 전 거절 이유(beta.23 설계 7.2). 붙어 있으면 서버가 보내지 않는다
+  const refusedWhy = ch?.refused === "no-conv" ? CH_TEXT.refusedNoConv : ch?.refused === "conv-mismatch" ? CH_TEXT.refusedMismatch : undefined;
   const swEl = () => document.getElementById(floorDomId(session.id))?.querySelector<HTMLElement>('[role="switch"]');
   const term = useFloorTerminate(session, budgetCtx.announce, settingsOpen);
   const hider = useFloorHide(session, onHidden, budgetCtx.announce);
@@ -225,9 +227,9 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
           {session.stale && <span className="stale">⚠ 갱신 지연</span>}
           {alarm && <span className="chip chip--budget">예산 도달</span>}
           {ch && (
-            <span className="chip chip--channel" data-testid="channel-chip" title={ch.parked ? CH_TEXT.parked : ch.unreceived ? CH_TEXT.unreceived : undefined}>
+            <span className="chip chip--channel" data-testid="channel-chip" title={ch.parked ? CH_TEXT.parked : refusedWhy ?? (ch.unreceived ? CH_TEXT.unreceived : undefined)}>
               {CH_TEXT.chipLaunched} · {ch.connected ? CH_TEXT.chipConnected : CH_TEXT.chipWaiting}
-              {ch.parked ? ` · ${CH_TEXT.chipParked}${ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ""}` : ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.unreceived ? ` · ${CH_TEXT.chipUnreceived}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
+              {refusedWhy ? ` · ${CH_TEXT.chipRefused}` : ch.parked ? ` · ${CH_TEXT.chipParked}${ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ""}` : ch.held > 0 ? ` · ${CH_TEXT.chipHeld(ch.held)}` : ch.unreceived ? ` · ${CH_TEXT.chipUnreceived}` : ch.last ? ` · ${ch.last === "delivered" ? CH_TEXT.chipDelivered : CH_TEXT.chipSent}` : ""}
             </span>
           )}
           {decisions > 0 && <span className="chip chip--decision">? 결정 {decisions}</span>}
@@ -253,7 +255,7 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             noteId={noteId}
             reopening={reopening}
             onReopen={() => openReopen(session)}
-            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.parked ? { enabled: false, title: CH_TEXT.parked, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: ch.reconnecting ? LEAD_TEXT.reconnecting : CH_TEXT.notConnected, onClick: () => {} }}
+            instruct={!ch ? { enabled: false, title: CH_TEXT.notLaunched, onClick: () => {} } : ch.parked ? { enabled: false, title: CH_TEXT.parked, onClick: () => {} } : ch.connected || paused ? { enabled: true, onClick: () => setInstructOpen(true) } : { enabled: false, title: refusedWhy ?? (ch.reconnecting ? LEAD_TEXT.reconnecting : CH_TEXT.notConnected), onClick: () => {} }}
           />
           {(sw.error ?? hider.error) && (
             <span className="fc-err" role="alert">

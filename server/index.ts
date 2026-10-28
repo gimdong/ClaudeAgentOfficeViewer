@@ -301,7 +301,8 @@ async function main(): Promise<void> {
     const tmuxName = `co-${randomBytes(4).toString("hex")}`;
     let key: string | null;
     try {
-      key = channels.register(sessionId, tmuxName);
+      // 층 열쇠는 띄울 때 정한 대화만 받는다(beta.23 설계 7.1) — 옮겨 열기는 --resume 값
+      key = channels.register(sessionId, tmuxName, resume ?? sessionId);
     } catch (e) {
       getLogger().warn("floors", "key file failed", { error: errInfo(e) });
       return { ok: false as const, error: "tmux" as const };

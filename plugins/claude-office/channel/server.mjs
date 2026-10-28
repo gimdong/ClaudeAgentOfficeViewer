@@ -2,7 +2,7 @@
 // - 포트를 열지 않는다. 대시보드가 띄운 층에만 있는 CLAUDE_OFFICE_FLOOR_KEY_FILE(0600 열쇠 파일, B265 — 열쇠 원문은 프로세스 인자·환경에
 //   싣지 않는다)을 읽을 수 있으면 대시보드(127.0.0.1)로 나가는 SSE 연결을 건다
 // - 열쇠가 없는 세션(대시보드가 띄우지 않은 모든 세션)에서는 연결도, 안내 문구도, 알림도 내지 않는다
-// - process.env에서 아래 두 이름만 읽는다. 그 밖의 값(세션 메시징 토큰 등)은 읽지도 보내지도 않는다
+// - process.env에서 아래 세 이름만 읽는다. 그 밖의 값(세션 메시징 토큰 등)은 읽지도 보내지도 않는다
 // - 열쇠 원문은 보내지 않는다(B257). 대시보드가 먼저 열쇠를 안다는 것을 증명해야 이쪽도 증명하고, 지시마다 연결 키의 MAC을 확인한다
 // - 팀리더 프로세스에서만 연결한다(Phase 6b 스펙 12장 g ①). agent team의 팀원은 Claude Code가 `claude --agent-id … --agent-name …
 //   --team-name …`로 띄우는 별 프로세스라(세 인자는 함께 와야 한다 — Claude Code 2.1.304 소스의 인자 검사), 조상 프로세스 명령줄에
@@ -22,6 +22,10 @@ const KEY = (() => {
   }
 })();
 const PORT = process.env.CLAUDE_OFFICE_PORT;
+// 이 서버를 띄운 대화의 id(beta.23 설계 7.1). Claude Code가 MCP 서버 환경에 넣는다(2.1.311에서 확인, 문서에는 없음).
+// 핸드셰이크에 밝히고 세 증명에 묶는다 — 대시보드는 층 열쇠마다 띄울 때 정한 대화만 받는다(데몬이 물려준 열쇠 경로로 다른 대화가 붙지 않게).
+// 없거나 형식이 틀리면 밝히지 않는다(대시보드가 403 no-conv로 거절하고 층에 표시)
+const CONV = /^[A-Za-z0-9_-]{1,128}$/.test(process.env.CLAUDE_CODE_SESSION_ID ?? "") ? process.env.CLAUDE_CODE_SESSION_ID : undefined;
 const BASE = `http://127.0.0.1:${/^\d{2,5}$/.test(PORT ?? "") ? PORT : "4317"}`;
 // 새 런타임이 2026-07-28로 협상하면 channel로 등록되지 않는다(스파이크 Q1 함정). 이 revision으로 고정한다
 export const PROTOCOL = "2025-11-25";
@@ -191,18 +195,20 @@ async function connect(attempt) {
     try {
       // 시도마다 새 nonce. 서버 proof가 없거나 틀리면(열쇠를 모르는 가짜 서버) 스트림을 열지 않고 다시 시도한다
       const nonce = randomBytes(32).toString("hex");
-      const h = await fetch(`${BASE}/channel/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kid: KID, nonce }) });
+      const h = await fetch(`${BASE}/channel/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kid: KID, nonce, ...(CONV ? { conv: CONV } : {}) }) });
+      // 403 + reason(beta.23 설계 7.2): 이 열쇠는 이 대화의 것이 아니다(또는 대화 id가 없다) — 다시 시도하지 않는다
+      if (h.status === 403) return;
       // 모르는 열쇠: 대시보드가 층을 정리했으면 열쇠 파일도 지웠다 — 그때만 조용히 멈춘다. 파일이 있으면(재시작 직후 등록 누락 등)
       // 아래 백오프(최대 30초)로 다시 시도한다(스펙 12장 n)
-      if ((h.status === 401 || h.status === 403) && !(KEY_FILE && existsSync(KEY_FILE))) return;
+      if (h.status === 401 && !(KEY_FILE && existsSync(KEY_FILE))) return;
       const { snonce, proof } = h.ok ? await h.json() : {};
-      if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `server|${nonce}|${snonce}`))) {
-        const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `client|${nonce}|${snonce}`)}`, Accept: "text/event-stream" } });
+      if (typeof snonce === "string" && HEX.test(snonce) && same(proof, mac(KEY, `server|${nonce}|${snonce}|${CONV}`))) {
+        const res = await fetch(`${BASE}/channel/stream`, { headers: { Authorization: `Proof ${KID} ${snonce} ${mac(KEY, `client|${nonce}|${snonce}|${CONV}`)}`, Accept: "text/event-stream" } });
         const ack = res.headers.get("x-office-ack") ?? "";
         if (res.ok && res.body && HEX.test(ack)) {
           attempt = 0;
           busy = 0;
-          const sk = mac(KEY, `session|${nonce}|${snonce}`);
+          const sk = mac(KEY, `session|${nonce}|${snonce}|${CONV}`);
           session = { sk, ack };
           try {
             await read(res.body, sk, ack);

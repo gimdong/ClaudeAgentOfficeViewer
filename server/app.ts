@@ -759,13 +759,18 @@ export function createApp(
   if (opts.channels) {
     const { hub: ch } = opts.channels;
     const HEX = /^[0-9a-f]{64}$/;
+    const CONV = /^[A-Za-z0-9_-]{1,128}$/;
     const noBrowser = (req: express.Request, res: express.Response, next: express.NextFunction) => (req.headers.origin === undefined ? next() : void res.status(403).end());
     const body = express.json({ limit: "1kb", type: () => true });
     app.post("/channel/hello", noBrowser, body, (req, res) => {
-      const b = req.body as { kid?: unknown; nonce?: unknown } | undefined;
+      const b = req.body as { kid?: unknown; nonce?: unknown; conv?: unknown } | undefined;
       if (typeof b?.kid !== "string" || !HEX.test(b.kid) || typeof b.nonce !== "string" || !HEX.test(b.nonce)) return void res.status(400).end();
-      const r = ch.hello(b.kid, b.nonce);
-      if (r) res.json(r);
+      // 대화 id(beta.23): 없으면 옛 channel 서버 — 형식이 틀린 값은 400
+      if (b.conv !== undefined && (typeof b.conv !== "string" || !CONV.test(b.conv))) return void res.status(400).end();
+      const r = ch.hello(b.kid, b.nonce, b.conv as string | undefined);
+      // 403 + reason: 새 channel 서버는 이 열쇠로 다시 시도하지 않는다(설계 7.2)
+      if (r && "refused" in r) res.status(403).json({ reason: r.refused });
+      else if (r) res.json(r);
       else res.status(401).end();
     });
     app.get("/channel/stream", noBrowser, (req, res) => {

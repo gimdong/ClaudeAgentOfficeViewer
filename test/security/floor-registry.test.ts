@@ -56,7 +56,7 @@ async function stop(s: Server) {
   await new Promise<void>((r) => s.close(() => r()));
 }
 function channel(port: number, keyFile: string) {
-  const c = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile }, stdio: ["pipe", "pipe", "ignore"] });
+  const c = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_OFFICE_PORT: String(port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile, CLAUDE_CODE_SESSION_ID: "s1" }, stdio: ["pipe", "pipe", "ignore"] });
   children.push(c);
   const got: string[] = [];
   let buf = "";
@@ -159,11 +159,11 @@ describe("(e) 핸드셰이크 상태는 재시작을 넘지 않는다", () => {
     const key = h1.register("s1", "co-0a1b2c3d")!;
     const kid = mac(key, "kid");
     const nonce = randomBytes(32).toString("hex");
-    const hello = h1.hello(kid, nonce)!;
+    const hello = h1.hello(kid, nonce, "s1") as { snonce: string };
     const h2 = hubAt();
     expect(h2.has("s1")).toBe(true);
     const res = { on: () => {}, end: () => {}, destroyed: false, writableEnded: false } as never;
-    expect(h2.attach({ kid, snonce: hello.snonce, proof: mac(key, `client|${nonce}|${hello.snonce}`) }, res)).toBeNull();
+    expect(h2.attach({ kid, snonce: hello.snonce, proof: mac(key, `client|${nonce}|${hello.snonce}|s1`) }, res)).toBeNull();
     expect(h2.verifySubmit("a".repeat(64), "x", "m", "0".repeat(32))).toBeNull();
   });
 });

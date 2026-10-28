@@ -77,7 +77,7 @@ const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("
 const hello = (body: unknown, headers: Record<string, string> = {}) =>
   send("/channel/hello", { headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
 /** channel 서버처럼 핸드셰이크(B257: hello → 서버 proof 확인 → 클라이언트 proof)로 스트림을 열고 받은 글을 모은다 */
-function openStream(key: string, headers: Record<string, string> = {}) {
+function openStream(key: string, headers: Record<string, string> = {}, conv = "s1") {
   const got: string[] = [];
   let status = 0;
   let ack = "";
@@ -85,13 +85,13 @@ function openStream(key: string, headers: Record<string, string> = {}) {
   let close = () => {};
   const ready = (async () => {
     const nonce = randomBytes(32).toString("hex");
-    const h = await hello({ kid: mac(key, "kid"), nonce }, headers);
+    const h = await hello({ kid: mac(key, "kid"), nonce, conv }, headers);
     if (h.status !== 200) return void (status = h.status);
     const { snonce, proof } = JSON.parse(h.body);
-    expect(proof).toBe(mac(key, `server|${nonce}|${snonce}`));
-    sk = mac(key, `session|${nonce}|${snonce}`);
+    expect(proof).toBe(mac(key, `server|${nonce}|${snonce}|${conv}`));
+    sk = mac(key, `session|${nonce}|${snonce}|${conv}`);
     await new Promise<void>((resolve) => {
-      const req = request({ host: "127.0.0.1", port, path: "/channel/stream", method: "GET", headers: { Host: `127.0.0.1:${port}`, Authorization: `Proof ${mac(key, "kid")} ${snonce} ${mac(key, `client|${nonce}|${snonce}`)}`, ...headers } }, (res) => {
+      const req = request({ host: "127.0.0.1", port, path: "/channel/stream", method: "GET", headers: { Host: `127.0.0.1:${port}`, Authorization: `Proof ${mac(key, "kid")} ${snonce} ${mac(key, `client|${nonce}|${snonce}|${conv}`)}`, ...headers } }, (res) => {
         status = res.statusCode ?? 0;
         ack = String(res.headers["x-office-ack"] ?? "");
         res.on("data", (d) => got.push(String(d)));
@@ -288,6 +288,56 @@ describe("옮겨진 층(대화가 bg job으로 옮겨 감, parkedJobId) — 지�
   });
 });
 
+describe("위험 ①(beta.23 설계 7.1·7.2): 연결은 대화 id를 밝히고, 층 열쇠는 띄울 때 정한 대화 id만 받는다", () => {
+  beforeEach(() => hub.setEnabled(true));
+  const kidOf = (key: string) => mac(key, "kid");
+  const nonce = "ab".repeat(32);
+
+  it("대화 id가 없으면(옛 channel 서버) 403 no-conv — 증명을 내주지 않고, 연결 전 층에 거절 이유를 보인다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const r = await hello({ kid: kidOf(key), nonce });
+    expect(r.status).toBe(403);
+    expect(JSON.parse(r.body)).toEqual({ reason: "no-conv" });
+    expect(hub.view("s1")?.refused).toBe("no-conv");
+  });
+
+  it("H1: 층 열쇠로 다른 대화 id(물려받은 bg 대화)를 주장하면 403 conv-mismatch — 지금 대화 id(bg)여도 층 열쇠로는 받지 않는다", async () => {
+    const key = hub.register("s1", "co-1")!;
+    const r = await hello({ kid: kidOf(key), nonce, conv: "bg-conv" });
+    expect(r.status).toBe(403);
+    expect(JSON.parse(r.body)).toEqual({ reason: "conv-mismatch" });
+    expect(hub.view("s1")?.refused).toBe("conv-mismatch");
+    // 맞는 대화 id로 붙으면 거절 표시는 사라진다
+    const s = openStream(key, {}, "s1");
+    await s.ready;
+    await until(() => hub.view("s1")?.connected === true);
+    expect(hub.view("s1")?.refused).toBeUndefined();
+  });
+
+  it("옮겨 열기 층(M1): 띄울 때 정한 대화 id(--resume 값)만 받고 층 id는 받지 않는다. 등록 파일로 되살아나도 같다", async () => {
+    const keyDir = join(tmp, "floors");
+    const h1 = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    h1.load();
+    const key = h1.register("s1", "co-0a1b2c3d", "resumed-conv")!;
+    expect(h1.hello(kidOf(key), nonce, "s1")).toEqual({ refused: "conv-mismatch" });
+    expect(h1.hello(kidOf(key), nonce, "resumed-conv")).toMatchObject({ snonce: expect.any(String) });
+    const h2 = new ChannelHub({ file: join(tmp, "experimental.json"), available: { ok: true }, keyDir });
+    h2.load();
+    expect(h2.hello(kidOf(key), nonce, "s1")).toEqual({ refused: "conv-mismatch" });
+    expect(h2.hello(kidOf(key), nonce, "resumed-conv")).toMatchObject({ snonce: expect.any(String) });
+  });
+
+  it("증명은 대화 id에 묶인다 — hello의 대화 id 없이 만든(옛 형식) 증명으로는 붙지 못한다", () => {
+    const key = hub.register("s1", "co-1")!;
+    const hi = hub.hello(kidOf(key), nonce, "s1") as { snonce: string; proof: string };
+    expect(hi.proof).toBe(mac(key, `server|${nonce}|${hi.snonce}|s1`));
+    const res = { on: () => {}, destroyed: false, writableEnded: false, write: () => true } as never;
+    expect(hub.attach({ kid: kidOf(key), snonce: hi.snonce, proof: mac(key, `client|${nonce}|${hi.snonce}`) }, res)).toBeNull();
+    const hi2 = hub.hello(kidOf(key), nonce, "s1") as { snonce: string };
+    expect(hub.attach({ kid: kidOf(key), snonce: hi2.snonce, proof: mac(key, `client|${nonce}|${hi2.snonce}|s1`) }, res)).toMatchObject({ id: "s1" });
+  });
+});
+
 describe("리뷰 #410 수정", () => {
   it("I1: 첫 지시·이름이 -로 시작하면 claude 옵션으로 읽히므로 거부(앞 공백도)", () => {
     const dir = join(tmp, "w");
@@ -350,10 +400,10 @@ describe("일하는 방식(서브에이전트/agent team)", () => {
 describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다", () => {
   const hex = () => randomBytes(32).toString("hex");
   const stream = (authorization: string) => send("/channel/stream", { method: "GET", headers: { Authorization: authorization } });
-  const proofAuth = (key: string, nonce: string, snonce: string, p = mac(key, `client|${nonce}|${snonce}`)) => `Proof ${mac(key, "kid")} ${snonce} ${p}`;
+  const proofAuth = (key: string, nonce: string, snonce: string, p = mac(key, `client|${nonce}|${snonce}|s1`)) => `Proof ${mac(key, "kid")} ${snonce} ${p}`;
   async function helloOk(key: string) {
     const nonce = hex();
-    const r = await hello({ kid: mac(key, "kid"), nonce });
+    const r = await hello({ kid: mac(key, "kid"), nonce, conv: "s1" });
     expect(r.status).toBe(200);
     return { nonce, snonce: JSON.parse(r.body).snonce as string };
   }
@@ -367,8 +417,8 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
 
   it("모르는 kid는 401, nonce·kid가 64자 hex가 아니거나 본문이 1kb를 넘으면 400", async () => {
     hub.register("s1", "co-1");
-    expect((await hello({ kid: hex(), nonce: hex() })).status).toBe(401);
-    for (const b of [{ kid: hex(), nonce: "x" }, { kid: hex().toUpperCase(), nonce: hex() }, { kid: hex() }, [], "s"]) expect((await hello(b)).status, JSON.stringify(b)).toBe(400);
+    expect((await hello({ kid: hex(), nonce: hex(), conv: "s1" })).status).toBe(401);
+    for (const b of [{ kid: hex(), nonce: "x" }, { kid: hex().toUpperCase(), nonce: hex() }, { kid: hex() }, { kid: hex(), nonce: hex(), conv: "../x" }, { kid: hex(), nonce: hex(), conv: 5 }, [], "s"]) expect((await hello(b)).status, JSON.stringify(b)).toBe(400);
     expect((await hello({ kid: hex(), nonce: hex(), pad: "x".repeat(1100) })).status).toBe(413);
   });
 
@@ -384,9 +434,9 @@ describe("channel 핸드셰이크(B257) — 열쇠 원문은 오가지 않는다
     const key = hub.register("s1", "co-1")!;
     const other = hub.register("s2", "co-2")!;
     const a = await helloOk(key);
-    expect((await stream(proofAuth(key, a.nonce, a.snonce, mac(other, `client|${a.nonce}|${a.snonce}`)))).status).toBe(401);
+    expect((await stream(proofAuth(key, a.nonce, a.snonce, mac(other, `client|${a.nonce}|${a.snonce}|s1`)))).status).toBe(401);
     const b = await helloOk(key);
-    expect((await stream(proofAuth(key, b.nonce, b.snonce, mac(key, `server|${b.nonce}|${b.snonce}`)))).status).toBe(401);
+    expect((await stream(proofAuth(key, b.nonce, b.snonce, mac(key, `server|${b.nonce}|${b.snonce}|s1`)))).status).toBe(401);
     const c = await helloOk(key);
     expect((await stream(proofAuth(key, hex(), c.snonce))).status).toBe(401);
   });
@@ -531,7 +581,7 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     expect([again.has("s1"), again.has("s2")]).toEqual([true, false]);
     expect(readFileSync(floorKeyFile(keyDir, "co-0a1b2c3d"), "utf8")).toBe(key);
     expect(existsSync(join(keyDir, "co-99999999.key"))).toBe(false);
-    expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number) }] });
+    expect(JSON.parse(readFileSync(join(keyDir, "registry.json"), "utf8"))).toEqual({ floors: [{ sessionId: "s1", tmux: "co-0a1b2c3d", at: expect.any(Number), conv: "s1" }] }); // conv = 띄울 때 정한 대화 id(beta.23 설계 7.1)
   });
 
   it(`#658: 복원했지만 아직 다시 붙지 않은(증명 성공 전) 층은 ${UNSEEN_MS / 60_000}분 동안 reconnecting(B341 — 2분·5분에도) — 증명에 성공해 붙거나 시간이 지나면 없다(hello만으로는 남음). 새로 띄운 층은 처음부터 없다`, () => {
@@ -554,13 +604,13 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     // hello만 오고 증명이 틀리면 표시는 남는다 — 증명이 성공해 붙었을 때만 끈다(team-lead 판정)
     const kid = createHmac("sha256", key).update("kid").digest("hex");
     const nonce = "ab".repeat(32);
-    const hi = again.hello(kid, nonce)!;
+    const hi = again.hello(kid, nonce, "s1") as { snonce: string };
     let close = () => {};
     const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false } as never;
     expect(again.attach({ kid, snonce: hi.snonce, proof: "0".repeat(64) }, res)).toBeNull();
     expect(again.view("s1")?.reconnecting).toBe(true);
-    const hi2 = again.hello(kid, nonce)!;
-    expect(again.attach({ kid, snonce: hi2.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi2.snonce}`).digest("hex") }, res)).toMatchObject({ id: "s1" });
+    const hi2 = again.hello(kid, nonce, "s1") as { snonce: string };
+    expect(again.attach({ kid, snonce: hi2.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi2.snonce}|s1`).digest("hex") }, res)).toMatchObject({ id: "s1" });
     expect(again.view("s1")?.reconnecting).toBeUndefined();
     close(); // 한 번 붙은 뒤 끊기면 "다시 연결하는 중"이 아니라 연결 없음
     expect(again.view("s1")).toMatchObject({ connected: false });
@@ -584,10 +634,10 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
     // s2는 복원 뒤 한 번 연결했다가 끊김
     const kid = createHmac("sha256", k2).update("kid").digest("hex");
     const nonce = "ab".repeat(32);
-    const hi = again.hello(kid, nonce)!;
+    const hi = again.hello(kid, nonce, "s2") as { snonce: string };
     let close = () => {};
     const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false } as never;
-    expect(again.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", k2).update(`client|${nonce}|${hi.snonce}`).digest("hex") }, res)).toMatchObject({ id: "s2" });
+    expect(again.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", k2).update(`client|${nonce}|${hi.snonce}|s2`).digest("hex") }, res)).toMatchObject({ id: "s2" });
     close();
     t += UNSEEN_MS - 1;
     again.sweep(new Set(["s1", "s2"]));
@@ -628,10 +678,10 @@ describe("층 열쇠 파일(B265 — 열쇠 원문은 tmux 인자에 싣지 않�
       const kid = createHmac("sha256", key).update("kid").digest("hex");
       const attach = () => {
         const nonce = randomBytes(32).toString("hex");
-        const hi = hub2.hello(kid, nonce)!;
+        const hi = hub2.hello(kid, nonce, "s1") as { snonce: string };
         let close = () => {};
         const res = { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false, write: () => true } as never;
-        hub2.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi.snonce}`).digest("hex") }, res);
+        hub2.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi.snonce}|s1`).digest("hex") }, res);
         return () => close();
       };
       return attach;

@@ -66,6 +66,10 @@ export const CH_TEXT = {
   chipDelivered: "전달됨",
   // 합친 층(B192): 대화가 bg job으로 옮겨 가 앞면 프로세스는 지시를 쌓기만 한다 — 서버가 보내지 않는다
   chipParked: "백그라운드로 옮겨짐",
+  // beta.23 설계 7.2: 연결 전 거절(대화 id 확인) — bg 대화가 물려받은 열쇠로 시도해도 이 층에 뜨므로 중립적으로
+  chipRefused: "다시 연결 필요",
+  refusedNoConv: "이 층 열쇠로 옛 버전 channel이 붙으려 해서 받지 않았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결하거나, 층을 다시 띄워 주세요.",
+  refusedMismatch: "이 층 열쇠로 이 층을 띄운 대화가 아닌 channel이 붙으려 해서 막았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결해 주세요.",
   parked: PARKED,
   briefTitle: (name: string) => `${name} 층 재개 전 확인`,
   briefHeld: "휴업 중 보관한 지시",

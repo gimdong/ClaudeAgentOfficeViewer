@@ -32,11 +32,13 @@ afterEach(async () => {
 
 const mac = (k: string, m: string) => createHmac("sha256", k).update(m).digest("hex");
 const TEXT = 'say "hi" $(rm -rf /)\nline2';
-type Mode = "good" | "no-proof" | "bad-proof" | "tamper";
+type Mode = "good" | "no-proof" | "bad-proof" | "tamper" | "refuse";
 /**
  * 가짜 대시보드(B257 핸드셰이크): good은 열쇠를 아는 진짜처럼 증명하고 MAC을 붙인다. no-proof·bad-proof는 열쇠를 모르는 가짜 서버,
  * tamper는 핸드셰이크는 그대로 중계하지만 지시 글을 바꾸는 중계자. 받은 요청은 모두 기록한다
  */
+/** 이 channel 서버를 띄운 대화(가짜 값, CLAUDE_CODE_SESSION_ID) */
+const CONV = "c0ffee00-0000-4000-8000-000000000001";
 async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, sk: string) => void } = {}) {
   const mode = o.mode ?? "good";
   const seen: Array<{ url: string; auth?: string; body: string; headers: IncomingMessage["headers"] }> = [];
@@ -48,15 +50,16 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, 
     req.on("end", () => {
       seen.push({ url: req.url ?? "", auth: req.headers.authorization, body, headers: req.headers });
       if (req.url === "/channel/hello") {
-        const { nonce } = JSON.parse(body);
+        const { nonce, conv } = JSON.parse(body);
+        if (mode === "refuse") return void res.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ reason: "conv-mismatch" }));
         const snonce = randomBytes(32).toString("hex");
-        nonces.set(snonce, nonce);
-        const proof = mode === "no-proof" ? undefined : mode === "bad-proof" ? randomBytes(32).toString("hex") : mac(KEY, `server|${nonce}|${snonce}`);
+        nonces.set(snonce, `${nonce}|${snonce}|${conv}`);
+        const proof = mode === "no-proof" ? undefined : mode === "bad-proof" ? randomBytes(32).toString("hex") : mac(KEY, `server|${nonce}|${snonce}|${conv}`);
         res.end(JSON.stringify({ snonce, proof }));
       } else if (req.url === "/channel/stream") {
         streams++;
         const [, , snonce] = (req.headers.authorization ?? "").split(" ");
-        const sk = mac(KEY, `session|${nonces.get(snonce)}|${snonce}`);
+        const sk = mac(KEY, `session|${nonces.get(snonce)}`);
         res.writeHead(200, { "Content-Type": "text/event-stream", "X-Office-Ack": "f".repeat(64) });
         const text = mode === "tamper" ? "rm -rf ~" : TEXT;
         (o.onStream ?? ((r) => r.write(`event: instruction\ndata: ${JSON.stringify({ id: "i1", text, mac: mac(sk, JSON.stringify(["i1", TEXT])) })}\n\n`)))(res, sk);
@@ -69,7 +72,7 @@ async function fakeDashboard(o: { mode?: Mode; onStream?: (res: ServerResponse, 
 
 function start(env: Record<string, string>) {
   const out: string[] = [];
-  child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_CODE_MESSAGING_TOKEN: FAKE_MSG_TOKEN, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  child = spawn(process.execPath, [SCRIPT], { env: { PATH: process.env.PATH ?? "", CLAUDE_CODE_MESSAGING_TOKEN: FAKE_MSG_TOKEN, CLAUDE_CODE_SESSION_ID: CONV, ...env }, stdio: ["pipe", "pipe", "pipe"] });
   let buf = "";
   child.stdout!.on("data", (d) => {
     buf += String(d);
@@ -104,6 +107,22 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     expect(init.capabilities.experimental).toBeUndefined();
     expect(init.instructions).toBeUndefined();
     expect(out).toHaveLength(1);
+  });
+
+  it("beta.23 설계 7.2: hello가 403(이 열쇠는 이 대화의 것이 아님)이면 다시 시도하지 않는다. hello에 자기 대화 id를 밝힌다", async () => {
+    const d = await fakeDashboard({ mode: "refuse" });
+    start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY_FILE: keyFile() });
+    await until(() => d.seen.length >= 1);
+    await new Promise((r) => setTimeout(r, 2_500));
+    expect(d.seen.map((s) => s.url)).toEqual(["/channel/hello"]);
+    expect(JSON.parse(d.seen[0].body).conv).toBe(CONV);
+  });
+
+  it("security 6: 열쇠 파일 없이 환경(옛 이름)에만 열쇠가 있으면 연결하지 않는다 — 데몬이 물려준 원문으로 붙지 않게", async () => {
+    const d = await fakeDashboard();
+    start({ CLAUDE_OFFICE_PORT: String(d.port), CLAUDE_OFFICE_FLOOR_KEY: KEY });
+    await new Promise((r) => setTimeout(r, 800));
+    expect(d.seen).toEqual([]);
   });
 
   it("열쇠가 있으면 SSE로 받은 지시를 그대로 channel 알림으로 넣고 ack를 보낸다. 메시징 토큰은 어디에도 보내지 않는다", async () => {
@@ -213,9 +232,9 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
       req.on("data", (d) => (body += d));
       req.on("end", () => {
         if (req.url === "/channel/hello") {
-          const { nonce } = JSON.parse(body);
+          const { nonce, conv } = JSON.parse(body);
           const snonce = randomBytes(32).toString("hex");
-          return void res.end(JSON.stringify({ snonce, proof: mac(KEY, `server|${nonce}|${snonce}`) }));
+          return void res.end(JSON.stringify({ snonce, proof: mac(KEY, `server|${nonce}|${snonce}|${conv}`) }));
         }
         if (req.url === "/channel/stream") times.push(Date.now());
         res.writeHead(409).end();
@@ -229,10 +248,10 @@ describe("channel 서버(Phase 4b 스펙 5장)", () => {
     expect(times[2] - times[1]).toBeGreaterThan(3_500);
   }, 15_000);
 
-  it("process.env에서는 두 이름만 읽는다(코드 검사)", () => {
+  it("process.env에서는 세 이름만 읽는다(코드 검사) — 옛 이름 CLAUDE_OFFICE_FLOOR_KEY(열쇠 원문)는 읽지 않는다", () => {
     const src = readFileSync(SCRIPT, "utf8");
     const names = [...src.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
-    expect([...new Set(names)].sort()).toEqual(["CLAUDE_OFFICE_FLOOR_KEY_FILE", "CLAUDE_OFFICE_PORT"]);
+    expect([...new Set(names)].sort()).toEqual(["CLAUDE_CODE_SESSION_ID", "CLAUDE_OFFICE_FLOOR_KEY_FILE", "CLAUDE_OFFICE_PORT"]);
     expect(/process\.env\[/.test(src) || /Object\.(keys|entries)\(process\.env\)/.test(src)).toBe(false);
   });
 
