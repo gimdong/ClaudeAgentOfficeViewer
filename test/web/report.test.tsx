@@ -493,7 +493,7 @@ describe("종류별 보고서", () => {
     expect(within(dialog).getByRole("heading", { level: 2 }).textContent).toBe("이 명령을 실행해도 될까요?");
     expect(dialog.textContent).toContain("팀원이 리드에게 권한을 묻고 있습니다. 이 질문은 대시보드에서 답할 수 없습니다");
     expect(dialog.textContent).toContain("리드의 터미널에서 답해 주세요");
-    expect(dialog.textContent).toContain("팀원이 다시 일을 시작하거나 10분이 지나면 손을 내립니다");
+    expect(dialog.textContent).toContain("리드 창 안에서 도는 팀원은 다시 일을 시작하면, 별도 창에서 도는 팀원은 10분 뒤에 손을 내립니다");
     expect(within(dialog).queryByRole("button", { name: /허용|거부|계속|중단|승인/ })).toBeNull();
     expect(within(dialog).queryByRole("timer")).toBeNull();
   });

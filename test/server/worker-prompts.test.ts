@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WORKER_PROMPT_TTL, WorkerPrompts, parseWorkerPrompt } from "../../server/decisions/workerPrompts";
 
 const T = 1_800_000_000_000;
-const ev = (at: number) => ({ at });
+const ev = (at: number, event = "PostToolUse", tool = "Bash") => ({ at, event, tool });
 
 describe("팀원 권한 질문 알림(안 A, Notification worker_permission_prompt)", () => {
   it("글에서 팀원 이름·도구를 꺼낸다. 네트워크 질문은 호스트, 모르는 형식은 이름 없이", () => {
@@ -10,6 +10,9 @@ describe("팀원 권한 질문 알림(안 A, Notification worker_permission_prom
     expect(parseWorkerPrompt("qa-2 needs network access to example.com")).toEqual({ name: "qa-2", tool: "network", target: "example.com" });
     expect(parseWorkerPrompt("Claude needs your permission")).toEqual({ tool: "?" });
     expect(parseWorkerPrompt(undefined)).toEqual({ tool: "?" });
+    // MCP 도구 이름은 길다(리뷰 #2-4)
+    const mcp = `mcp__${"s".repeat(40)}__${"t".repeat(40)}`;
+    expect(parseWorkerPrompt(`dev needs permission for ${mcp}`)).toEqual({ name: "dev", tool: mcp });
     // 위조 입력 대비 길이 상한
     expect(parseWorkerPrompt(`${"x".repeat(200)} needs permission for Bash`)).toEqual({ tool: "?" });
   });
@@ -37,6 +40,21 @@ describe("팀원 권한 질문 알림(안 A, Notification worker_permission_prom
     expect(w.open("s1", T + 5, new Map([["developer", [ev(T - 1), ev(T + 2)]]]))).toEqual([]);
     // 한 번 내린 것은 다시 올라오지 않는다
     expect(w.open("s1", T + 6, new Map())).toEqual([]);
+  });
+
+  it("병렬로 돌던 다른 도구의 Post 이벤트로는 내리지 않는다 — 같은 도구의 Post·Failure·PermissionDenied, 새 PreToolUse·Stop·TeammateIdle로 내린다(리뷰 #2-3)", () => {
+    const w = new WorkerPrompts();
+    const open = (e: ReturnType<typeof ev>) => {
+      w.note("s1", "developer needs permission for Read", T);
+      return w.open("s1", T + 5, new Map([["developer", [e]]])).length;
+    };
+    expect(open(ev(T + 1, "PostToolUse", "Grep"))).toBe(1);
+    expect(open(ev(T + 1, "PostToolUse", "Read"))).toBe(0);
+    expect(open(ev(T + 1, "PostToolUseFailure", "Read"))).toBe(0);
+    expect(open(ev(T + 1, "PermissionDenied", "Read"))).toBe(0);
+    expect(open(ev(T + 1, "PreToolUse", "Glob"))).toBe(0);
+    expect(open(ev(T + 1, "Stop", ""))).toBe(0);
+    expect(open(ev(T + 1, "TeammateIdle", ""))).toBe(0);
   });
 
   it("이름을 모르는 알림은 마지막 하나만 두고 시간으로만 내린다", () => {

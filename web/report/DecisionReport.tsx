@@ -289,7 +289,7 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
       <>
         <p className="rp-terminal">{v.kind === "team" ? "터미널(리드 세션)에서 답해 주세요" : v.viaLead ? "리드의 터미널에서 답해 주세요" : "터미널에서 답해 주세요"}</p>
         {v.kind === "team" && <p className="rp-sub">리드가 이 팀원에게 메시지를 보내거나 30분이 지나면 손을 내립니다</p>}
-        {v.viaLead && <p className="rp-sub">팀원이 다시 일을 시작하거나 10분이 지나면 손을 내립니다</p>}
+        {v.viaLead && <p className="rp-sub">리드 창 안에서 도는 팀원은 다시 일을 시작하면, 별도 창에서 도는 팀원은 10분 뒤에 손을 내립니다</p>}
       </>
     );
   }
@@ -369,7 +369,7 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
         <section className="rp-sec" id="rp-what" aria-labelledby="rp-what-h">
           <h3 id="rp-what-h">하려는 일</h3>
           {/* 팀원 요청은 도구 호출이 아니므로 도구 줄을 그리지 않는다(명세 §1.4) */}
-          {v.kind !== "team" && <p className="rp-tool">{`도구 ${v.toolName}`}</p>}
+          {v.kind !== "team" && !(v.viaLead && (v.toolName === "?" || v.toolName === "network")) && <p className="rp-tool">{`도구 ${v.toolName}`}</p>}
           <What v={v} />
         </section>
         <section className="rp-sec" aria-labelledby="rp-why-h">

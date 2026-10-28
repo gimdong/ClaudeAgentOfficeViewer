@@ -307,7 +307,7 @@ export class SnapshotBuilder {
       const wp = prompts.find((p) => deskOf(p) === name);
       if (wp) {
         const what = wp.tool === "network" ? `${wp.target} 네트워크 접근` : wp.tool === "?" ? "권한" : `${wp.tool} 권한`;
-        const summary = cut(`${wp.name && name === "team-lead" ? `팀원 ${wp.name}: ` : !wp.name ? "팀원이 " : ""}${what}을 묻는 중 — 리드 터미널에서 답해 주세요`);
+        const summary = cut(`${wp.name && name === "team-lead" ? `팀원 ${wp.name}: ` : !wp.name ? "팀원이 " : ""}${what}을 묻는 중 — 리드의 터미널에서 답해 주세요`);
         const since = iso(wp.at);
         const deadline = iso(wp.at + WORKER_PROMPT_TTL);
         const id = `worker:${s.sessionId}:${wp.name ?? "?"}:${wp.at}`;

@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assistant, makeHome, type FakeHome } from "../helpers/fakeHome";
 import { agentsItem, checkAgents } from "../../server/diag/agents";
@@ -13,17 +14,20 @@ describe("진단: 에이전트 기록 점검(beta.22, 회사 PC 2.1.305 사례)"
     await h.append("projects/-p/c1.jsonl", [agentCall(1), agentCall(2)]);
     await h.write("projects/-p/c1/subagents/agent-a1.meta.json", { name: "dev", teamName: "t" });
     await h.write("projects/-p/c1/subagents/agent-a2.meta.json", { agentType: "Explore" });
+    // 깨진 meta 하나가 점검 전체를 죽이지 않는다(리뷰 #2-1)
+    await writeFile(h.path("projects/-p/c1/subagents/agent-a3.meta.json"), "{bad");
     await h.write("teams/t/config.json", { name: "t", leadSessionId: "c1", members: [] });
     await h.append("projects/-p/c2.jsonl", [agentCall(3)]);
     const r = await checkAgents(h.home, [
-      { conv: "c1", bg: true, members: 2, subagents: 0 },
-      { conv: "c2", bg: false, members: 1, subagents: 0 },
-      { conv: "c3", bg: false, members: 1, subagents: 0 },
+      { conv: "c1", floor: 3, bg: true, members: 2, subagents: 0 },
+      { conv: "c2", floor: 1, bg: false, members: 1, subagents: 0 },
+      { conv: "c3", floor: 2, bg: false, members: 1, subagents: 0 },
     ]);
+    // floor는 화면의 층 번호 그대로(리뷰 #2-8)
     expect(r).toEqual([
-      { floor: 1, bg: true, members: 2, subagents: 0, agentCalls: 2, folder: true, metas: 2, named: 1, team: true, missing: false },
-      { floor: 2, bg: false, members: 1, subagents: 0, agentCalls: 1, folder: false, metas: 0, named: 0, team: false, missing: true },
-      { floor: 3, bg: false, members: 1, subagents: 0, agentCalls: 0, folder: false, metas: 0, named: 0, team: false, missing: false },
+      { floor: 3, bg: true, members: 2, subagents: 0, agentCalls: 2, folder: true, metas: 3, named: 1, team: true, missing: false },
+      { floor: 1, bg: false, members: 1, subagents: 0, agentCalls: 1, folder: false, metas: 0, named: 0, team: false, missing: true },
+      { floor: 2, bg: false, members: 1, subagents: 0, agentCalls: 0, folder: false, metas: 0, named: 0, team: false, missing: false },
     ]);
     expect(JSON.stringify(r)).not.toMatch(/c1|c2|dev|"t"/);
   });

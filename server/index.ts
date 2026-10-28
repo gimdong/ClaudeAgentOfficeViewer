@@ -432,9 +432,9 @@ async function main(): Promise<void> {
       opts.claudeHome,
       hub.current().sessions.filter((s) => s.alive).map((s) => {
         const conv = builder.convOf(s.id);
-        return { conv, bg: conv !== s.id, members: s.members.length, subagents: s.subagents?.length ?? 0 };
+        return { conv, floor: s.floor, bg: conv !== s.id, members: s.members.length, subagents: s.subagents?.length ?? 0 };
       }),
-    );
+    ).catch((e) => (warnCaught("diag", "agent check failed", e), [])); // 보조 점검 하나가 진단 패널 전체를 죽이지 않게(리뷰 #2-1)
   const diagnostics = {
     diagDir: paths.diagDir,
     summary: async () => ({

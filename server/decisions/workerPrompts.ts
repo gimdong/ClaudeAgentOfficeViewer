@@ -17,7 +17,8 @@ export interface WorkerPrompt {
   at: number;
 }
 
-const PERMISSION = /^(\S.{0,63}?) needs permission for (\S{1,40})$/;
+/** 도구 이름은 mcp__<서버>__<도구>처럼 길 수 있다(리뷰 #2-4) */
+const PERMISSION = /^(\S.{0,63}?) needs permission for (\S{1,128})$/;
 const NETWORK = /^(\S.{0,63}?) needs network access to (\S{1,253})$/;
 
 export function parseWorkerPrompt(message: unknown): Omit<WorkerPrompt, "at"> {
@@ -29,6 +30,12 @@ export function parseWorkerPrompt(message: unknown): Omit<WorkerPrompt, "at"> {
   return { tool: "?" };
 }
 
+/** 그 도구 호출이 끝남 */
+const DONE: ReadonlySet<string> = new Set(["PostToolUse", "PostToolUseFailure", "PermissionDenied"]);
+/** 다음 일로 넘어감 */
+const RESUME: ReadonlySet<string> = new Set(["PreToolUse", "Stop", "TeammateIdle"]);
+
+/** ponytail: byConv는 open()이 불리는 살아 있는 층에서만 정리된다 — 끝난 층에는 대화당 팀원 수만큼 남는다(리뷰 #2-7). 늘면 prune을 스냅샷 sweep에 붙인다 */
 export class WorkerPrompts {
   private readonly byConv = new Map<string, WorkerPrompt[]>();
 
@@ -41,11 +48,18 @@ export class WorkerPrompts {
     this.byConv.set(conv, list);
   }
 
-  /** 아직 손을 들고 있는 것. 시간이 지났거나 알림 뒤 그 팀원의 이벤트가 왔으면(답을 받아 다시 일함) 지운다 */
-  open(conv: string, now: number, events: ReadonlyMap<string, readonly { at: number }[]>): WorkerPrompt[] {
+  /**
+   * 아직 손을 들고 있는 것. 시간이 지났거나, 알림 뒤 그 팀원이 다시 일한 흔적이 오면 지운다: 그 도구의 Post·Failure·PermissionDenied,
+   * 새 PreToolUse·Stop·TeammateIdle. 같은 메시지에서 병렬로 돌던 다른 도구의 Post는 세지 않는다(리뷰 #2-3). 같은 호출의 PreToolUse는 hook이 동기라 알림보다 먼저 저장된다.
+   * ponytail: 이벤트는 리드 대화 키로 쌓인 것만 본다 — in-process 팀원만 여기로 오고, 별도 프로세스(tmux) 팀원의 hook은 자기 세션으로 와서 시간(TTL)으로만 내린다(리뷰 #2-2).
+   * 그 팀원의 세션 id를 알게 되면(회사 진단 파일) 층 안 이름으로 세션을 넘어 짝짓는다
+   */
+  open(conv: string, now: number, events: ReadonlyMap<string, readonly { at: number; event: string; tool?: string }[]>): WorkerPrompt[] {
     const list = this.byConv.get(conv);
     if (!list) return [];
-    const keep = list.filter((p) => now - p.at <= WORKER_PROMPT_TTL && !(p.name && events.get(p.name)?.some((e) => e.at > p.at)));
+    const resumed = (p: WorkerPrompt, e: { at: number; event: string; tool?: string }) =>
+      e.at > p.at && (RESUME.has(e.event) || (DONE.has(e.event) && (e.tool === p.tool || p.tool === "network" || p.tool === "?")));
+    const keep = list.filter((p) => now - p.at <= WORKER_PROMPT_TTL && !(p.name && events.get(p.name)?.some((e) => resumed(p, e))));
     if (keep.length) this.byConv.set(conv, keep);
     else this.byConv.delete(conv);
     return keep;

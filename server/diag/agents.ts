@@ -8,7 +8,7 @@ import type { DoctorItem } from "../../src/shared/types";
  * 이 자리는 문서에 없는 관찰이라 버전마다 바뀔 수 있다 — 그때 진단 파일 하나로 알아보게 층마다 개수만 남긴다(id·이름 없음)
  */
 export interface AgentCheck {
-  /** 살아 있는 층의 순번(1부터) */
+  /** 화면의 층 번호 */
   floor: number;
   /** 대화가 bg job으로 옮겨 간 층(B192) */
   bg: boolean;
@@ -47,7 +47,8 @@ async function tail(file: string): Promise<string> {
   }
 }
 
-export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ conv: string; bg: boolean; members: number; subagents: number }>): Promise<AgentCheck[]> {
+/** floor: 화면의 층 번호(사용자 보고와 맞춰 보게, 리뷰 #2-8) */
+export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ conv: string; floor: number; bg: boolean; members: number; subagents: number }>): Promise<AgentCheck[]> {
   const projects = join(claudeHome, "projects");
   const dirs = await ls(projects);
   const leads = new Set<string>();
@@ -60,24 +61,35 @@ export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ co
     }
   }
   const out: AgentCheck[] = [];
-  for (const [i, f] of floors.entries()) {
+  for (const f of floors) {
     let agentCalls = 0;
     let folder = false;
     let metas = 0;
     let named = 0;
+    // 대화 기록이 있는 프로젝트 폴더 하나만 본다(리뷰 #2-9 — 폴더마다 열지 않게). 대화 폴더는 기록 옆에 생긴다
+    // ponytail: 층 수 × 프로젝트 폴더 수만큼 stat — 폴더가 아주 많으면 builder의 기록 위치 캐시를 넘겨받는다
+    let home: string | undefined;
     for (const p of dirs) {
-      agentCalls += await tail(join(projects, p, `${f.conv}.jsonl`)).then((t) => t.match(AGENT_CALL)?.length ?? 0, () => 0);
-      if (!(await stat(join(projects, p, f.conv)).then((s) => s.isDirectory(), () => false))) continue;
-      folder = true;
-      const sub = join(projects, p, f.conv, "subagents");
+      if (await stat(join(projects, p, `${f.conv}.jsonl`)).then(() => true, () => false)) {
+        home = join(projects, p);
+        break;
+      }
+    }
+    if (home) {
+      agentCalls = await tail(join(home, `${f.conv}.jsonl`)).then((t) => t.match(AGENT_CALL)?.length ?? 0, () => 0);
+      folder = await stat(join(home, f.conv)).then((s) => s.isDirectory(), () => false);
+    }
+    if (home && folder) {
+      const sub = join(home, f.conv, "subagents");
       for (const n of await ls(sub)) {
         if (!n.endsWith(".meta.json")) continue;
         metas++;
-        if (await readFile(join(sub, n), "utf8").then((t) => !!JSON.parse(t)?.name, () => false)) named++;
+        // JSON.parse가 던져도 이 파일만 건너뛴다(리뷰 #2-1 — then의 두 번째 인자는 첫 콜백의 오류를 잡지 않는다)
+        if (await readFile(join(sub, n), "utf8").then((t) => !!JSON.parse(t)?.name).catch(() => false)) named++;
       }
     }
     const team = leads.has(f.conv);
-    out.push({ floor: i + 1, bg: f.bg, members: f.members, subagents: f.subagents, agentCalls, folder, metas, named, team, missing: agentCalls > 0 && metas === 0 && !team });
+    out.push({ floor: f.floor, bg: f.bg, members: f.members, subagents: f.subagents, agentCalls, folder, metas, named, team, missing: agentCalls > 0 && metas === 0 && !team });
   }
   return out;
 }
@@ -90,8 +102,8 @@ export function agentsItem(checks: readonly AgentCheck[]): DoctorItem {
         id: "agents",
         status: "warn",
         title: "에이전트 기록",
-        detail: `에이전트를 불렀는데 대시보드가 읽는 자리에 기록이 없는 층이 ${n}개 있습니다. 이 층의 팀원·서브에이전트는 책상에 보이지 않을 수 있습니다(Claude Code 버전에 따라 기록 위치가 다를 수 있음).`,
+        detail: `에이전트를 불렀는데 대시보드가 읽는 자리에 기록이 없는 층이 ${n}개 있습니다. 이 층의 팀원·서브에이전트는 책상에 보이지 않을 수 있습니다(Claude Code 버전에 따라 기록 위치가 다를 수 있습니다).`,
         fix: "진단 파일을 만들어 보내 주세요(층마다 개수만 담깁니다).",
       }
-    : { id: "agents", status: "ok", title: "에이전트 기록", detail: "살아 있는 층의 에이전트 기록을 찾았습니다(또는 부른 에이전트가 없음).", fix: "" };
+    : { id: "agents", status: "ok", title: "에이전트 기록", detail: "살아 있는 층의 에이전트 기록을 찾았습니다(또는 부른 에이전트가 없습니다).", fix: "" };
 }

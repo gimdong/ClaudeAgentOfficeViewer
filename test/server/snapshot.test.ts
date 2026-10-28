@@ -372,7 +372,7 @@ describe("SnapshotBuilder + 팀원 권한 질문 알림(안 A)", () => {
     const dev = s1.members.find((m) => m.name === "developer")!;
     const id = `worker:s1:developer:${at}`;
     expect(dev.state).toBe("decision");
-    expect(dev.decision).toEqual({ kind: "permission", since: new Date(at).toISOString(), summary: "Bash 권한을 묻는 중 — 리드 터미널에서 답해 주세요", id, deadline: new Date(at + 10 * 60_000).toISOString() });
+    expect(dev.decision).toEqual({ kind: "permission", since: new Date(at).toISOString(), summary: "Bash 권한을 묻는 중 — 리드의 터미널에서 답해 주세요", id, deadline: new Date(at + 10 * 60_000).toISOString() });
     expect(s1.members[0].decision).toBeUndefined();
     expect(snap.decisions.find((d) => d.id === id)).toMatchObject({ sessionId: "s1", agent: "developer", kind: "permission", toolName: "Bash", state: "pending", answerable: false, viaLead: true });
     expect(snap.decisionCount).toBe(1);
@@ -383,7 +383,7 @@ describe("SnapshotBuilder + 팀원 권한 질문 알림(안 A)", () => {
     w.note("s1", "ghost needs network access to example.com", T - 3000);
     const snap = await build();
     const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
-    expect(lead.decision).toMatchObject({ kind: "permission", summary: "팀원 ghost: example.com 네트워크 접근을 묻는 중 — 리드 터미널에서 답해 주세요" });
+    expect(lead.decision).toMatchObject({ kind: "permission", summary: "팀원 ghost: example.com 네트워크 접근을 묻는 중 — 리드의 터미널에서 답해 주세요" });
     expect(snap.decisions.find((d) => d.viaLead)).toMatchObject({ agent: "team-lead", toolName: "network", detail: { domain: "example.com" } });
   });
 
