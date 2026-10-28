@@ -6,6 +6,7 @@ import { SnapshotBuilder } from "../../server/snapshot";
 import { DecisionQueue, RESOLVED_KEEP_MS, type HeldResponse } from "../../server/decisions/queue";
 import { HOLD_MS } from "../../server/decisions/protocol";
 import { EventStore } from "../../server/events/store";
+import { WorkerPrompts } from "../../server/decisions/workerPrompts";
 import { getLogger } from "../../server/log";
 import { PolicyGate } from "../../server/policy/gate";
 import { FloorControl } from "../../server/floors/control";
@@ -348,6 +349,50 @@ describe("SnapshotBuilder + 결정 큐(Phase 2, Ruling B28·B40)", () => {
     const text = JSON.stringify(await build());
     expect(text).not.toContain("RAW-SECRET-LIKE");
     expect(text.length).toBeLessThan(50_000);
+  });
+});
+
+describe("SnapshotBuilder + 팀원 권한 질문 알림(안 A)", () => {
+  const T = NOW;
+  let q: DecisionQueue;
+  let w: WorkerPrompts;
+  beforeEach(() => {
+    q = new DecisionQueue({ now: () => T - 1000 });
+    w = new WorkerPrompts();
+  });
+  afterEach(() => q.stop());
+  const build = (events?: EventStore) => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, decisions: q, workerPrompts: w, ...(events ? { events } : {}) }).build(T);
+
+  it("책상이 있는 팀원이면 그 책상이 손을 들고(permission, 답은 리드 터미널), decisions에 answerable:false·viaLead로 나온다", async () => {
+    await seed();
+    const at = T - 5000;
+    w.note("s1", "developer needs permission for Bash", at);
+    const snap = await build();
+    const s1 = snap.sessions.find((s) => s.id === "s1")!;
+    const dev = s1.members.find((m) => m.name === "developer")!;
+    const id = `worker:s1:developer:${at}`;
+    expect(dev.state).toBe("decision");
+    expect(dev.decision).toEqual({ kind: "permission", since: new Date(at).toISOString(), summary: "Bash 권한을 묻는 중 — 리드 터미널에서 답해 주세요", id, deadline: new Date(at + 10 * 60_000).toISOString() });
+    expect(s1.members[0].decision).toBeUndefined();
+    expect(snap.decisions.find((d) => d.id === id)).toMatchObject({ sessionId: "s1", agent: "developer", kind: "permission", toolName: "Bash", state: "pending", answerable: false, viaLead: true });
+    expect(snap.decisionCount).toBe(1);
+  });
+
+  it("책상이 없는 이름(팀 설정에 없는 팀원)이나 모르는 형식이면 리드 책상이 대신 손을 들고 이름을 보인다", async () => {
+    await seed();
+    w.note("s1", "ghost needs network access to example.com", T - 3000);
+    const snap = await build();
+    const lead = snap.sessions.find((s) => s.id === "s1")!.members[0];
+    expect(lead.decision).toMatchObject({ kind: "permission", summary: "팀원 ghost: example.com 네트워크 접근을 묻는 중 — 리드 터미널에서 답해 주세요" });
+    expect(snap.decisions.find((d) => d.viaLead)).toMatchObject({ agent: "team-lead", toolName: "network", detail: { domain: "example.com" } });
+  });
+
+  it("대시보드에서 답할 수 있는 큐 결정이 있으면 그것이 먼저다", async () => {
+    await seed();
+    w.note("s1", "developer needs permission for Bash", T - 5000);
+    const v = q.hold({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" }, agent_id: "adeveloper-1", agent_type: "developer" }, heldRes())!;
+    const dev = (await build()).sessions.find((s) => s.id === "s1")!.members.find((m) => m.name === "developer")!;
+    expect(dev.decision).toMatchObject({ id: v.id });
   });
 });
 

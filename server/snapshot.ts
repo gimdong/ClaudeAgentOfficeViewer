@@ -13,6 +13,8 @@ import { readLimits, readStatusline } from "./collectors/limits";
 import { TEAM_REQUEST_TTL, readTeamRequests, type TeamRequest } from "./collectors/teamRequests";
 import { defaultProcStartMatcher, pidAlive, readSessions, type ProcStartMatcher, type SessionRecord } from "./collectors/sessions";
 import { readSubagents, type SubagentTracker } from "./collectors/subagents";
+import { MAX_FIELD, redact, toGraphemes } from "./events/summarize";
+import { WORKER_PROMPT_TTL, type WorkerPrompt, type WorkerPrompts } from "./decisions/workerPrompts";
 import { findTeamNameForSession, memberState, readTeams, withTranscriptsFor, type TeamRecord } from "./collectors/teams";
 import { UsageCollector } from "./collectors/usage";
 import { errInfo, getLogger, warnCaught } from "./log";
@@ -52,6 +54,8 @@ export interface BuilderOptions {
   duty?: { view(floor: string, member: string, c: { paused: boolean; decision: boolean; active?: boolean; lastActivityAt?: string; joinedAt?: number }): import("./floors/duty").DutyView; predecessors(floor: string): Array<{ name: string; retiredAt: number; startedAt?: number }> };
   /** 대화 질문 판(Phase 6b) — 대화 키로 */
   questions?: { list(conv: string): import("../src/shared/types").ChatQuestionView[] };
+  /** 팀원 권한 질문 알림(안 A) */
+  workerPrompts?: Pick<WorkerPrompts, "open">;
   /** 마지막 hook이 보낸 플러그인 버전(Phase 5 §3). null이면 아직 받지 않음 */
   plugin?: () => string | null;
   /** 옛 http 입구로 온 세션이 남아 있는지(Phase 6a §4) */
@@ -63,6 +67,8 @@ export interface BuilderOptions {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
+/** 모델·hook이 준 글: 비밀값을 가리고 200자(teamRequests와 같은 규칙) */
+const cut = (t: string) => toGraphemes(redact(t)).slice(0, MAX_FIELD).join("");
 
 /** 그 구성원의 가장 오래된 pending 결정(list()는 pending을 오래된 것부터 준다) */
 function queuedDecision(list: readonly DecisionView[], sessionId: string, agent: string): Decision | undefined {
@@ -284,6 +290,10 @@ export class SnapshotBuilder {
       s.alive && leadFile && (team?.members.length ?? 0) > 0
         ? await readTeamRequests(leadFile, now).catch((e) => (warnCaught("snapshot", "cannot read team requests", e, "transcript"), []))
         : [];
+    // 팀원 권한 질문 알림(안 A): 책상이 있는 팀원이면 그 책상, 없거나(팀 설정에 없음) 이름을 모르면 리드 책상
+    const desks = new Set(["team-lead", ...(team?.members.map((m) => m.name) ?? [])]);
+    const prompts = s.alive ? (this.opts.workerPrompts?.open(conv, now, agents ?? new Map()) ?? []) : [];
+    const deskOf = (p: WorkerPrompt) => (p.name && desks.has(p.name) ? p.name : "team-lead");
     const derived = (name: string): Derived | undefined => {
       const list = agents?.get(name);
       let d = list ? deriveAgent(list, now) : undefined;
@@ -294,6 +304,16 @@ export class SnapshotBuilder {
         d = decision ? { ...rest, decision } : rest;
       }
       if (d?.decision) return d; // 큐(또는 Phase 1 derive)가 먼저
+      const wp = prompts.find((p) => deskOf(p) === name);
+      if (wp) {
+        const what = wp.tool === "network" ? `${wp.target} 네트워크 접근` : wp.tool === "?" ? "권한" : `${wp.tool} 권한`;
+        const summary = cut(`${wp.name && name === "team-lead" ? `팀원 ${wp.name}: ` : !wp.name ? "팀원이 " : ""}${what}을 묻는 중 — 리드 터미널에서 답해 주세요`);
+        const since = iso(wp.at);
+        const deadline = iso(wp.at + WORKER_PROMPT_TTL);
+        const id = `worker:${s.sessionId}:${wp.name ?? "?"}:${wp.at}`;
+        teamItems.push({ id, sessionId: s.sessionId, agent: name, kind: "permission", toolName: wp.tool, state: "pending", createdAt: since, deadline, detail: { description: summary, ...(wp.target ? { domain: wp.target } : {}) }, answerable: false, viaLead: true });
+        return { ...(d ?? { toolRunning: false }), decision: { kind: "permission", since, summary, id, deadline } };
+      }
       const req = teamRequests.find((r) => r.from === name);
       if (!req) return d;
       const since = iso(req.at);

@@ -485,6 +485,19 @@ describe("종류별 보고서", () => {
     expect(dialog.textContent).not.toContain("도구 SendMessage"); // 팀원 요청에는 도구 줄이 없다(명세 §1.4)
   });
 
+  it("안 A: 팀원 권한 질문 알림(viaLead)은 권한 제목 그대로, 버튼·타이머 없이 \"리드의 터미널에서 답해 주세요\"와 손 내리는 조건", () => {
+    show(snap([dv({ id: "worker:s1:developer:1", kind: "permission", toolName: "Bash", detail: { description: "Bash 권한을 묻는 중 — 리드 터미널에서 답해 주세요" }, answerable: false, viaLead: true })]));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /developer, 결정 필요/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { level: 2 }).textContent).toBe("이 명령을 실행해도 될까요?");
+    expect(dialog.textContent).toContain("팀원이 리드에게 권한을 묻고 있습니다. 이 질문은 대시보드에서 답할 수 없습니다");
+    expect(dialog.textContent).toContain("리드의 터미널에서 답해 주세요");
+    expect(dialog.textContent).toContain("팀원이 다시 일을 시작하거나 10분이 지나면 손을 내립니다");
+    expect(within(dialog).queryByRole("button", { name: /허용|거부|계속|중단|승인/ })).toBeNull();
+    expect(within(dialog).queryByRole("timer")).toBeNull();
+  });
+
   it("아바타 셔츠는 책상과 같은 색(구성원 color)", () => {
     const v = dv({ agent: "quill" });
     const s = snap([v]);

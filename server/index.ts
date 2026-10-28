@@ -27,6 +27,7 @@ import { SnapshotHub } from "./hub";
 import { Logger, errInfo, getLogger, scrub, setLogger, warnCaught } from "./log";
 import { resolvePaths, type OfficePaths } from "./paths";
 import { SubagentTracker } from "./collectors/subagents";
+import { WorkerPrompts } from "./decisions/workerPrompts";
 import { SnapshotBuilder, emptySnapshot } from "./snapshot";
 import { LegacySessions, ReplayWindow, deriveKeys, loadOrCreateHookKey } from "./hooks/v2";
 import { PairingBook } from "./floors/pairing";
@@ -384,7 +385,9 @@ async function main(): Promise<void> {
       duty.sweep(new Set([...alive].filter((id) => !floors.isHidden(id))), channels, (id) => floors.isPaused(id));
     },
   };
-  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, questions, duty, folder: reports, building, matchProcStart: defaultProcStartMatcher });
+  // 팀원 권한 질문 알림(안 A): hook 입구가 쌓고 스냅샷이 손을 든다
+  const workerPrompts = new WorkerPrompts();
+  const builder = new SnapshotBuilder({ claudeHome: opts.claudeHome, workerPrompts, config, version: pkg.version, events, subagents, plugin: () => pluginVersion, pluginLegacy: () => (legacyShown = legacySessions.active()), reopen: { isAncestor, busy: (id) => reopener.isBusy(id) }, decisions, budget: { gate, store: budgetStore }, policy: { store: policyStore, gate: policy }, floors, channels: channelsView, questions, duty, folder: reports, building, matchProcStart: defaultProcStartMatcher });
   const hub = new SnapshotHub(builder, {
     watchDir: opts.claudeHome,
     fallback: () => emptySnapshot(Date.now(), config, "데이터를 읽지 못했습니다 — 진단 패널을 확인해 주세요"),
@@ -452,7 +455,7 @@ async function main(): Promise<void> {
     // 마지막 스냅샷 빌드의 세션 레코드(B117) — 종료 검사는 스냅샷이 아니라 이 레코드의 pid·procStart로 한다
     record: (id: string) => builder.record(id),
   };
-  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, building, normalizeSession: (id) => builder.convOf(id), stats, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook(), questions, duty } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
+  const server = createApp(hub, { staticDir, onHookEvent, onPluginVersion, hookV2, building, normalizeSession: (id) => builder.convOf(id), stats, workerPrompts, diagnostics, auth: { token, version: pkg.version }, decisions, gate, budget, policy, policyApi: policyStore, floors: floorsApi, channels: { hub: channels, launch: launchFloor, reopen: (r, mode) => reopener.reopen(r, mode), reopening: (id) => reopener.isBusy(id), reports, pairing: new PairingBook(), questions, duty } }).listen(opts.port, "127.0.0.1", (err?: Error) => {
     // Express 5는 listen이 실패해도(EADDRINUSE 등) 이 콜백을 오류와 함께 부른다. 실패 안내는 아래 "error" 처리가 한다
     if (err) return;
     console.log(`Claude Agent Office: http://127.0.0.1:${opts.port}  (data: ${opts.claudeHome})`);

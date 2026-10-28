@@ -73,6 +73,8 @@ export interface DecisionView {
   byPolicy?: true;
   /** false면 보고서만(팀원 요청, 보고서만으로 판정된 계획) */
   answerable: boolean;
+  /** 팀원 권한 질문 알림(안 A) — 리드 터미널 대화상자에서만 답할 수 있다 */
+  viaLead?: true;
 }
 export type DecisionAnswer =
   | { action: "allow" }

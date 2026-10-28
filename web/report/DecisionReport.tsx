@@ -287,8 +287,9 @@ export function DecisionReport({ d, sessions, announce }: { d: Decisions; sessio
   if (!v.answerable) {
     answer = (
       <>
-        <p className="rp-terminal">{v.kind === "team" ? "터미널(리드 세션)에서 답해 주세요" : "터미널에서 답해 주세요"}</p>
+        <p className="rp-terminal">{v.kind === "team" ? "터미널(리드 세션)에서 답해 주세요" : v.viaLead ? "리드의 터미널에서 답해 주세요" : "터미널에서 답해 주세요"}</p>
         {v.kind === "team" && <p className="rp-sub">리드가 이 팀원에게 메시지를 보내거나 30분이 지나면 손을 내립니다</p>}
+        {v.viaLead && <p className="rp-sub">팀원이 다시 일을 시작하거나 10분이 지나면 손을 내립니다</p>}
       </>
     );
   }

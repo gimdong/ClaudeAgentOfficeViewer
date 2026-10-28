@@ -45,6 +45,7 @@ let froms: Array<{ v2: boolean }>;
 let pauseAnswer: object | null;
 let held: { closed?: boolean; answer?: (o: object) => void };
 let socketClosed: Array<() => void>;
+let notes: Array<[string, unknown]>;
 beforeEach(async () => {
   setLogger(new Logger({ dir: "" }));
   stats = new HookStats();
@@ -53,6 +54,7 @@ beforeEach(async () => {
   pauseAnswer = null;
   held = {};
   socketClosed = [];
+  notes = [];
   const snap = makeSnapshot({});
   server = createApp(
     { current: () => snap, subscribe: () => () => {}, poke: () => {} },
@@ -60,6 +62,7 @@ beforeEach(async () => {
       stats,
       onPluginVersion: (v, legacy, sid) => void versions.push([v, legacy, sid]),
       onHookEvent: (_i, from) => void froms.push(from),
+      workerPrompts: { note: (conv, message) => void notes.push([conv, message]) },
       hookV2: { keys: () => deriveKeys(KEY), seen: new ReplayWindow() },
       floors: { preToolUse: () => pauseAnswer, pause() {}, resume() {}, isPaused: () => false, terminate: async () => ({ ok: true }) as never, hide() {}, unhideAll() {}, hiddenCount: () => 0, record: () => undefined },
       decisions: {
@@ -122,6 +125,14 @@ describe("/hooks/v2 (Phase 6a §4)", () => {
     expect(stats.view().byEvent.Notification).toBe(2);
     expect(stats.view().byNotification).toEqual({ worker_permission_prompt: 1 });
     expect(JSON.stringify(stats.view())).not.toContain("fake secret body");
+  });
+
+  it("안 A: worker_permission_prompt는 /hooks/v2로 온 것만 팀원 권한 질문으로 넘긴다. 다른 종류는 넘기지 않는다", async () => {
+    const note = { session_id: "s1", hook_event_name: "Notification", notification_type: "worker_permission_prompt", message: "developer needs permission for Bash" };
+    await send(plain(note));
+    await post(JSON.stringify(note), {}, "/hooks/event");
+    await send(plain({ ...note, notification_type: "permission_prompt" }));
+    expect(notes).toEqual([["s1", "developer needs permission for Bash"]]);
   });
 
   it("응답은 요청 키로는 풀리지 않는다(키 방향 분리), 평문 표지가 응답 본문에 없다", async () => {

@@ -42,6 +42,7 @@ export function titleOf(v: DecisionView): string {
   switch (v.kind) {
     case "permission":
       if (v.toolName === "Bash") return "이 명령을 실행해도 될까요?";
+      if (v.toolName === "network") return "이 주소에 접속해도 될까요?";
       if (v.toolName === "Edit" || v.toolName === "MultiEdit" || v.toolName === "NotebookEdit") return "이 파일을 고쳐도 될까요?";
       if (v.toolName === "Write") return "이 파일을 만들어도 될까요?";
       if (v.toolName === "WebFetch") return "이 페이지를 열어도 될까요?";
@@ -62,6 +63,8 @@ export function titleOf(v: DecisionView): string {
 export function whyLine(v: DecisionView): string {
   switch (v.kind) {
     case "permission":
+      // 팀원 권한 질문 알림(안 A): 리드 터미널 대화상자로만 답한다
+      if (v.viaLead) return "팀원이 리드에게 권한을 묻고 있습니다. 이 질문은 대시보드에서 답할 수 없습니다";
       // 정책 ask로 뜬 권한 요청(phase3 §6.4, B84)
       if (v.byPolicy) return "권한 정책이 매번 확인하도록 정해 둔 도구입니다";
       if (v.toolName === "Bash") return "이 명령을 실행해도 될지 묻고 있습니다";

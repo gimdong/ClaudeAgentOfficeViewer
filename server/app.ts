@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import type { WorkerPrompts } from "./decisions/workerPrompts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Snapshot } from "../src/shared/types";
@@ -123,6 +124,8 @@ export function createApp(
     /** hook의 session_id를 대화 키로 바꾼다(B194 — 합친 층의 층 id로 온 hook). 모르는 id는 그대로. 없으면 바꾸지 않는다 */
     normalizeSession?: (sessionId: string) => string;
     stats?: HookStats;
+    /** 팀원 권한 질문 알림(안 A) */
+    workerPrompts?: Pick<WorkerPrompts, "note">;
     diagnostics?: DiagnosticsDeps;
     /** 대시보드 토큰(스펙 7.1). 없으면 인증하지 않는다(단위 테스트용). main()은 항상 넣는다 */
     auth?: { token: string; /** 401 본문에 싣는 서버 버전(FB-8). 런처가 떠 있는 서버가 같은 버전인지 가린다 */ version?: string };
@@ -205,7 +208,11 @@ export function createApp(
     const sid = opts.normalizeSession?.(raw.session_id as string) ?? (raw.session_id as string);
     const input = sid === raw.session_id ? raw : { ...raw, session_id: sid };
     opts.stats?.accept(input.hook_event_name as string);
-    if (!legacy && input.hook_event_name === "Notification") opts.stats?.acceptNotification(input.notification_type);
+    if (!legacy && input.hook_event_name === "Notification") {
+      opts.stats?.acceptNotification(input.notification_type);
+      // 팀원 권한 질문(안 A): 손만 든다 — 답은 리드 터미널. 대화 키로 쌓는다
+      if (input.notification_type === "worker_permission_prompt") opts.workerPrompts?.note(input.session_id as string, input.message, Date.now());
+    }
     try {
       // 버전 문자열은 부르는 쪽이 40자로 자른다(스냅샷이 커지지 않게)
       opts.onPluginVersion?.(pluginVersion, legacy, input.session_id as string);
