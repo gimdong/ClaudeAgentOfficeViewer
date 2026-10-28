@@ -20,6 +20,7 @@ import { dirname } from "node:path";
 import { defaultProcStartMatcher, pidAlive } from "./collectors/sessions";
 import { PolicyStore } from "./policy/store";
 import { buildBundle, readClaudeVersion, writeBundle, type PolicyStats } from "./diag/bundle";
+import { agentsItem, checkAgents, type AgentCheck } from "./diag/agents";
 import { defaultProbePort, defaultWhich, formatDoctor, runDoctor, type DoctorItem, type PortState } from "./diag/doctor";
 import { HookStats, type HookStatsView } from "./events/stats";
 import { EventStore } from "./events/store";
@@ -163,9 +164,9 @@ async function doctorCli(argv: string[]): Promise<void> {
 
 /** 진단 파일을 만들어 paths.diagDir에 쓰고 파일 이름을 돌려준다(서버 버튼과 CLI가 같이 쓴다) */
 /** decisions는 켜진 서버의 큐 통계. CLI가 직접 만들 때는 없다(진단 파일에는 0으로 들어간다). policy는 정책 통계(대상 이름 없음) */
-async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, policy: PolicyStats, decisions?: DecisionStats, floors?: FloorStats): Promise<string> {
+async function makeBundleFile(paths: OfficePaths, snapshot: Snapshot, hooks: HookStatsView, doctor: () => Promise<DoctorItem[]>, policy: PolicyStats, decisions?: DecisionStats, floors?: FloorStats, agents?: AgentCheck[]): Promise<string> {
   const claudeVersion = await readClaudeVersion(defaultWhich(process.env, process.platform)("claude"));
-  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions, policy, floors }));
+  return writeBundle(paths.diagDir, await buildBundle({ doctor, hooks, snapshot, logDir: paths.logDir, appVersion: pkg.version, claudeVersion, decisions, policy, floors, agents }));
 }
 
 /**
@@ -425,16 +426,28 @@ async function main(): Promise<void> {
   // 서버 안의 doctor는 자기 자신이 이 포트를 쓴다. 기본 probe는 /api/diagnostics를 부르는데, 그 API가 다시
   // doctor를 돌리므로 자기 자신을 조회하면 끝없이 되풀이된다(FB-2). 그래서 "ours"로 준다
   const doctor = () => runDoctor({ claudeHome: opts.claudeHome, paths, port: opts.port, hooks: async () => stats.view(), probePort: async () => "ours" });
+  // 에이전트 기록 점검(beta.22): 살아 있는 층마다, 합친 층은 bg 대화 키로
+  const agentChecks = () =>
+    checkAgents(
+      opts.claudeHome,
+      hub.current().sessions.filter((s) => s.alive).map((s) => {
+        const conv = builder.convOf(s.id);
+        return { conv, bg: conv !== s.id, members: s.members.length, subagents: s.subagents?.length ?? 0 };
+      }),
+    );
   const diagnostics = {
     diagDir: paths.diagDir,
     summary: async () => ({
-      doctor: await doctor(),
+      doctor: [...(await doctor()), agentsItem(await agentChecks())],
       hooks: stats.view(),
       errorsLastHour: log.errorsSince(Date.now() - 3_600_000),
       logDir: scrub(paths.logDir, home) as string,
       diagDir: scrub(paths.diagDir, home) as string,
     }),
-    makeBundle: () => makeBundleFile(paths, hub.current(), stats.view(), doctor, { ...policyStore.summary(), decisions: policy.totals() }, decisions.stats(), floors.stats()),
+    makeBundle: async () => {
+      const agents = await agentChecks();
+      return makeBundleFile(paths, hub.current(), stats.view(), async () => [...(await doctor()), agentsItem(agents)], { ...policyStore.summary(), decisions: policy.totals() }, decisions.stats(), floors.stats(), agents);
+    },
   };
   // 토큰 파일이 없으면(beta.2에서 올라온 설치본, 개발 첫 실행) 여기서 0600으로 만든다(Ruling B33)
   const token = loadOrCreateToken(paths.tokenFile);

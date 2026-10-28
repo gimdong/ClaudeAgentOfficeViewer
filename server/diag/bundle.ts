@@ -8,6 +8,7 @@ import type { FloorStats } from "../floors/control";
 import type { HookStatsView } from "../events/stats";
 import { scrub } from "../log";
 import type { DoctorItem } from "./doctor";
+import type { AgentCheck } from "./agents";
 
 /** 권한 정책 통계(Phase 3). 대상 이름은 넣지 않는다(스펙 9장) */
 export interface PolicyStats { targets: number; rulesByKind: Record<"lead" | "agent" | "sub" | "others", number>; decisions: { deny: number; ask: number } }
@@ -25,6 +26,8 @@ export interface DiagBundle {
   policy: PolicyStats;
   /** 층 관리(Phase 4a): 지금 일시정지·숨김·종료 중인 층의 수만. 세션 id는 넣지 않는다(스펙 9장) */
   floors: FloorStats;
+  /** 에이전트 기록 점검(beta.22): 살아 있는 층마다 개수만. 켜진 서버가 만들 때만 */
+  agents: AgentCheck[];
   logs: Array<{ file: string; lines: string[] }>; // 최근 7일, 새 파일이 앞
   truncated: boolean;
 }
@@ -45,6 +48,7 @@ export interface BundleInput {
   policy?: PolicyStats;
   /** 서버의 FloorControl.stats(). 없으면 0으로 채운다 */
   floors?: FloorStats;
+  agents?: AgentCheck[];
 }
 
 const EMPTY_DECISIONS = (): DecisionStats => ({
@@ -198,6 +202,7 @@ export async function buildBundle(d: BundleInput): Promise<DiagBundle> {
     decisions: d.decisions ?? EMPTY_DECISIONS(),
     policy: d.policy ?? EMPTY_POLICY(),
     floors: d.floors ?? { paused: 0, hidden: 0, terminating: 0 },
+    agents: d.agents ?? [],
     logs: await readLogs(d.logDir, now),
     truncated: false,
   };
