@@ -344,6 +344,8 @@ async function main(): Promise<void> {
     // 되돌릴 수 없는 SIGTERM 전에: 원래 폴더가 그대로 있는지, launched 자리가 있는지(예약)(B212 I1)
     precheck: (r) => {
       if (!validateLaunch({ cwd: r.cwd }).ok) return { ok: false, error: "cwd" };
+      // 거절된 대시보드 층(beta.24)은 자기 자리를 비우고 다시 쓰므로 새 자리를 예약하지 않는다(리뷰 #4-2 — 8개가 가득해도 옮겨 열 수 있게)
+      if (channels.has(r.sessionId)) return { ok: true, release: () => {} };
       const release = channels.reserve();
       return release ? { ok: true, release } : { ok: false, error: "limit" };
     },

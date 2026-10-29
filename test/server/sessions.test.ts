@@ -4,7 +4,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseCTime, pidAlive, readSessions } from "../../server/collectors/sessions";
+import { ownFile, parseCTime, pidAlive, readSessions } from "../../server/collectors/sessions";
 import { Logger, setLogger, type LogLine } from "../../server/log";
 import { makeHome, type FakeHome } from "../helpers/fakeHome";
 
@@ -121,18 +121,14 @@ describe("readSessions", () => {
       expect(r.bg?.trusted).toBe(false);
     });
 
-    it.skipIf(process.platform === "win32")("beta.24(security #4 d): 그룹 쓰기(0664)는 파일 그룹이 내 주 그룹일 때만 믿는다 — umask 002·1인 그룹(UPG)", async () => {
-      await seed();
-      chmodSync(h.path("sessions/21.json"), 0o664);
-      chmodSync(h.path("sessions/22.json"), 0o664);
-      const [r] = await readSessions(h.home, NOW, () => true);
-      // 테스트가 만든 파일의 그룹은 보통 내 주 그룹(macOS는 폴더의 그룹을 물려받아 다를 수 있다 — 그러면 믿지 않는 쪽이 맞다)
-      const { statSync } = await import("node:fs");
-      const own = statSync(h.path("sessions/22.json")).gid === process.getgid!() && statSync(h.path("sessions/21.json")).gid === process.getgid!();
-      expect(r.bg?.trusted).toBe(own);
-      chmodSync(h.path("sessions/22.json"), 0o646);
-      const [r2] = await readSessions(h.home, NOW, () => true);
-      expect(r2.bg?.trusted).toBe(false);
+    it.skipIf(process.platform === "win32")("beta.24(security #4 d, 리뷰 #4-1·4): 그룹 쓰기는 Linux에서 파일 그룹이 내 주 그룹일 때만 — macOS(staff 공유)·다른 그룹·남 쓰기는 거절", () => {
+      const st = (mode: number, gid = process.getgid!(), uid = process.getuid!()) => ({ isFile: () => true, uid, gid, mode });
+      expect(ownFile(st(0o600))).toBe(true);
+      expect(ownFile(st(0o664), "linux")).toBe(true);
+      expect(ownFile(st(0o664, process.getgid!() + 1), "linux")).toBe(false);
+      expect(ownFile(st(0o664), "darwin")).toBe(false);
+      expect(ownFile(st(0o646), "linux")).toBe(false);
+      expect(ownFile(st(0o644, process.getgid!(), process.getuid!() + 1))).toBe(false);
     });
 
     it("kind가 bg가 아니면 짝짓지 않는다. 짝 없는 bg(평범한 --bg 세션)는 그대로 보인다", async () => {

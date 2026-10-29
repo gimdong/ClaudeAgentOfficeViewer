@@ -120,7 +120,7 @@ describe("작업 지시(스펙 6장)", () => {
       expect(instructBtn().getAttribute("aria-disabled")).toBe("true");
       expect(instructBtn().getAttribute("title")).toBe(why);
     }
-    expect(CH_TEXT.refusedNoConv).toContain("옮겨 열기");
+    expect(CH_TEXT.refusedNoConv).toContain("[작업 지시 켜기]"); // 버튼의 실제 표기(REOPEN 문구표)
     expect(CH_TEXT.chipRefused).toBe("옮겨 열기 필요");
   });
 
@@ -128,7 +128,7 @@ describe("작업 지시(스펙 6장)", () => {
     const s = { channel: { connected: false, tmux: "co-1", held: 0, refused: "no-conv" as const } };
     expect(channelOf(s)).toBe("refused");
     expect(channelWhy("refused")).toBe(LEAD_TEXT.refused);
-    expect(LEAD_TEXT.refused).toContain("옮겨 열기");
+    expect(LEAD_TEXT.refused).toContain("[작업 지시 켜기]");
     expect(LEAD_TEXT.refused).not.toBe(CH_TEXT.notConnected);
   });
 
