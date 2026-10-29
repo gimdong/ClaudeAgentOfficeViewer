@@ -446,7 +446,10 @@ export class SnapshotBuilder {
     const ro = this.opts.reopen;
     if (!ch || !ro || !ch.enabled() || !s.alive) return {};
     if (ro.busy?.(s.sessionId)) return { reopen: "busy" };
-    if (ch.view(s.sessionId)) return { reopen: "launched" };
+    // 대시보드가 띄운 층은 channel이 있으므로 옮겨 열기를 막는다 — 다만 옛 channel로 거절되는 층(beta.23 업그레이드 뒤)은
+    // 옮겨 열기로 새 버전을 띄우는 것이 확실한 출구라 연다(beta.24, 회사 평가)
+    const cv = ch.view(s.sessionId);
+    if (cv && !cv.refused) return { reopen: "launched" };
     if (s.convId && s.convId !== s.sessionId) return { reopen: "merged" };
     if (this.opts.floors?.view(s.sessionId).paused) return { reopen: "paused" };
     // 조상 여부는 pid의 수명 동안 같다 — 빌드마다 묻지 않는다

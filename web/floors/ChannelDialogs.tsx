@@ -67,7 +67,7 @@ export const CH_TEXT = {
   // 합친 층(B192): 대화가 bg job으로 옮겨 가 앞면 프로세스는 지시를 쌓기만 한다 — 서버가 보내지 않는다
   chipParked: "백그라운드로 옮겨짐",
   // beta.23 설계 7.2: 연결 전 거절(대화 id 확인) — bg 대화가 물려받은 열쇠로 시도해도 이 층에 뜨므로 중립적으로
-  chipRefused: "다시 연결 필요",
+  chipRefused: "옮겨 열기 필요",
   // 대안 A(beta.23 설계 3.1·7.5): 옮겨진 층을 bg 대화에 잇기. 사람 확인은 잘못된 짝을 막는 장치 — 창에 층과 bg 쪽을 나란히
   linkOpen: "백그라운드로 연결 옮기기",
   linkTitle: (name: string) => `${name} 층을 백그라운드 작업에 잇기`,
@@ -79,8 +79,9 @@ export const CH_TEXT = {
   chipLinking: "백그라운드 연결 기다리는 중",
   linkingHint: "그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결하면 붙습니다.",
   chipLinked: "백그라운드 작업에 연결됨",
-  refusedNoConv: "이 층의 열쇠로 옛 버전 channel이 연결을 시도해 받지 않았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결하거나 층을 다시 띄워 주세요.",
-  refusedMismatch: "이 층을 띄운 대화가 아닌 다른 대화의 channel이 이 층의 열쇠로 연결을 시도해 막았습니다. 이 층의 Claude Code에서 /mcp로 claude-office를 다시 연결해 주세요.",
+  // beta.24(회사 평가): 업그레이드 전부터 떠 있던 세션은 /mcp만으로 새 버전이 뜬다는 보장이 없다 — 확실한 출구인 옮겨 열기를 안내
+  refusedNoConv: "이 층에 옛 버전 channel이 붙으려 해 받지 않았습니다(업그레이드 전부터 떠 있던 세션). 층 머리의 [작업 지시 켜기(옮겨 열기)]로 새 버전으로 다시 띄워 주세요.",
+  refusedMismatch: "이 층을 띄운 대화가 아닌 다른 대화의 channel이 이 층의 열쇠로 연결을 시도해 막았습니다. 층 머리의 [작업 지시 켜기(옮겨 열기)]로 이 층을 다시 띄워 주세요.",
   parked: PARKED,
   briefTitle: (name: string) => `${name} 층 재개 전 확인`,
   briefHeld: "휴업 중 보관한 지시",

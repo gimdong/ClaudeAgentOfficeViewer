@@ -8,7 +8,8 @@ const state = vi.hoisted(() => ({ value: { snapshot: null as unknown, live: true
 vi.mock("../../web/useSnapshot", async (orig) => ({ ...(await orig<typeof import("../../web/useSnapshot")>()), useSnapshot: () => state.value }));
 
 import { App } from "../../web/App";
-import { LEAD_TEXT } from "../../web/office/leadText";
+import { channelWhy, LEAD_TEXT } from "../../web/office/leadText";
+import { channelOf } from "../../web/office/LeadUi";
 import { CH_TEXT } from "../../web/floors/ChannelDialogs";
 
 const DIAG = { doctor: [], hooks: { total: 0, byEvent: {}, lastAt: null, rejected: { "403": 0, "415": 0, "413": 0, "400": 0 }, last10min: 0 }, errorsLastHour: 0, logDir: "l", diagDir: "d" };
@@ -119,7 +120,16 @@ describe("작업 지시(스펙 6장)", () => {
       expect(instructBtn().getAttribute("aria-disabled")).toBe("true");
       expect(instructBtn().getAttribute("title")).toBe(why);
     }
-    expect(CH_TEXT.refusedNoConv).toContain("/mcp");
+    expect(CH_TEXT.refusedNoConv).toContain("옮겨 열기");
+    expect(CH_TEXT.chipRefused).toBe("옮겨 열기 필요");
+  });
+
+  it("beta.24(회사 평가): 거절된 층은 팀리더 패널·답 칸 등 모든 화면이 같은 판정(refused)과 같은 안내를 쓴다 — '확인 창' 안내가 나오지 않는다", () => {
+    const s = { channel: { connected: false, tmux: "co-1", held: 0, refused: "no-conv" as const } };
+    expect(channelOf(s)).toBe("refused");
+    expect(channelWhy("refused")).toBe(LEAD_TEXT.refused);
+    expect(LEAD_TEXT.refused).toContain("옮겨 열기");
+    expect(LEAD_TEXT.refused).not.toBe(CH_TEXT.notConnected);
   });
 
   it("대안 A(beta.23): 옮겨진 층을 이을 수 있으면 [백그라운드로 연결 옮기기] → 확인 창에 층과 bg 쪽을 나란히 → 확인하면 POST link(그 대화 id)", async () => {

@@ -20,6 +20,8 @@ export const LEAD_TEXT = {
   notLaunchedRestart: "연결이 끊겨 결재를 보낼 수 없습니다(대시보드를 다시 켰거나 층이 끝남). 층이 살아 있으면 작업 지시 켜기(옮겨 열기)로 다시 연결하세요.",
   notConnected: CH_TEXT.notConnected,
   parked: CH_TEXT.parked,
+  // 거절된 층(beta.24): 이유와 상관없이 같은 출구
+  refused: "이 층의 channel을 받지 않았습니다(옛 버전이거나 다른 대화의 연결). 층 머리의 [작업 지시 켜기(옮겨 열기)]로 다시 띄워 주세요.",
   // 보낸 지시를 세션이 받은 흔적이 없음(B343) — 층 머리 칩 title과 같은 글
   unreceived: CH_TEXT.unreceived,
   // 재시작 뒤 복원한 층이 아직 다시 붙지 않음(#658, qa 확정). 옮겨 열기는 권하지 않는다
@@ -87,5 +89,5 @@ export function shortTime(iso: string): string {
 }
 
 export function channelWhy(ch: LeadChannel): string | null {
-  return ch === "not-launched" ? LEAD_TEXT.notLaunched : ch === "not-connected" ? LEAD_TEXT.notConnected : ch === "reconnecting" ? LEAD_TEXT.reconnecting : ch === "parked" ? LEAD_TEXT.parked : null;
+  return ch === "not-launched" ? LEAD_TEXT.notLaunched : ch === "not-connected" ? LEAD_TEXT.notConnected : ch === "reconnecting" ? LEAD_TEXT.reconnecting : ch === "parked" ? LEAD_TEXT.parked : ch === "refused" ? LEAD_TEXT.refused : null;
 }

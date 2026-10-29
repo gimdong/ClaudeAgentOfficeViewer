@@ -234,6 +234,22 @@ describe("POST /api/floors/:id/reopen(B202·B203)", () => {
     expect(calls).toEqual([]);
   });
 
+  it("beta.24: 대시보드가 띄운 층이라도 옛 channel로 거절된 층(다시 띄우기 필요)은 옮겨 열기를 받는다", async () => {
+    const { createHmac } = await import("node:crypto");
+    const key = hub.register("s1", "co-old")!;
+    const kid = createHmac("sha256", key).update("kid").digest("hex");
+    const nonce = "ab".repeat(32);
+    // 한 번 붙었다가 끊긴 층에 옛 channel(대화 id 없음)이 붙으려 함
+    const hi = hub.hello(kid, nonce, "s1") as { snonce: string };
+    let close = () => {};
+    hub.attach({ kid, snonce: hi.snonce, proof: createHmac("sha256", key).update(`client|${nonce}|${hi.snonce}|s1`).digest("hex") }, { on: (_e: string, fn: () => void) => void (close = fn), destroyed: false, writableEnded: false } as never);
+    close();
+    hub.hello(kid, nonce);
+    expect(hub.view("s1")?.refused).toBe("no-conv");
+    expect((await res("/api/floors/s1/reopen"))[0]).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
+
   it("대시보드가 띄운 층은 409 launched(B203), 멈춘 층은 409 paused(B202)", async () => {
     hub.register("s1", "co-old");
     expect(await res("/api/floors/s1/reopen")).toEqual([409, { error: "launched" }]);
@@ -298,14 +314,16 @@ describe("스냅샷의 옮겨 열기 표시(B205 ④ — 화면이 버튼 상태
       await h.write("sessions/36.json", { pid: 36, sessionId: "dead", cwd: "/e", status: "idle", updatedAt: now - 1000 });
       await h.write("sessions/37.json", { pid: 37, sessionId: "paused", cwd: "/f", status: "idle", updatedAt: now - 1000 });
       await h.write("sessions/38.json", { pid: 38, sessionId: "moving", cwd: "/g", status: "idle", updatedAt: now - 1000 });
+      await h.write("sessions/39.json", { pid: 39, sessionId: "refused", cwd: "/h", status: "idle", updatedAt: now - 1000 });
       const fc = new FloorControl({ signal: () => {}, matchProcStart: async () => true });
       fc.pause("paused");
       const asked: number[] = [];
       let enabled = true;
-      const channels = { enabled: () => enabled, available: () => ({ ok: true }), sweep: () => {}, view: (id: string) => (id === "launched" ? { connected: true, tmux: "co-1", held: 0 } : undefined) };
+      const channels = { enabled: () => enabled, available: () => ({ ok: true }), sweep: () => {}, view: (id: string) => (id === "launched" ? { connected: true, tmux: "co-1", held: 0 } : id === "refused" ? { connected: false, tmux: "co-2", held: 0, refused: "no-conv" as const } : undefined) };
       const b = new SnapshotBuilder({ claudeHome: h.home, config: { budget: {}, contextWindows: {} }, isAlive: (pid) => pid !== 36, channels, floors: fc, reopen: { isAncestor: (pid) => (asked.push(pid), pid === 32), busy: (id) => id === "moving" } });
       const by = async () => Object.fromEntries((await b.build(now)).sessions.map((s) => [s.id, s.reopen]));
-      expect(await by()).toEqual({ plain: "ok", parent: "ancestor", front: "merged", launched: "launched", dead: undefined, paused: "paused", moving: "busy" });
+      // 대시보드가 띄웠어도 옛 channel로 거절된 층(beta.23 업그레이드 뒤)은 옮겨 열기로 새 버전을 띄울 수 있다(beta.24)
+    expect(await by()).toEqual({ plain: "ok", parent: "ancestor", front: "merged", launched: "launched", dead: undefined, paused: "paused", moving: "busy", refused: "ok" });
       const n = asked.length; // 조상 판정은 pid별로 한 번(프로세스 수명 동안 같음)
       await by();
       expect(asked.length).toBe(n);

@@ -671,7 +671,8 @@ export function createApp(
           const r = floors.record(id);
           if (!r) return void res.status(404).json({});
           if (!r.alive) return void res.status(409).json({ error: "ended" });
-          if (hub.has(id)) return void res.status(409).json({ error: "launched" });
+          // 대시보드가 띄운 층은 막는다 — 옛 channel로 거절되는 층만 예외(beta.24, 스냅샷 reopenField와 같은 규칙)
+          if (hub.has(id) && !hub.view(id)?.refused) return void res.status(409).json({ error: "launched" });
           if (floors.isPaused(id)) return void res.status(409).json({ error: "paused" });
           // 합친 층은 bg job이 같은 대화를 계속 쓰므로 앞면만 끄면 두 프로세스가 한 대화를 쓴다(B205 ③)
           if (r.convId && r.convId !== r.sessionId) return void res.status(409).json({ error: "merged" });

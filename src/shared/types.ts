@@ -272,7 +272,7 @@ export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string
 export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }>; unreadable?: true }
 
 /** 팀리더 지시 통로 상태(Phase 6b 화면, designer SPEC §1.2) */
-export type LeadChannel = "ok" | "not-launched" | "not-connected" | "reconnecting" | "parked";
+export type LeadChannel = "ok" | "not-launched" | "not-connected" | "reconnecting" | "parked" | "refused";
 /** 보고서 도장(started: 인수인계로 새 팀원을 시작함) */
 /** held: 휴업 중 보관한 결재(실제로 나가면 approved·revise, 보관함에서 지우면 pending — 스펙 12장 l) */
 export type ReportState = "pending" | "held" | "approved" | "revise" | "started";

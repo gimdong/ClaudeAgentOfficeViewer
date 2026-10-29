@@ -344,6 +344,8 @@ async function main(): Promise<void> {
       const v = validateLaunch({ cwd: r.cwd, name: r.name, ...(mode ? { mode } : {}) });
       const w = v.ok ? v : validateLaunch({ cwd: r.cwd, ...(mode ? { mode } : {}) });
       if (!w.ok) return { ok: false as const, error: "tmux" as const };
+      // 거절된 채 다시 띄우는 대시보드 층(beta.24)은 옛 등록·열쇠 파일을 먼저 정리한다(이 시점엔 프로세스가 끝났다)
+      if (channels.has(r.sessionId)) channels.unregister(r.sessionId);
       const out = await startFloor(r.sessionId, w.value, r.convId ?? r.sessionId);
       return out.ok ? { ok: true as const, tmux: out.tmux } : out;
     },
