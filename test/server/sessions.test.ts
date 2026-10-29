@@ -121,6 +121,20 @@ describe("readSessions", () => {
       expect(r.bg?.trusted).toBe(false);
     });
 
+    it.skipIf(process.platform === "win32")("beta.24(security #4 d): 그룹 쓰기(0664)는 파일 그룹이 내 주 그룹일 때만 믿는다 — umask 002·1인 그룹(UPG)", async () => {
+      await seed();
+      chmodSync(h.path("sessions/21.json"), 0o664);
+      chmodSync(h.path("sessions/22.json"), 0o664);
+      const [r] = await readSessions(h.home, NOW, () => true);
+      // 테스트가 만든 파일의 그룹은 보통 내 주 그룹(macOS는 폴더의 그룹을 물려받아 다를 수 있다 — 그러면 믿지 않는 쪽이 맞다)
+      const { statSync } = await import("node:fs");
+      const own = statSync(h.path("sessions/22.json")).gid === process.getgid!() && statSync(h.path("sessions/21.json")).gid === process.getgid!();
+      expect(r.bg?.trusted).toBe(own);
+      chmodSync(h.path("sessions/22.json"), 0o646);
+      const [r2] = await readSessions(h.home, NOW, () => true);
+      expect(r2.bg?.trusted).toBe(false);
+    });
+
     it("kind가 bg가 아니면 짝짓지 않는다. 짝 없는 bg(평범한 --bg 세션)는 그대로 보인다", async () => {
       expect((await seed({ bgKind: "interactive" })).map((s) => s.sessionId).sort()).toEqual([BG, INTER].sort());
       await h.write("sessions/23.json", { pid: 23, sessionId: "plain-bg", cwd: "/p", status: "idle", kind: "bg", jobId: "deadbeef", updatedAt: NOW - 1000 });

@@ -79,7 +79,7 @@ export const CH_TEXT = {
   linkOff: {
     "bg-ended": "백그라운드 작업이 끝나서 이을 수 없습니다.",
     ambiguous: "같은 작업을 가리키는 세션 기록이 여럿이라 어느 쪽인지 정할 수 없어 잇지 않습니다.",
-    untrusted: "세션 기록 파일을 다른 사용자도 쓸 수 있는 권한(예: 664, umask 002)이라 잇지 않습니다.",
+    untrusted: "세션 기록 파일을 다른 사용자도 쓸 수 있는 권한(남 쓰기, 또는 다른 사람과 함께 쓰는 그룹의 쓰기)이라 잇지 않습니다.",
     keydir: "대시보드의 열쇠 폴더가 기본 위치(~/.claude-office/floors)가 아니라 잇지 않습니다.",
   } as const,
   linkCancel: "연결 끊기",

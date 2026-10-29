@@ -32,9 +32,17 @@ export interface SessionRecord {
 const DAY = 86_400_000;
 /** 짝짓기용 관찰 필드 + 파일을 믿을 수 있는지(대안 A — 버튼 판단에만 쓴다) */
 interface Side { kind?: string; jobId?: string; parkedJobId?: string; trusted?: boolean }
-/** 자기 소유 일반 파일이고 그룹·남이 쓸 수 없는가(S2). uid가 없는 플랫폼(Windows)은 믿지 않는다 — 대안 A는 tmux 층(macOS·Linux)만 */
-const ownFile = (st: { isFile(): boolean; uid: number; mode: number }) =>
-  st.isFile() && typeof process.getuid === "function" && st.uid === process.getuid() && (st.mode & 0o022) === 0;
+/**
+ * 자기 소유 일반 파일이고 남이 쓸 수 없는가(S2). 그룹 쓰기는 파일 그룹이 내 주 그룹일 때만 허용(security #4 d — umask 002는 거의 늘
+ * 1인 그룹(UPG) 설정이라 그룹 쓰기여도 쓸 수 있는 사람은 나뿐. 2026-10-29 회사 PC가 0664). uid가 없는 플랫폼(Windows)은 믿지 않는다
+ */
+const ownFile = (st: { isFile(): boolean; uid: number; gid: number; mode: number }) =>
+  st.isFile() &&
+  typeof process.getuid === "function" &&
+  typeof process.getgid === "function" &&
+  st.uid === process.getuid() &&
+  (st.mode & 0o002) === 0 &&
+  ((st.mode & 0o020) === 0 || st.gid === process.getgid());
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
