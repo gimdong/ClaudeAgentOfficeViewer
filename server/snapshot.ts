@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { Decision, DecisionView, FloorStatus, Member, MemberState, SessionView, Snapshot, SubagentDesk } from "../src/shared/types";
+import type { BgLinkOff } from "../src/shared/types";
 import { emptySum } from "../src/shared/tokens";
 import type { OfficeConfig } from "./config";
 import type { BudgetGate } from "./budget/gate";
@@ -42,7 +43,7 @@ export interface BuilderOptions {
   /** 층 관리(Phase 4a): 일시정지·종료 중·숨김. 빌드마다 sweep으로 끝난 세션을 정리한다 */
   floors?: Pick<FloorControl, "sweep" | "view" | "isHidden" | "hiddenCount">;
   /** Phase 4b: 대시보드가 띄운 층의 channel 상태와 실험 기능 스위치 */
-  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep"> & Partial<Pick<ChannelHub, "receiptCheck">> & { linkable?: (id: string) => string | undefined };
+  channels?: Pick<ChannelHub, "view" | "enabled" | "available" | "sweep"> & Partial<Pick<ChannelHub, "receiptCheck">> & { linkCheck?: (id: string) => { conv: string } | { off: BgLinkOff } | undefined };
   policy?: { store: Pick<PolicyStore, "resolve" | "all" | "unreadable">; gate: Pick<PolicyGate, "countsOf" | "counts" | "lastDenied"> };
   /** 빌딩 설정(Phase 6b Task 10) */
   building?: { userName(): string; variant(): import("./building").Variant };
@@ -477,8 +478,10 @@ export class SnapshotBuilder {
     const v = ch.view(s.sessionId);
     if (!v) return {};
     // 대안 A: 옮겨진 층을 이을 수 있으면 확인 창에 보일 bg 쪽 정보(이름·폴더는 같은 계정이 쓸 수 있는 원문 — 제어·방향 문자를 지운다, M3)
-    const conv = v.parked && s.bg ? ch.linkable?.(s.sessionId) : undefined;
-    if (conv && s.bg) return { channel: { ...v, bgLink: { convId: conv, name: plain(s.bg.name), cwd: plain(s.bg.cwd), pid: s.bg.pid, startedAt: iso(s.bg.startedAt) } } };
+    const c = v.parked && s.bg ? ch.linkCheck?.(s.sessionId) : undefined;
+    if (c && "conv" in c && s.bg) return { channel: { ...v, bgLink: { convId: c.conv, name: plain(s.bg.name), cwd: plain(s.bg.cwd), pid: s.bg.pid, startedAt: iso(s.bg.startedAt) } } };
+    // 이을 수 없으면 이유를 싣는다 — 화면이 흐린 버튼과 함께 보인다(beta.24, 회사에서 umask 002로 숨겨졌던 일)
+    if (c && "off" in c) return { channel: { ...v, bgLinkOff: c.off } };
     return { channel: v };
   }
 

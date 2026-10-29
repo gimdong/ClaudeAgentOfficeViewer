@@ -402,13 +402,25 @@ describe("SnapshotBuilder + 대안 A 확인 창 정보(beta.23 설계 7.5)", () 
     await h.write("sessions/21.json", { pid: 21, sessionId: "front", name: "층", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "j1", startedAt: NOW - 60_000, updatedAt: NOW - 50_000 });
     await h.write("sessions/22.json", { pid: 22, sessionId: BG, name: "bg\u202Eevil\u0007", cwd: "/w\u200F", status: "busy", kind: "bg", jobId: "j1", startedAt: NOW - 55_000, updatedAt: NOW - 1_000 });
     let canLink = true;
-    const channels = { view: () => ({ connected: true, tmux: "co-1", held: 0, parked: true as const }), enabled: () => true, available: () => ({ ok: true }), sweep: () => {}, linkable: () => (canLink ? BG : undefined) };
+    const channels = { view: () => ({ connected: true, tmux: "co-1", held: 0, parked: true as const }), enabled: () => true, available: () => ({ ok: true }), sweep: () => {}, linkCheck: () => (canLink ? { conv: BG } : undefined) };
     const build = () => new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, channels }).build(NOW);
     let v = (await build()).sessions.find((x) => x.id === "front")!;
     expect(v.channel?.bgLink).toEqual({ convId: BG, name: "bgevil", cwd: "/w", pid: 22, startedAt: new Date(NOW - 55_000).toISOString() });
     canLink = false;
     v = (await build()).sessions.find((x) => x.id === "front")!;
     expect(v.channel?.bgLink).toBeUndefined();
+  });
+
+  it("beta.24(회사 평가): 이을 수 없으면 버튼을 숨기지 않고 이유를 싣는다(bg 끝남·짝 여럿·파일 권한·열쇠 폴더)", async () => {
+    const BG = "80673844-48d8-4000-8000-000000000002";
+    await h.write("sessions/21.json", { pid: 21, sessionId: "front", name: "층", cwd: "/w", status: "idle", kind: "interactive", parkedJobId: "j1", startedAt: NOW - 60_000, updatedAt: NOW - 50_000 });
+    await h.write("sessions/22.json", { pid: 22, sessionId: BG, name: "bg", cwd: "/w", status: "busy", kind: "bg", jobId: "j1", startedAt: NOW - 55_000, updatedAt: NOW - 1_000 });
+    for (const off of ["bg-ended", "ambiguous", "untrusted", "keydir"] as const) {
+      const channels = { view: () => ({ connected: false, tmux: "co-1", held: 0, parked: true as const }), enabled: () => true, available: () => ({ ok: true }), sweep: () => {}, linkCheck: () => ({ off }) };
+      const v = (await new SnapshotBuilder({ claudeHome: h.home, config, isAlive: () => true, channels }).build(NOW)).sessions.find((x) => x.id === "front")!;
+      expect(v.channel?.bgLink).toBeUndefined();
+      expect(v.channel?.bgLinkOff).toBe(off);
+    }
   });
 });
 

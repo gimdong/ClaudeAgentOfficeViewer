@@ -187,7 +187,7 @@ export interface SessionView {
   /** unreceived: 보낸 지시를 세션이 받은 흔적(리드 hook)이 없음(B343, 확실하지 않음) */
   /** parked: 대화가 bg job으로 옮겨 가 이 층의 channel로는 지시가 닿지 않음(서버가 보내지 않는다) */
   /** refused: 연결 전, 이 층 열쇠로 온 연결을 거절한 이유(beta.23) — 옛 channel 서버(no-conv)·다른 대화(conv-mismatch) */
-  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean; parked?: boolean; refused?: "no-conv" | "conv-mismatch"; linking?: boolean; linked?: boolean; bgLink?: { convId: string; name: string; cwd: string; pid: number; startedAt: string } };
+  channel?: { connected: boolean; tmux: string; held: number; last?: "sent" | "delivered"; reconnecting?: boolean; unreceived?: boolean; parked?: boolean; refused?: "no-conv" | "conv-mismatch"; linking?: boolean; linked?: boolean; bgLink?: { convId: string; name: string; cwd: string; pid: number; startedAt: string }; bgLinkOff?: BgLinkOff };
   /** 켠 뒤로 일시정지가 막은 호출 수(Phase 4a 스펙 4.4). 일시정지 층에만 */
   pausedDenied?: number;
   /** 종료 신호를 보냈고 아직 살아 있다(스펙 5.2) */
@@ -272,6 +272,8 @@ export interface PolicyDenied { group: PolicyGroup; at: string; subType?: string
 export interface PolicySnapshot { targets: Record<string, PolicyRules>; counts: Record<string, { denied: number; asked: number }>; unreadable?: true }
 
 /** 팀리더 지시 통로 상태(Phase 6b 화면, designer SPEC §1.2) */
+/** 옮겨진 층을 bg에 이을 수 없는 이유(beta.24 — 버튼을 숨기지 않고 보인다): bg 작업이 끝남·짝이 여럿·세션 기록 파일을 남이 쓸 수 있음·열쇠 폴더가 기본 위치가 아님 */
+export type BgLinkOff = "bg-ended" | "ambiguous" | "untrusted" | "keydir";
 export type LeadChannel = "ok" | "not-launched" | "not-connected" | "reconnecting" | "parked" | "refused";
 /** 보고서 도장(started: 인수인계로 새 팀원을 시작함) */
 /** held: 휴업 중 보관한 결재(실제로 나가면 approved·revise, 보관함에서 지우면 pending — 스펙 12장 l) */

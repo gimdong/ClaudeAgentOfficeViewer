@@ -144,6 +144,19 @@ describe("작업 지시(스펙 6장)", () => {
     expect(calls()).toContainEqual(["/api/floors/s1/link", "POST", JSON.stringify({ convId: BG })]);
   });
 
+  it("beta.24(회사 평가): 이을 수 없으면 [백그라운드로 연결 옮기기]를 숨기지 않고 흐리게, 이유를 title로", () => {
+    for (const off of ["bg-ended", "ambiguous", "untrusted", "keydir"] as const) {
+      cleanup();
+      show([floorOf({ channel: { connected: false, tmux: "co-1", held: 0, parked: true, bgLinkOff: off } })]);
+      render(<App />);
+      const btn = within(screen.getByTestId("floor")).getByRole("button", { name: CH_TEXT.linkOpen });
+      expect(btn.getAttribute("aria-disabled")).toBe("true");
+      expect(btn.getAttribute("title")).toBe(CH_TEXT.linkOff[off]);
+      fireEvent.click(btn);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    }
+  });
+
   it("대안 A: 열쇠를 냈고 아직 안 붙었으면 '백그라운드 연결 기다리는 중'과 [연결 끊기](DELETE), 붙었으면 '백그라운드 작업에 연결됨'이고 작업 지시가 켜진다", async () => {
     show([floorOf({ channel: { connected: true, tmux: "co-1", held: 0, parked: true, linking: true } })]);
     const { rerender } = render(<App />);

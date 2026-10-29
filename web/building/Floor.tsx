@@ -234,8 +234,12 @@ export function Floor({ session, bubble, onHidden }: { session: SessionView; bub
             </span>
           )}
           {/* 대안 A(beta.23): 옮겨진 층을 bg 대화에 잇기 / 끊기 */}
-          {ch?.parked && !ch.linked && !ch.linking && ch.bgLink && (
-            <button type="button" className="pbtn" onClick={() => setLinkOpen(true)}>
+          {ch?.parked && !ch.linked && !ch.linking && (ch.bgLink || ch.bgLinkOff) && (
+            <button
+              type="button"
+              className="pbtn"
+              {...(ch.bgLink ? { onClick: () => setLinkOpen(true) } : { "aria-disabled": true, title: CH_TEXT.linkOff[ch.bgLinkOff!] })}
+            >
               {CH_TEXT.linkOpen}
             </button>
           )}

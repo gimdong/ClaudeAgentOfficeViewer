@@ -75,6 +75,13 @@ export const CH_TEXT = {
   linkBg: "잇게 될 백그라운드 작업",
   linkNote: "잇기를 누른 뒤, 그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결해 주세요. 같은 대화가 여러 곳에 열려 있으면 먼저 붙는 쪽이 지시를 받습니다. 한 번 붙은 뒤 끊기면 다시 눌러야 합니다.",
   linkConfirm: "잇기",
+  // beta.24(회사 평가): 이을 수 없을 때 버튼을 숨기지 않고 이유를 보인다
+  linkOff: {
+    "bg-ended": "백그라운드 작업이 끝나서 이을 수 없습니다.",
+    ambiguous: "같은 작업을 가리키는 세션 기록이 여럿이라 어느 쪽인지 정할 수 없어 잇지 않습니다.",
+    untrusted: "세션 기록 파일을 다른 사용자도 쓸 수 있는 권한(예: 664, umask 002)이라 잇지 않습니다.",
+    keydir: "대시보드의 열쇠 폴더가 기본 위치(~/.claude-office/floors)가 아니라 잇지 않습니다.",
+  } as const,
   linkCancel: "연결 끊기",
   chipLinking: "백그라운드 연결 기다리는 중",
   linkingHint: "그 백그라운드 작업의 터미널에서 /mcp로 claude-office를 다시 연결하면 붙습니다.",

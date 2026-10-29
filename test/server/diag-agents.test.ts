@@ -19,13 +19,14 @@ describe("진단: 에이전트 기록 점검(beta.22, 회사 PC 2.1.305 사례)"
     await h.write("teams/t/config.json", { name: "t", leadSessionId: "c1", members: [] });
     await h.append("projects/-p/c2.jsonl", [agentCall(3)]);
     const r = await checkAgents(h.home, [
-      { conv: "c1", floor: 3, bg: true, members: 2, subagents: 0 },
+      { conv: "c1", floor: 3, bg: true, members: 2, subagents: 0, link: "untrusted" },
       { conv: "c2", floor: 1, bg: false, members: 1, subagents: 0 },
       { conv: "c3", floor: 2, bg: false, members: 1, subagents: 0 },
     ]);
     // floor는 화면의 층 번호 그대로(리뷰 #2-8)
     expect(r).toEqual([
-      { floor: 3, bg: true, members: 2, subagents: 0, agentCalls: 2, folder: true, metas: 3, named: 1, team: true, missing: false },
+      // link: 옮겨진 층을 bg에 이을 수 있는지(beta.24 — 회사에서 umask 002로 막힌 일을 진단 파일 하나로)
+      { floor: 3, bg: true, members: 2, subagents: 0, agentCalls: 2, folder: true, metas: 3, named: 1, team: true, missing: false, link: "untrusted" },
       { floor: 1, bg: false, members: 1, subagents: 0, agentCalls: 1, folder: false, metas: 0, named: 0, team: false, missing: true },
       { floor: 2, bg: false, members: 1, subagents: 0, agentCalls: 0, folder: false, metas: 0, named: 0, team: false, missing: false },
     ]);

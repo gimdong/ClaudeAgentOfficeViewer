@@ -37,7 +37,7 @@ import { BuildingStore } from "./building";
 import { QuestionBoard } from "./floors/questions";
 import { DutyBoard } from "./floors/duty";
 import { readLastAssistantTurn } from "./lib/jsonlTail";
-import type { Snapshot } from "../src/shared/types";
+import type { BgLinkOff, Snapshot } from "../src/shared/types";
 import pkg from "../package.json" with { type: "json" };
 
 export interface CliOptions {
@@ -285,10 +285,19 @@ async function main(): Promise<void> {
   const floorKeyDir = join(dirname(paths.stateFile), "floors");
   // 대안 A(beta.23 설계 7.5): 옮겨졌고 bg가 살아 있고 짝이 하나이며 두 기록 파일을 믿을 수 있을 때만 그 bg 대화로 이을 수 있다.
   // channel 서버는 고정 위치(~/.claude-office/floors)에서만 대화 열쇠를 찾으므로 대시보드 열쇠 폴더가 다르면 끈다(L2 — 개발 모드 등)
-  const linkable = (id: string): string | undefined => {
+  // 이을 수 없으면 이유(beta.24 — 화면이 버튼을 숨기지 않고 이유를 보인다). 합친 층이 아니면 undefined
+  const linkCheck = (id: string): { conv: string } | { off: BgLinkOff } | undefined => {
     const r = builder.record(id);
-    if (!r?.convId || r.convId === id || !r.bg?.alive || !r.bg.trusted || r.bg.ambiguous) return undefined;
-    return floorKeyDir === join(homedir(), ".claude-office", "floors") ? r.convId : undefined;
+    if (!r?.convId || r.convId === id || !r.bg) return undefined;
+    if (!r.bg.alive) return { off: "bg-ended" };
+    if (r.bg.ambiguous) return { off: "ambiguous" };
+    if (!r.bg.trusted) return { off: "untrusted" };
+    if (floorKeyDir !== join(homedir(), ".claude-office", "floors")) return { off: "keydir" };
+    return { conv: r.convId };
+  };
+  const linkable = (id: string): string | undefined => {
+    const c = linkCheck(id);
+    return c && "conv" in c ? c.conv : undefined;
   };
   const channels = new ChannelHub({
     file: join(dirname(paths.stateFile), "experimental.json"),
@@ -391,7 +400,7 @@ async function main(): Promise<void> {
   const channelsView = {
     view: channels.view.bind(channels),
     receiptCheck: channels.receiptCheck.bind(channels),
-    linkable,
+    linkCheck,
     enabled: channels.enabled.bind(channels),
     available: channels.available.bind(channels),
     sweep: (alive: ReadonlySet<string>) => {
@@ -446,7 +455,8 @@ async function main(): Promise<void> {
       opts.claudeHome,
       hub.current().sessions.filter((s) => s.alive).map((s) => {
         const conv = builder.convOf(s.id);
-        return { conv, floor: s.floor, bg: conv !== s.id, members: s.members.length, subagents: s.subagents?.length ?? 0 };
+        const lc = linkCheck(s.id);
+        return { conv, floor: s.floor, bg: conv !== s.id, members: s.members.length, subagents: s.subagents?.length ?? 0, ...(lc ? { link: "conv" in lc ? "ok" : lc.off } : {}) };
       }),
     ).catch((e) => (warnCaught("diag", "agent check failed", e), [])); // 보조 점검 하나가 진단 패널 전체를 죽이지 않게(리뷰 #2-1)
   const diagnostics = {

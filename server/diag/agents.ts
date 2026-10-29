@@ -26,6 +26,8 @@ export interface AgentCheck {
   team: boolean;
   /** Agent를 불렀는데 대시보드가 읽는 자리에 기록이 하나도 없다 */
   missing: boolean;
+  /** 옮겨진 층을 bg에 이을 수 있으면 "ok", 없으면 이유(beta.24). 옮겨진 층이 아니면 없음 */
+  link?: string;
 }
 
 /** 대화 기록은 클 수 있어 끝부분만 본다 */
@@ -48,7 +50,7 @@ async function tail(file: string): Promise<string> {
 }
 
 /** floor: 화면의 층 번호(사용자 보고와 맞춰 보게, 리뷰 #2-8) */
-export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ conv: string; floor: number; bg: boolean; members: number; subagents: number }>): Promise<AgentCheck[]> {
+export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ conv: string; floor: number; bg: boolean; members: number; subagents: number; link?: string }>): Promise<AgentCheck[]> {
   const projects = join(claudeHome, "projects");
   const dirs = await ls(projects);
   const leads = new Set<string>();
@@ -89,7 +91,7 @@ export async function checkAgents(claudeHome: string, floors: ReadonlyArray<{ co
       }
     }
     const team = leads.has(f.conv);
-    out.push({ floor: f.floor, bg: f.bg, members: f.members, subagents: f.subagents, agentCalls, folder, metas, named, team, missing: agentCalls > 0 && metas === 0 && !team });
+    out.push({ floor: f.floor, bg: f.bg, members: f.members, subagents: f.subagents, agentCalls, folder, metas, named, team, missing: agentCalls > 0 && metas === 0 && !team, ...(f.link ? { link: f.link } : {}) });
   }
   return out;
 }
